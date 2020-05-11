@@ -236,7 +236,8 @@ static int tmff_play(struct input_dev *dev, void *data,
 }
 
 static int tmff_init_t300rs(struct hid_device *hid){
-	
+	/* wow this is slow */	
+	int a = 0;
 	return 0;
 }
 
