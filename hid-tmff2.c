@@ -58,15 +58,97 @@ static unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_2),
 	ARRAY_SIZE(setup_3),
 	ARRAY_SIZE(setup_4)	
-}; 
+};
 
 static u8 hw_rq_in[] = { 0xc1, 0x49, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00 };
 static u8 hw_rq_out[] = { 0x41, 0x53, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00 };
 static u8 ff_constant_array[] = { 
-	0x60, 0x00, 0x01, 0x0a, 0xff, 0xdf, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x60, 0x00, 0x01, 0x0a, 0xff, 0xbf, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-   	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-   	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, };
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+};
+
+static u8 t300rs_0[] = {
+	0x42, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+};
+
+static u8 t300rs_1[] = {
+	0x0a, 0x04, 0x90, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+};
+
+static u8 t300rs_2[] = {
+	0x0a, 0x04, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+};
+
+static u8 t300rs_3[] = {
+	0x0a, 0x04, 0x12, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+};
+
+static u8 t300rs_4[] = {
+	0x0a, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+};
+
+static u8 t300rs_re[] = {
+	0x0a, 0x04, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,	
+};
+
+static u8 *t300rs_arr[] = { t300rs_0, t300rs_1, t300rs_2, t300rs_3, t300rs_4, };
+static unsigned int t300rs_arr_sizes[] = { 
+	ARRAY_SIZE(t300rs_0),
+	ARRAY_SIZE(t300rs_1),
+	ARRAY_SIZE(t300rs_2),
+	ARRAY_SIZE(t300rs_3),
+	ARRAY_SIZE(t300rs_4),	
+};
+
+static u8 t300rs_ctrl_out[] = { 0x41, 0x48, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, };
+
+static u8 t300rs_ctrl_in_0[] = { 0xc1, 0x42, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, };
+static u8 t300rs_ctrl_in_1[] = { 0xc1, 0x4e, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, };
+static u8 t300rs_ctrl_in_2[] = { 0xc1, 0x56, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, };
+static u8 t300rs_ctrl_in_re[] = { 0xc1, 0x49, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00 };
+static u8 *t300rs_ctrl_in_arr[] = {t300rs_ctrl_in_0, t300rs_ctrl_in_1, t300rs_ctrl_in_2 };
+static unsigned int t300rs_ctrl_in_sizes[] = {
+	ARRAY_SIZE(t300rs_ctrl_in_0),
+	ARRAY_SIZE(t300rs_ctrl_in_1),
+	ARRAY_SIZE(t300rs_ctrl_in_2)
+};
+
+static u8 t300rs_in_0[] = { 0xc1, 0x56, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, };
+static u8 t300rs_in_1[] = { 0xc1, 0x49, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, };
+static u8 t300rs_in_2[] = { 0xc1, 0x48, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, };
+static u8 t300rs_in_3[] = { 0xc1, 0x55, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, };
+static u8 *t300rs_in_arr[] = {t300rs_in_0, t300rs_in_1, t300rs_in_2, t300rs_in_3};
+static unsigned int t300rs_in_sizes[] = {
+	ARRAY_SIZE(t300rs_in_0),
+	ARRAY_SIZE(t300rs_in_1),
+	ARRAY_SIZE(t300rs_in_2),
+	ARRAY_SIZE(t300rs_in_3)
+};
 
 struct tmff_device {
 	struct hid_report *report;
@@ -118,18 +200,27 @@ static void tmff_ctrl(struct urb *urb){
 	spin_unlock_irqrestore(report_lock, flags);
 }
 
+static void tmff_t300rs_ctrl(struct urb *urb){
+	if(urb->status){
+		hid_warn(urb->dev, "urb status %d received\n", urb->status);
+	}
+}
+
 static int usb_start_wait_urb(struct urb *urb, int timeout, int *actual_length)
 {
 
 	unsigned long expire;
 	int retval;
 
+	printk("1");
 	init_completion(&ctx.done);
 	urb->context = &ctx;
 	urb->actual_length = 0;
 	retval = usb_submit_urb(urb, GFP_ATOMIC);
 	if (unlikely(retval))
 		goto out;
+
+	printk("2");
 
 	expire = timeout ? msecs_to_jiffies(timeout) : MAX_SCHEDULE_TIMEOUT;
 	if (!wait_for_completion_timeout(&ctx.done, expire)) {
@@ -146,6 +237,7 @@ static int usb_start_wait_urb(struct urb *urb, int timeout, int *actual_length)
 	} else
 		retval = ctx.status;
 out:
+	printk("3");
 	if (actual_length)
 		*actual_length = urb->actual_length;
 
@@ -163,7 +255,7 @@ static int tmff_play(struct input_dev *dev, void *data,
 	struct hid_field *ff_field = tmff->ff_field;
 	int x, y;
 	int left, right;	/* Rumbling */
-	
+
 	printk("Reached debug point 2");
 	int trans, b_ep, err;
 	unsigned long flags;
@@ -184,9 +276,9 @@ static int tmff_play(struct input_dev *dev, void *data,
 	printk("Reached debug point 4");
 	switch (effect->type) {
 		case FF_CONSTANT:
-			
+
 			printk("Reached debug point 5");	
-			
+
 			x = tmff_scale_s8(effect->u.ramp.start_level,
 					ff_field->logical_minimum,
 					ff_field->logical_maximum);
@@ -209,23 +301,23 @@ static int tmff_play(struct input_dev *dev, void *data,
 					tmff_ctrl,
 					hid,
 					ep->desc.bInterval
-			);
+					);
 
 			printk("Reached debug point yeet");
 			/*err = usb_start_wait_urb(urb, 1, &trans);
-			if(err){
-				hid_err(hid, "Failed sending thing with ERRNO: %i", err);
-			}*/
+			  if(err){
+			  hid_err(hid, "Failed sending thing with ERRNO: %i", err);
+			  }*/
 			usb_submit_urb(urb, GFP_KERNEL);
-			
+
 			printk("Reached debug point wooot");
 
 			/*usb_interrupt_msg(usbdev,
-				usb_sndintpipe(usbdev, b_ep),
-				send_buf,
-				ARRAY_SIZE(ff_constant_array),
-				&trans,
-				USB_CTRL_SET_TIMEOUT);*/
+			  usb_sndintpipe(usbdev, b_ep),
+			  send_buf,
+			  ARRAY_SIZE(ff_constant_array),
+			  &trans,
+			  USB_CTRL_SET_TIMEOUT);*/
 
 			printk("Reached debug point 7");
 			break;
@@ -236,8 +328,173 @@ static int tmff_play(struct input_dev *dev, void *data,
 }
 
 static int tmff_init_t300rs(struct hid_device *hid){
-	/* wow this is slow */	
-	int a = 0;
+
+	int trans, b_ep, bb_ep, i, err;
+	u8 *send_buf, *rq_buf;
+	struct device *dev = &hid->dev;
+	struct usb_interface *usbif = to_usb_interface(dev->parent);
+	struct usb_device *usbdev = interface_to_usbdev(usbif);
+	struct usb_host_endpoint *ep;
+	struct urb *urb;
+
+	ep = &usbif->cur_altsetting->endpoint[0];
+	bb_ep = ep->desc.bEndpointAddress;
+
+	ep = &usbif->cur_altsetting->endpoint[1];
+	b_ep = ep->desc.bEndpointAddress;
+
+	send_buf = kmalloc(256, GFP_ATOMIC); /* overkill but whatever */
+	rq_buf = kmalloc(256, GFP_ATOMIC);
+
+	for(i = 0; i < ARRAY_SIZE(t300rs_in_arr); ++i){
+		memcpy(rq_buf, t300rs_in_arr[i], t300rs_in_sizes[i]);
+		urb = usb_alloc_urb(0, GFP_KERNEL);
+		usb_fill_control_urb(urb,
+				usbdev,
+				usb_rcvctrlpipe(usbdev, 0),
+				rq_buf,
+				send_buf,
+				0,
+				tmff_t300rs_ctrl,
+				hid);
+
+		err = usb_start_wait_urb(urb, 1, &trans);
+		if(err != 0){
+			hid_err(hid, "Failed sending pre-ctrin with ERRNO: %i", err);
+			goto error;
+		}
+	}	
+
+	for(i = 0; i < ARRAY_SIZE(t300rs_ctrl_in_arr); ++i){
+		memcpy(rq_buf, t300rs_ctrl_in_arr[i], t300rs_ctrl_in_sizes[i]);
+		urb = usb_alloc_urb(0, GFP_KERNEL);
+		usb_fill_control_urb(urb,
+				usbdev,
+				usb_rcvctrlpipe(usbdev, 0),
+				rq_buf,
+				send_buf,
+				0,
+				tmff_t300rs_ctrl,
+				hid
+				);
+
+		err = usb_start_wait_urb(urb, 1, &trans);
+		if(err != 0){
+			hid_err(hid, "Failed sending T300RS ctrl out with ERRNO: %i", err);
+			goto error;
+		}
+
+
+	}
+	printk("Sent initial ctrlouts");
+
+	for(i = 0; i < ARRAY_SIZE(t300rs_arr); ++i){
+		memcpy(send_buf, t300rs_arr[i], t300rs_arr_sizes[i]);
+
+		err = usb_interrupt_msg(usbdev,
+				usb_sndintpipe(usbdev, b_ep),
+				send_buf,
+				t300rs_arr_sizes[i],
+				&trans,
+				USB_CTRL_SET_TIMEOUT);
+
+		if(err){
+			hid_err(hid, "T300RS setup data at index %i couldn't be sent, ERRNO: %i\n", i, err);
+			goto error;
+		}
+
+		err = usb_interrupt_msg(usbdev,
+				usb_rcvintpipe(usbdev, bb_ep),
+				send_buf,
+				0,
+				&trans,
+				USB_CTRL_SET_TIMEOUT);
+		if(err != 0){
+			hid_err(hid, "FUCK, ERRNO: %i", err);
+			goto error;
+		}
+	}
+
+	memcpy(rq_buf, t300rs_ctrl_in_re, ARRAY_SIZE(t300rs_ctrl_in_re));
+	for(i = 0; i < 16; ++i){
+		urb = usb_alloc_urb(0, GFP_KERNEL);
+		usb_fill_control_urb(urb,
+				usbdev,
+				usb_rcvctrlpipe(usbdev, 0),
+				rq_buf,
+				send_buf,
+				0,
+				tmff_t300rs_ctrl,
+				hid
+				);
+
+		err = usb_start_wait_urb(urb, 1, &trans);
+		if(err != 0){
+			hid_err(hid, "Failed sending T300RS ctrl out with ERRNO: %i", err);
+			goto error;
+		}
+	}
+
+	printk("Sent first 16 ctrlins");
+
+	memcpy(rq_buf, t300rs_ctrl_out, ARRAY_SIZE(t300rs_ctrl_out));
+	urb = usb_alloc_urb(0, GFP_KERNEL);
+	usb_fill_control_urb(urb,
+			usbdev,
+			usb_sndctrlpipe(usbdev, 0),
+			rq_buf,
+			send_buf,
+			0,
+			tmff_t300rs_ctrl,
+			hid		
+			);
+
+	err = usb_start_wait_urb(urb, 1, &trans);
+	if(err != 0){
+		hid_err(hid, "Failed sending ctrl out with ERRNO: %i", err);
+		goto error;
+	}
+
+	memcpy(rq_buf, t300rs_ctrl_in_re, ARRAY_SIZE(t300rs_ctrl_in_re));
+	for(i = 0; i < 8; ++i){
+		urb = usb_alloc_urb(0, GFP_KERNEL);
+		usb_fill_control_urb(urb,
+				usbdev,
+				usb_rcvctrlpipe(usbdev, 0),
+				rq_buf,
+				send_buf,
+				0,
+				tmff_t300rs_ctrl,
+				hid
+				);
+
+		err = usb_start_wait_urb(urb, 1, &trans);
+		if(err != 0){
+			hid_err(hid, "Failed sending T300RS ctrl out with ERRNO: %i", err);
+			goto error;
+		}
+	}
+
+	memcpy(send_buf, t300rs_re, ARRAY_SIZE(t300rs_re));
+
+	for(i = 0; i < 3; ++i){
+		err = usb_interrupt_msg(usbdev,
+				usb_sndintpipe(usbdev, b_ep),
+				send_buf,
+				ARRAY_SIZE(t300rs_re),
+				&trans,
+				USB_CTRL_SET_TIMEOUT);
+
+		if(err){
+			hid_err(hid, "T300RS after-init data couldn't be sent, ERRNO: %i", err);
+			goto error;
+		}
+	}
+
+error:
+	kfree(send_buf);
+	kfree(rq_buf);
+
 	return 0;
 }
 
@@ -307,7 +564,7 @@ error:
 static int tmff_delete(struct kref *kref){
 	/* reserved for future use */
 	/* currently the errors we get aren't pretty */	
-	
+
 	return 0;
 };
 
@@ -322,10 +579,17 @@ static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 	struct input_dev *input_dev = hidinput->input;
 	int error;
 	int i;
-			
+
 	if(hid->product == 0xb65d)
 		return tmff_clear_init(hid);
 
+	if(hid->product == 0xb66e){
+		error = tmff_init_t300rs(hid);
+
+		if(error){
+			return -ENOEXEC;
+		}
+	}
 	tmff = kzalloc(sizeof(struct tmff_device), GFP_KERNEL);
 	if (!tmff)
 		return -ENOMEM;
@@ -410,9 +674,8 @@ static inline int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 
 static int tm_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
-	int ret;
-	printk("We have been retarded");
-
+	int ret;	
+	
 	ret = hid_parse(hdev);
 	if (ret) {
 		hid_err(hdev, "parse failed\n");
