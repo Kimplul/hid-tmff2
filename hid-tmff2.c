@@ -256,7 +256,6 @@ static int tmff_play(struct input_dev *dev, void *data,
 	int x, y;
 	int left, right;	/* Rumbling */
 
-	printk("Reached debug point 2");
 	int trans, b_ep, err;
 	unsigned long flags;
 	struct device *d_dev = &hid->dev;
@@ -266,18 +265,14 @@ static int tmff_play(struct input_dev *dev, void *data,
 
 	struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
 
-	printk("Reached debug point 3");
 	u8 *send_buf = kmalloc(1024, GFP_ATOMIC);
 	memcpy(send_buf, ff_constant_array, ARRAY_SIZE(ff_constant_array));
 
 	ep = &usbif->cur_altsetting->endpoint[1];
 	b_ep = ep->desc.bEndpointAddress;
 
-	printk("Reached debug point 4");
 	switch (effect->type) {
 		case FF_CONSTANT:
-
-			printk("Reached debug point 5");	
 
 			x = tmff_scale_s8(effect->u.ramp.start_level,
 					ff_field->logical_minimum,
@@ -303,14 +298,12 @@ static int tmff_play(struct input_dev *dev, void *data,
 					ep->desc.bInterval
 					);
 
-			printk("Reached debug point yeet");
 			/*err = usb_start_wait_urb(urb, 1, &trans);
 			  if(err){
 			  hid_err(hid, "Failed sending thing with ERRNO: %i", err);
 			  }*/
 			usb_submit_urb(urb, GFP_KERNEL);
 
-			printk("Reached debug point wooot");
 
 			/*usb_interrupt_msg(usbdev,
 			  usb_sndintpipe(usbdev, b_ep),
@@ -319,10 +312,9 @@ static int tmff_play(struct input_dev *dev, void *data,
 			  &trans,
 			  USB_CTRL_SET_TIMEOUT);*/
 
-			printk("Reached debug point 7");
 			break;
 	}
-	printk("Reached debug point X");
+	
 	kfree(send_buf);
 	return 0;
 }
@@ -406,7 +398,7 @@ static int tmff_init_t300rs(struct hid_device *hid){
 		err = usb_interrupt_msg(usbdev,
 				usb_rcvintpipe(usbdev, bb_ep),
 				send_buf,
-				0,
+				64,
 				&trans,
 				USB_CTRL_SET_TIMEOUT);
 		if(err != 0){
@@ -583,13 +575,6 @@ static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 	if(hid->product == 0xb65d)
 		return tmff_clear_init(hid);
 
-	if(hid->product == 0xb66e){
-		error = tmff_init_t300rs(hid);
-
-		if(error){
-			return -ENOEXEC;
-		}
-	}
 	tmff = kzalloc(sizeof(struct tmff_device), GFP_KERNEL);
 	if (!tmff)
 		return -ENOMEM;
@@ -682,14 +667,24 @@ static int tm_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto err;
 	}
 
+	if(hdev->product == 0xb66e){
+		ret = tmff_init_t300rs(hdev);
+
+		if(ret){
+			hid_err(hdev, "t300rs init failed\n");
+			goto err;
+		}
+	}
+
+
 	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT & ~HID_CONNECT_FF);
 	if (ret) {
 		hid_err(hdev, "hw start failed\n");
 		goto err;
 	}
-
+	
 	tmff_init(hdev, (void *)id->driver_data);
-
+	
 	return 0;
 err:
 	return ret;
