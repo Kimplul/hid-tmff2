@@ -1,3 +1,5 @@
+/*This file has been modified from the Linux kernel driver drivers/hid/hid-tmff.c, starting from May 7 2020*/
+
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Force feedback support for various HID compliant devices by ThrustMaster:
