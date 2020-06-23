@@ -194,7 +194,15 @@ static u8 t300rs_fin_6[] = {
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
-static u8 *t300rs_fin_arr[] = {t300rs_fin_0, t300rs_fin_1, t300rs_fin_2, t300rs_fin_3, t300rs_fin_4, t300rs_fin_5, t300rs_fin_6 };
+
+static u8 t300rs_fin_7[] = {
+0x60, 0x00, 0x01, 0x89, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+static u8 *t300rs_fin_arr[] = {t300rs_fin_0, t300rs_fin_1, t300rs_fin_2, t300rs_fin_3, t300rs_fin_4, t300rs_fin_5, t300rs_fin_6, t300rs_fin_7 };
 static unsigned int t300rs_fin_sizes[] = {
 ARRAY_SIZE(t300rs_fin_0),
 ARRAY_SIZE(t300rs_fin_1),
@@ -202,7 +210,8 @@ ARRAY_SIZE(t300rs_fin_2),
 ARRAY_SIZE(t300rs_fin_3),
 ARRAY_SIZE(t300rs_fin_4),
 ARRAY_SIZE(t300rs_fin_5),
-ARRAY_SIZE(t300rs_fin_6)
+ARRAY_SIZE(t300rs_fin_6),
+ARRAY_SIZE(t300rs_fin_7)
 };
 
 struct tmff_device {
@@ -336,11 +345,11 @@ static int tmff_play(struct input_dev *dev, void *data,
 					ff_field->logical_minimum,
 					ff_field->logical_maximum);
 
-			printk("(x, y)=(%04x, %04x)\n", x, y);
-			//send_buf[4] = x;
-			//send_buf[5] = y;	
+			send_buf[4] = x;
+			send_buf[5] = y;
 
-			printk("Reached debug point 6");
+			printk("x = %i y = %i\n", x, y);	
+
 
 			usb_fill_int_urb(
 					urb,
@@ -730,7 +739,7 @@ static int tmff_afterthought_t300rs(struct hid_device *hid){
 	send_buf = kmalloc(256, GFP_ATOMIC); /* overkill but whatever */
 	rq_buf = kmalloc(256, GFP_ATOMIC);
 
-	for(i = 0; i < 7; ++i){
+	for(i = 0; i < ARRAY_SIZE(t300rs_fin_sizes); ++i){
 		memcpy(send_buf, t300rs_fin_arr[i], t300rs_fin_sizes[i]);
 
 		err = usb_interrupt_msg(usbdev,
@@ -773,7 +782,7 @@ static int tm_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 
-	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT & ~HID_CONNECT_FF);
+	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT /* & ~HID_CONNECT_FF*/);
 	if (ret) {
 		hid_err(hdev, "hw start failed\n");
 		goto err;
