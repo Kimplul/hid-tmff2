@@ -14,4 +14,8 @@
   To see if the driver is being loaded, run ```dmesg```. The feed should be filled with debugging messages that honestly probably should be improved. A lot.
 
 GOOD NEWS, EVERYBODY!
-I managed to make the wheel turn! Still nowhere near usable as an, y'know, actual wheel, but we're getting somewhere boys and girls!!!!!!!
+
+I managed to make the wheel turn! Still nowhere near usable as an, y'know, actual wheel, but we're getting somewhere boys and girls!
+
+Here's an example video of the current state of the driver:
+https://www.youtube.com/watch?v=k5tu91TjXqY
