@@ -370,7 +370,10 @@ static int tmff_play(struct input_dev *dev, void *data,
 				}
 
                 x = (x * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
-                send_buf[5] = x;
+                 
+                send_buf[5] = tmff_scale_s8(x,
+                        ff_field->logical_minimum,
+                        ff_field->logical_maximum);
 
 			}
 
