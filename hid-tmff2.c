@@ -405,7 +405,7 @@ static int tmff_play(struct input_dev *dev, void *data,
 			break;
 	}
 
-
+	msleep(2);
 
 	kfree(send_buf);
 	return 0;
@@ -842,7 +842,6 @@ err:
 }
 
 static void tm_remove(struct hid_device *hdev){
-	printk("Heyo");
 	hid_hw_stop(hdev);
 }
 
