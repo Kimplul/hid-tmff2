@@ -268,7 +268,7 @@ static void tmff_ctrl(struct urb *urb){
 		hid_warn(urb->dev, "urb status %d received\n", urb->status);
 	}
 	usb_free_urb(urb);
-	spin_unlock_irqrestore(report_lock, flags);
+	//spin_unlock_irqrestore(report_lock, flags);
 }
 
 static void tmff_init_ctrl(struct urb *urb){
@@ -328,7 +328,7 @@ static int tmff_play(struct input_dev *dev, void *data,
 		struct ff_effect *effect)
 {
 
-	spin_lock_irqsave(report_lock, flags);
+	//spin_lock_irqsave(report_lock, flags);
 	struct hid_device *hid = input_get_drvdata(dev);
 	struct tmff_device *tmff = data;
 	struct hid_field *ff_field = tmff->ff_field;
@@ -342,9 +342,9 @@ static int tmff_play(struct input_dev *dev, void *data,
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	struct usb_host_endpoint *ep;
 
-	struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+	struct urb *urb = usb_alloc_urb(0, GFP_KERNEL);
 
-	u8 *send_buf = kmalloc(1024, GFP_ATOMIC);
+	u8 *send_buf = kmalloc(1024, GFP_KERNEL);
 	memcpy(send_buf, ff_constant_array, ARRAY_SIZE(ff_constant_array));
 
 	ep = &usbif->cur_altsetting->endpoint[1];
@@ -356,18 +356,23 @@ static int tmff_play(struct input_dev *dev, void *data,
 			x = tmff_scale_s8(effect->u.ramp.start_level,
 					ff_field->logical_minimum,
 					ff_field->logical_maximum);
-			y = tmff_scale_s8(effect->u.ramp.end_level,
-					ff_field->logical_minimum,
-					ff_field->logical_maximum);
 
-			/*send_buf[4] = x;
-			  send_buf[5] = y;*/
-
-			if(x == 128 && y == 128){
+			if(x == 128){
 				memcpy(send_buf, ff_stop_array, ARRAY_SIZE(ff_stop_array));
+			} else {
+
+				if(x < 128){
+					x = 128 - x;
+
+				} else if(x > 128){
+					x = 256 - (x - 128);
+				}
+
+				send_buf[5] = x;
+
 			}
 
-			printk("x = %i y = %i\n", x, y);	
+			//printk("x = %i\n", x);	
 
 
 			usb_fill_int_urb(
@@ -396,7 +401,11 @@ static int tmff_play(struct input_dev *dev, void *data,
 			  USB_CTRL_SET_TIMEOUT);*/
 
 			break;
+		default:
+			break;
 	}
+
+
 
 	kfree(send_buf);
 	return 0;
