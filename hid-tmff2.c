@@ -822,7 +822,7 @@ static int tm_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if(ret){
 		hid_err(hdev, "what the fuck is going on?\n");
 		if(ret == -32){
-			hid_hw_stop(hdev);
+			//hid_hw_stop(hdev);
 			return 0;
 		}
 		goto err;
@@ -841,27 +841,12 @@ err:
 	return ret;
 }
 
+static void tm_remove(struct hid_device *hdev){
+	printk("Heyo");
+	hid_hw_stop(hdev);
+}
+
 static const struct hid_device_id tm_devices[] = {
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb300),
-		.driver_data = (unsigned long)ff_rumble },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb304),   /* FireStorm Dual Power 2 (and 3) */
-		.driver_data = (unsigned long)ff_rumble },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, THRUSTMASTER_DEVICE_ID_2_IN_1_DT),   /* Dual Trigger 2-in-1 */
-		.driver_data = (unsigned long)ff_rumble },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb323),   /* Dual Trigger 3-in-1 (PC Mode) */
-		.driver_data = (unsigned long)ff_rumble },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb324),   /* Dual Trigger 3-in-1 (PS3 Mode) */
-		.driver_data = (unsigned long)ff_rumble },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb605),   /* NASCAR PRO FF2 Wheel */
-		.driver_data = (unsigned long)ff_joystick },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb651),	/* FGT Rumble Force Wheel */
-		.driver_data = (unsigned long)ff_rumble },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb653),	/* RGT Force Feedback CLUTCH Raging Wheel */
-		.driver_data = (unsigned long)ff_joystick },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb654),	/* FGT Force Feedback Wheel */
-		.driver_data = (unsigned long)ff_joystick },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb65a),	/* F430 Force Feedback Wheel */
-		.driver_data = (unsigned long)ff_joystick },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb65d), 
 		.driver_data = (unsigned long)ff_constant }, /* die */
 	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66e),
@@ -874,6 +859,7 @@ static struct hid_driver tm_driver = {
 	.name = "thrustmaster",
 	.id_table = tm_devices,
 	.probe = tm_probe,
+	.remove = tm_remove,
 };
 module_hid_driver(tm_driver);
 
