@@ -27,6 +27,8 @@
 #define THRUSTMASTER_DEVICE_ID_2_IN_1_DT	0xb320
 #define URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL	0x001e
 
+unsigned long last = 0;
+
 static const signed short ff_rumble[] = {
 	FF_RUMBLE,
 	-1
@@ -60,6 +62,8 @@ static unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_3),
 	ARRAY_SIZE(setup_4)	
 };
+
+u8 new_value = 0;
 
 static u8 hw_rq_in[] = { 0xc1, 0x49, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00 };
 static u8 hw_rq_out[] = { 0x41, 0x53, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -338,6 +342,12 @@ static int tmff_play(struct input_dev *dev, void *data,
 	struct usb_interface *usbif = to_usb_interface(d_dev->parent);
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	struct usb_host_endpoint *ep;
+	
+	if(ktime_get_ns() - last < 4000000){
+		return 0;
+	}
+
+	last = ktime_get_ns();
 
 	struct urb *urb = usb_alloc_urb(0, GFP_KERNEL);
 
@@ -353,7 +363,7 @@ static int tmff_play(struct input_dev *dev, void *data,
 			x = tmff_scale_s8(effect->u.ramp.start_level,
 					ff_field->logical_minimum,
 					ff_field->logical_maximum);
-
+			new_value = x;
 			if(x == 128){
 				memcpy(send_buf, ff_stop_array, ARRAY_SIZE(ff_stop_array));
 			} else {
@@ -379,28 +389,15 @@ static int tmff_play(struct input_dev *dev, void *data,
 					hid,
 					ep->desc.bInterval
 					);
-
-			/*err = usb_start_wait_urb(urb, 1, &trans);
-			  if(err){
-			  hid_err(hid, "Failed sending thing with ERRNO: %i", err);
-			  }*/
 			usb_submit_urb(urb, GFP_KERNEL);
 
-
-			/*usb_interrupt_msg(usbdev,
-			  usb_sndintpipe(usbdev, b_ep),
-			  send_buf,
-			  ARRAY_SIZE(ff_constant_array),
-			  &trans,
-			  USB_CTRL_SET_TIMEOUT);*/
 
 			break;
 		default:
 			break;
 	}
 
-	msleep(2);
-
+//	msleep(2);
 	kfree(send_buf);
 	return 0;
 }
@@ -647,6 +644,7 @@ static int tmff_delete(struct kref *kref){
 	return 0;
 };
 
+
 static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 {
 
@@ -776,6 +774,7 @@ static int tmff_afterthought_t300rs(struct hid_device *hid){
 			goto error;
 		}
 	}
+
 
 error:
 	kfree(send_buf);
