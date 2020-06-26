@@ -22,6 +22,7 @@
 #include <linux/input.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/fixp-arith.h>
 
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
@@ -368,7 +369,8 @@ static int tmff_play(struct input_dev *dev, void *data,
 					x = 256 - (x - 128);
 				}
 
-				send_buf[5] = x;
+                x = (x * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
+                send_buf[5] = x;
 
 			}
 
