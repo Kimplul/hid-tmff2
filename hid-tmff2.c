@@ -22,8 +22,6 @@
 #include <linux/input.h>
 #include <linux/slab.h>
 #include <linux/module.h>
-#include <linux/fixp-arith.h>
-
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 #define THRUSTMASTER_DEVICE_ID_2_IN_1_DT	0xb320
@@ -269,7 +267,6 @@ static void tmff_ctrl(struct urb *urb){
 		hid_warn(urb->dev, "urb status %d received\n", urb->status);
 	}
 	usb_free_urb(urb);
-	//spin_unlock_irqrestore(report_lock, flags);
 }
 
 static void tmff_init_ctrl(struct urb *urb){
@@ -335,7 +332,6 @@ static int tmff_play(struct input_dev *dev, void *data,
 	struct hid_field *ff_field = tmff->ff_field;
 	int x, y;
 	int left, right;	/* Rumbling */
-
 	int trans, b_ep, err;
 	unsigned long flags;
 	struct device *d_dev = &hid->dev;
@@ -369,16 +365,9 @@ static int tmff_play(struct input_dev *dev, void *data,
 					x = 256 - (x - 128);
 				}
 
-                x = (x * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
-                 
-                send_buf[5] = tmff_scale_s8(x,
-                        ff_field->logical_minimum,
-                        ff_field->logical_maximum);
+				send_buf[5] = x;
 
 			}
-
-			//printk("x = %i\n", x);	
-
 
 			usb_fill_int_urb(
 					urb,
