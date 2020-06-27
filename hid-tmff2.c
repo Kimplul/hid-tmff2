@@ -349,9 +349,9 @@ static int tmff_play(struct input_dev *dev, void *data,
 
 	last = ktime_get_ns();
 
-	struct urb *urb = usb_alloc_urb(0, GFP_KERNEL);
+	struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
 
-	u8 *send_buf = kmalloc(1024, GFP_KERNEL);
+	u8 *send_buf = kmalloc(1024, GFP_ATOMIC);
 	memcpy(send_buf, ff_constant_array, ARRAY_SIZE(ff_constant_array));
 
 	ep = &usbif->cur_altsetting->endpoint[1];
@@ -389,7 +389,7 @@ static int tmff_play(struct input_dev *dev, void *data,
 					hid,
 					ep->desc.bInterval
 					);
-			usb_submit_urb(urb, GFP_KERNEL);
+			usb_submit_urb(urb, GFP_ATOMIC);
 
 
 			break;
