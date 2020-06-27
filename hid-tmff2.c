@@ -63,8 +63,6 @@ static unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_4)	
 };
 
-u8 new_value = 0;
-
 static u8 hw_rq_in[] = { 0xc1, 0x49, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00 };
 static u8 hw_rq_out[] = { 0x41, 0x53, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00 };
 static u8 ff_constant_array[] = { 
@@ -343,7 +341,7 @@ static int tmff_play(struct input_dev *dev, void *data,
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	struct usb_host_endpoint *ep;
 	
-	if(ktime_get_ns() - last < 4000000){
+	if((ktime_get_ns() - last) < 4000000){
 		return 0;
 	}
 
@@ -363,19 +361,23 @@ static int tmff_play(struct input_dev *dev, void *data,
 			x = tmff_scale_s8(effect->u.ramp.start_level,
 					ff_field->logical_minimum,
 					ff_field->logical_maximum);
-			new_value = x;
+			y = tmff_scale_s8(effect->u.ramp.end_level,
+					ff_field->logical_minimum,
+					ff_field->logical_maximum);
+			
 			if(x == 128){
 				memcpy(send_buf, ff_stop_array, ARRAY_SIZE(ff_stop_array));
 			} else {
 
-				if(x < 128){
+				/*if(x < 128){
 					x = 128 - x;
 
 				} else if(x > 128){
 					x = 256 - (x - 128);
-				}
+				}*/
 
-				send_buf[5] = x;
+				send_buf[4] = x;
+				send_buf[5] = y;
 
 			}
 
