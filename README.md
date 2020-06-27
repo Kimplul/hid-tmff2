@@ -13,9 +13,8 @@
   And possibly some ```sudo depmod -a && sudo modprobe hid-tmff2```
   To see if the driver is being loaded, run ```dmesg```. The feed should be filled with debugging messages that honestly probably should be improved. A lot.
 
-GOOD NEWS, EVERYBODY!
+Update as of 27.06.2020 21:21
 
-I managed to make the wheel turn! Still nowhere near usable as an, y'know, actual wheel, but we're getting somewhere boys and girls!
+I managed to somewhat successfully play DiRT Rally. The force feedback works, but isn't anywhere near as high quality as on windows. I've experiences some odd cases where the wheel decides to lock up, but it doesn't seem to affect the host computer in any way. No clue why it happens, but they seem to be relatively rare and reseating the USB plug has so far always returned the wheel to a usable state.
 
-Here's an example video of the current state of the driver:
-https://www.youtube.com/watch?v=k5tu91TjXqY
+NOTE: I still don't necessarily recommend using this driver, unless you're really desperate for some ffb. I can't promise that this driver won't freeze up your kernel, corrupt all your data and kick your dog.
