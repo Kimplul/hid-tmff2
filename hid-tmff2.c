@@ -49,6 +49,8 @@ static const signed short ff_joystick[] = {
 /* Usages for thrustmaster devices I know about */
 #define THRUSTMASTER_USAGE_FF	(HID_UP_GENDESK | 0xbb)
 
+u16 tmff_gain = 0xffff;
+
 static u8 setup_0[] = { 0x42, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 static u8 setup_1[] = { 0x0a, 0x04, 0x90, 0x03, 0x00, 0x00, 0x00, 0x00 };
 static u8 setup_2[] = { 0x0a, 0x04, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x00 };
@@ -358,10 +360,7 @@ static int tmff_play(struct input_dev *dev, void *data,
 	switch (effect->type) {
 		case FF_CONSTANT:
 
-			x = tmff_scale_s8(effect->u.ramp.start_level,
-					ff_field->logical_minimum,
-					ff_field->logical_maximum);
-			y = tmff_scale_s8(effect->u.ramp.end_level,
+			x = tmff_scale_s8((tmff_gain * effect->u.constant.level) / ((u16)0xffff),
 					ff_field->logical_minimum,
 					ff_field->logical_maximum);
 			
@@ -369,15 +368,13 @@ static int tmff_play(struct input_dev *dev, void *data,
 				memcpy(send_buf, ff_stop_array, ARRAY_SIZE(ff_stop_array));
 			} else {
 
-				/*if(x < 128){
-					x = 128 - x;
+				if(x < 128){
+				    x = 128 + x;
+                } else if(x > 128){
+                    x = 256 - x;
+                }
 
-				} else if(x > 128){
-					x = 256 - (x - 128);
-				}*/
-
-				send_buf[4] = x;
-				send_buf[5] = y;
+				send_buf[5] = x;
 
 			}
 
@@ -646,6 +643,9 @@ static int tmff_delete(struct kref *kref){
 	return 0;
 };
 
+static void tmff_set_gain(struct input_dev *dev, u16 gain){
+    tmff_gain = gain;
+}
 
 static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 {
@@ -656,6 +656,7 @@ static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 	struct hid_input *hidinput = list_entry(hid->inputs.next,
 			struct hid_input, list);
 	struct input_dev *input_dev = hidinput->input;
+    struct ff_device *ff;
 	int error;
 	int i;
 
@@ -729,6 +730,9 @@ static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 	error = input_ff_create_memless(input_dev, tmff, tmff_play);
 	if (error)
 		goto fail;
+
+    ff = input_dev->ff;
+    ff->set_gain = tmff_set_gain;
 
 	hid_info(hid, "force feedback for ThrustMaster devices by Zinx Verituse <zinx@epicsol.org>\n");
 	return 0;
