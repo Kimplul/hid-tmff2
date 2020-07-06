@@ -1,0 +1,153 @@
+Here I will gather all info I can find out about the different force effects and
+their USB commands. All values seem to be little-endian.
+Also, general note, it seems like some effects are affected by the direction of
+the force, denoted by ***
+GENERAL:
+
+    Playing:
+    60 00 - standard header
+    01 - ID
+    89 - playing options
+    01 - play
+    00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+
+    Stopping/removing: (why are they rolled into one?)
+    60 00 - standard header 
+    01 - ID
+    89 - playing options
+    00 - stop
+    00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+FF_CONSTANT:
+    Initialization:
+    60 00 - standard header
+    01 - ID
+    6a - new constant effect(?)
+    fe ff - strength ***
+    00 00 - attack_length
+    00 00 - attack_level ***
+    00 00 - fade_length
+    00 00 - fade_level ***
+    00 4f - ?
+    f7 17 - time in milliseconds, unsigned
+    00 00
+    07 00 - offset from start(?)
+    00 ff ff - end of new effect(?)
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+
+    Modifying: (It may be possible to modify the effects all at once, not sure)
+        Direction: n/a
+        
+        Constant force:
+        60 00 - standard header
+        01 - ID
+        0a - modify constant force
+        05 16 - constant force
+        00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        
+        Envelope:
+        60 00 - standard header
+        01 - ID
+        31 - modify envelope
+        84 - ID of envelope attribute ( attack_level 82,
+                                        attack_length 81,
+                                        fade_level 88,
+                                        fade_length 84  )
+        63 04 - value attribute should be set to
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        Duration:
+        60 00 - standard header
+        01 - ID
+        49 00 41 - modify timing?
+        6c 20 - length in milliseconds
+        00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+
+FF_RAMP:
+    (Why on earth is it this difficult to figure out how a fucking ramp works?)
+    Init:
+    60 00 - standard header
+    01 - ID
+    6b - new ramp effect 
+    f6 7f - ? *** (these two have something in common but no idea what yet) 
+    fe ff - ?
+    00 00
+    f7 17 - time?
+    00 80 - some kind of marker
+    00 00 - attack_length? 
+    f6 7f - attack_level? ***
+    00 00 - fade_length?
+    f6 7f - fade_level? ***
+    04 - invert (going "down", 05, going "up", 04)
+    4f  
+    f7 17 - time again?
+    00 00
+    00 00 - offset 
+    00 ff ff - end of init
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+FF_SPRING:
+    Init:
+    60 00 - standard header
+    01 - ID
+    64 - new conditional effect
+    fc 7f - positive coefficient (right?)
+    fc 7f - negative coefficient (left?)
+    fe ff - deadband (left?) (deadband + offset) (fe ff means no deadband)
+    fe ff - deadband (right?) (deadband + offset)
+    a6 6a a6 6a fe ff fe ff fe ff fe ff df 58 a6 6a 06 4f f7 17
+    00 00 - some weird hard-coded values to do with springs?
+    00 00 - offset 
+    00 ff ff - end of init
+    00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+FF_DAMPER + FF_FRICTION + FF_INERTIA:
+    Init:
+    60 00 - standard header
+    02 -ID
+    64 - new conditional effect
+    fc 7f - positive coefficient (right?)
+    fc 7f - negative coefficient (left?)
+    fe ff - deadband (left?) (deadband + offset) (fe ff means no deadband)
+    fe ff - deadband (right?) (deadband + offset)
+    fc 7f fc 7f fe ff fe ff fe ff fe ff fc 7f fc 7f 07 4f f7 17
+    00 00 - some weird hard-coded values to do with friction?
+    00 00 - offset
+    00 ff ff - end of init 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+FF_PERIODIC:
+FF_SQUARE:
+    60 00 - standard header
+    01 - ID
+    6b - new periodic effect
+    00 00 - direction
+    fe ff - ?
+    00 00 - offset
+    e8 03 00 80 00 00
+    00 00 00 00 00 00 01 4f f7 17 00 00 00 00 00 ff
+    ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
