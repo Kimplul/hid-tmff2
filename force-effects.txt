@@ -94,15 +94,15 @@ FF_RAMP:
     60 00 - standard header
     01 - ID
     6b - new ramp effect 
-    f6 7f - ? *** (these two have something in common but no idea what exactly yet) 
-    fe ff - ?
+    f6 7f - difference? ***  
+    fe ff - level? ** (possibly starting_level?)
     00 00
     f7 17 - time?
     00 80 - some kind of marker
     00 00 - attack_length? 
-    f6 7f - attack_level? ***
+    f6 7f - attack_level but with difference? ***
     00 00 - fade_length?
-    f6 7f - fade_level? ***
+    f6 7f - fade_level but with difference? ***
     04 - invert (going "down", 05, going "up", 04)
     4f  
     f7 17 - time again?
@@ -186,6 +186,13 @@ FF_AUTOCENTER:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
+FF_GAIN:
+    60 02 - header plus gain?
+    bf - gain (between ff and 00)
+    00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
 Rotation angle:
     60 08 - header plus settings?
