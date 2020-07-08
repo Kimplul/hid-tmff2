@@ -3,6 +3,10 @@ their USB commands. All values seem to be little-endian.
 Also, general note, it seems like some effects are affected by the direction of
 the force, denoted by ***
 
+As far as I can tell, fade_level and attack_level values are calculated by
+mapping the u16 into s16 and taking the absolute value, and after that
+multiplying by the direction. 
+
 All values are examples of actual commands that I captured on the USB interface,
 not the only ones available.
 
@@ -94,15 +98,16 @@ FF_RAMP:
     60 00 - standard header
     01 - ID
     6b - new ramp effect 
-    f6 7f - difference? ***  
-    fe ff - level? ** (possibly starting_level?)
+    f6 7f - difference ***  
+    fe ff - level? *** (level = (if end_level > start_level, end_level, else
+    start_level) - difference?)
     00 00
-    f7 17 - time?
+    f7 17 - time
     00 80 - some kind of marker
-    00 00 - attack_length? 
-    f6 7f - attack_level but with difference? ***
-    00 00 - fade_length?
-    f6 7f - fade_level but with difference? ***
+    00 00 - attack_length
+    f6 7f - attack_level ***
+    00 00 - fade_length
+    f6 7f - fade_level***
     04 - invert (going "down", 05, going "up", 04)
     4f  
     f7 17 - time again?
@@ -121,7 +126,7 @@ FF_SPRING:
     fc 7f - negative coefficient (left?)
     fe ff - deadband (left?) (deadband + offset) (fe ff means no deadband)
     fe ff - deadband (right?) (deadband + offset)
-    a6 6a a6 6a fe ff fe ff fe ff fe ff df 58 a6 6a 06- some weird hard-coded
+    a6 6a a6 6a fe ff fe ff fe ff fe ff df 58 a6 6a 06 - some weird hard-coded
                                                     values to do with springs?
 
     4f
@@ -160,10 +165,10 @@ FF_PERIODIC:
     00 00 - offset of effect (forward/backward)
     e8 03 - period
     00 80 
-    00 00 - attack_length?
-    00 00 - attack_level? ***
-    00 00 - fade_length?
-    00 00 - fade_level? ***
+    00 00 - attack_length
+    00 00 - attack_level ***
+    00 00 - fade_length
+    00 00 - fade_level ***
     01 - type of periodic ( square 01,
                             sine 03,
                             triangle 02,
@@ -202,3 +207,34 @@ Rotation angle:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+Open:
+    60 01 - standard header?
+    04 - ?
+    00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    
+    (this command doesn't appear every time, odd)
+    60 12 - ?
+    bf 04 00 00 03 b7 1e - ?
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    60 01 - ?
+    05 - ?
+    00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+Close:
+    60 01 - standard header?
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
