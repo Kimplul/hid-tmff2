@@ -265,12 +265,13 @@ static inline int tmff_scale_s8(int in, int minimum, int maximum)
 		return maximum;
 	return ret;
 }
-
+bool transferred = true;
 static void tmff_ctrl(struct urb *urb){
 	if(urb->status){
 		hid_warn(urb->dev, "urb status %d received\n", urb->status);
 	}
 	usb_free_urb(urb);
+    transferred = true;
 }
 
 static void tmff_init_ctrl(struct urb *urb){
@@ -326,57 +327,43 @@ out:
 	return retval;
 }
 
+bool last_stop = false;
+
 static int tmff_play(struct input_dev *dev, void *data,
 		struct ff_effect *effect)
 {
 
 	//spin_lock_irqsave(report_lock, flags);
 	struct hid_device *hid = input_get_drvdata(dev);
-	struct tmff_device *tmff = data;
-	struct hid_field *ff_field = tmff->ff_field;
-	int x, y;
-	int left, right;	/* Rumbling */
-	int trans, b_ep, err;
-	unsigned long flags;
 	struct device *d_dev = &hid->dev;
 	struct usb_interface *usbif = to_usb_interface(d_dev->parent);
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	struct usb_host_endpoint *ep;
-	
-	if((ktime_get_ns() - last) < 4000000){
-		return 0;
-	}
-
-	last = ktime_get_ns();
-
+    struct tmff_device *tmff = data;
+    struct hid_field *ff_field = tmff->ff_field;
 	struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
-
 	u8 *send_buf = kmalloc(1024, GFP_ATOMIC);
+    __s16 x;
+
+    if(!transferred){
+        return 0;
+    }
+	
+
 	memcpy(send_buf, ff_constant_array, ARRAY_SIZE(ff_constant_array));
 
 	ep = &usbif->cur_altsetting->endpoint[1];
-	b_ep = ep->desc.bEndpointAddress;
-
-	switch (effect->type) {
+    
+    switch (effect->type) {
 		case FF_CONSTANT:
+                // this only works with input_ff_create_memless, which clamps
+                // constant forces to s8 for some reason
+            x = tmff_scale_s8(effect->u.constant.level,
+                    ff_field->logical_minimum,
+                    ff_field->logical_maximum);
 
-			x = tmff_scale_s8((tmff_gain * effect->u.constant.level) / ((u16)0xffff),
-					ff_field->logical_minimum,
-					ff_field->logical_maximum);
-			
-			if(x == 128){
-				memcpy(send_buf, ff_stop_array, ARRAY_SIZE(ff_stop_array));
-			} else {
-
-				if(x < 128){
-				    x = 128 + x;
-                } else if(x > 128){
-                    x = 256 - x;
-                }
-
-				send_buf[5] = x;
-
-			}
+            send_buf[4] = x & 0xff;
+            send_buf[5] = x >> 8;
 
 			usb_fill_int_urb(
 					urb,
@@ -388,6 +375,7 @@ static int tmff_play(struct input_dev *dev, void *data,
 					hid,
 					ep->desc.bInterval
 					);
+            transferred = false;
 			usb_submit_urb(urb, GFP_ATOMIC);
 
 
@@ -666,7 +654,8 @@ static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 	tmff = kzalloc(sizeof(struct tmff_device), GFP_KERNEL);
 	if (!tmff)
 		return -ENOMEM;
-
+    
+    hid_info(hid, "what is going ong here???");
 	spin_lock_init(&tmff->report_lock);
 	report_lock = &tmff->report_lock;
 
@@ -677,6 +666,7 @@ static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 
 		for (fieldnum = 0; fieldnum < report->maxfield; ++fieldnum) {
 			struct hid_field *field = report->field[fieldnum];
+            printk("found field at fieldnum %i\n", fieldnum);
 
 			if (field->maxusage <= 0)
 				continue;
@@ -707,7 +697,7 @@ static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 
 					tmff->report = report;
 					tmff->ff_field = field;
-
+                    
 					for (i = 0; ff_bits[i] >= 0; i++)
 						set_bit(ff_bits[i], input_dev->ffbit);
 
@@ -738,6 +728,7 @@ static int tmff_init(struct hid_device *hid, const signed short *ff_bits)
 	return 0;
 
 fail:
+    hid_err(hid, "We have failed creating a force feedback memless device!!!\n");
 	kfree(tmff);
 	return error;
 }
@@ -754,7 +745,6 @@ static int tmff_afterthought_t300rs(struct hid_device *hid){
 	struct usb_interface *usbif = to_usb_interface(dev->parent);
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	struct usb_host_endpoint *ep;
-	struct urb *urb;
 
 	ep = &usbif->cur_altsetting->endpoint[0];
 	bb_ep = ep->desc.bEndpointAddress;
@@ -844,6 +834,23 @@ static void tm_remove(struct hid_device *hdev){
 	hid_hw_stop(hdev);
 }
 
+static __u8 t300rs_rdesc_fixed[] = {0x05, 0x01, 0x09, 0x04, 0xa1, 0x01, 0x09, 0x01, 0xa1, 0x00, 0x85, 0x07, 0x09, 0x30, 0x15, 0x00, 0x27, 0xff, 0xff, 0x00, 0x00, 0x35, 0x00, 0x47, 0xff, 0xff, 0x00, 0x00, 0x75, 0x10, 0x95, 0x01, 0x81, 0x02, 0x09, 0x31, 0x26, 0xff, 0x03, 0x46, 0xff, 0x03, 0x81, 0x02, 0x09, 0x35, 0x81, 0x02, 0x09, 0x36, 0x81, 0x02, 0x81, 0x03, 0x05, 0x09, 0x19, 0x01, 0x29, 0x0d, 0x25, 0x01, 0x45, 0x01, 0x75, 0x01, 0x95, 0x0d, 0x81, 0x02, 0x75, 0x0b, 0x95, 0x01, 0x81, 0x03, 0x05, 0x01, 0x09, 0x39, 0x25, 0x07, 0x46, 0x3b, 0x01, 0x55, 0x00, 0x65, 0x14, 0x75, 0x04, 0x81, 0x42, 0x65, 0x00, 0x81, 0x03, 0x85, 0x0a, 0x06, 0x00, 0xff, 0x09, 0x0a, 0x75, 0x08, 0x95, 0x3f, 
+    0x26, 0xff, 0x7f, 
+    0x16, 0x00, 0x80,
+    0x46, 0xff, 0x7f,
+    0x36, 0x00, 0x80,
+    0x91, 0x02, 0x85, 0x02, 0x09, 0x02, 0x81, 0x02, 0x09, 0x14, 0x85, 0x14, 0x81, 0x02, 0xc0, 0xc0,};
+
+static __u8 *tmff_t300rs_report_fixup(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize){
+    if(hdev->product != 0xb66e){
+        return rdesc;
+    }
+    printk("wahey");
+    rdesc = t300rs_rdesc_fixed;
+    *rsize = sizeof(t300rs_rdesc_fixed);
+    return rdesc;
+};
+
 static const struct hid_device_id tm_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb65d), 
 		.driver_data = (unsigned long)ff_constant }, /* die */
@@ -858,6 +865,7 @@ static struct hid_driver tm_driver = {
 	.id_table = tm_devices,
 	.probe = tm_probe,
 	.remove = tm_remove,
+    .report_fixup = tmff_t300rs_report_fixup,
 };
 module_hid_driver(tm_driver);
 
