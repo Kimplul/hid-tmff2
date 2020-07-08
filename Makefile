@@ -1,4 +1,4 @@
-obj-m += hid-tmff2.o
+obj-m += hid-tminit.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules
