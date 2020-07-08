@@ -354,9 +354,11 @@ static int tmff_play(struct input_dev *dev, void *data,
 
 	ep = &usbif->cur_altsetting->endpoint[1];
     
-	switch (effect->type) {
+    switch (effect->type) {
 		case FF_CONSTANT:
-            x = tmff_scale_s8(effect->u.ramp.start_level,
+                // this only works with input_ff_create_memless, which clamps
+                // constant forces to s8 for some reason
+            x = tmff_scale_s8(effect->u.constant.level,
                     ff_field->logical_minimum,
                     ff_field->logical_maximum);
 

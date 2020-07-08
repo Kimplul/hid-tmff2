@@ -98,9 +98,9 @@ FF_RAMP:
     60 00 - standard header
     01 - ID
     6b - new ramp effect 
-    f6 7f - difference ***  
+    f6 7f - difference *** 
     fe ff - level? *** (level = (if end_level > start_level, end_level, else
-    start_level) - difference?)
+    start_level) - difference?) (signed)
     00 00
     f7 17 - time
     00 80 - some kind of marker
