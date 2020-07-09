@@ -1,4 +1,5 @@
 obj-m += hid-tminit.o
+obj-m += hid-tmt300rs.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules

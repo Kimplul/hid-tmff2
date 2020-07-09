@@ -1,5 +1,7 @@
 #include "hid-tminit.h"
 
+
+
 static void tminit_callback(struct urb *urb){
     ctx.status = urb->status;
     hid_info(urb->dev, "urb status %d received\n", urb->status);
@@ -26,7 +28,7 @@ int tminit(struct hid_device *hdev){
            usb_sndctrlpipe(usbdev, 0),
            setup_packet,
            transfer_buffer,
-           0,
+           8,
            tminit_callback,
            hdev);
 
