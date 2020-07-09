@@ -892,7 +892,7 @@ err:
  * */
 static int t300rs_preinit(struct hid_device *hdev){
 	int ret;
-	u8 *setup_packet;
+	u8 *setup_packet, *send_buffer;
 	
     /* this is sort of unnecessary, as later on I compile the interfaces etc
      * into one struct, but for now this will do
@@ -900,9 +900,10 @@ static int t300rs_preinit(struct hid_device *hdev){
     struct device *dev = &hdev->dev;
 	struct usb_interface *usbif = to_usb_interface(dev->parent);
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
-	struct urb *urb;
+    struct urb *urb;
 
 	setup_packet = kmalloc(8, GFP_ATOMIC);
+    send_buffer = kzalloc(8, GFP_ATOMIC);
 
 	memcpy(setup_packet, t300rs_ctrl_out, ARRAY_SIZE(t300rs_ctrl_out));
 	urb = usb_alloc_urb(0, GFP_ATOMIC);
@@ -911,7 +912,10 @@ static int t300rs_preinit(struct hid_device *hdev){
 			usbdev,
 			usb_sndctrlpipe(usbdev, 0),
 			setup_packet,
-			NULL,
+            /* why is it important we have a pointer, when we send out 0 bytes?
+             * No clue.
+             * */
+			send_buffer,
 			0,
             /* technically speaking this isn't an interrupt usb, but hey, this
              * works.
@@ -926,6 +930,7 @@ static int t300rs_preinit(struct hid_device *hdev){
 	}
 
 error:
+    kfree(send_buffer);
 	kfree(setup_packet);
 	return ret;
 }
