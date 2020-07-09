@@ -638,6 +638,27 @@ static ssize_t t300rs_range_show(struct device *dev, struct device_attribute *at
 
 static DEVICE_ATTR(range, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, t300rs_range_show, t300rs_range_store);
 
+static void t300rs_set_autocenter(struct input_dev *dev, u16 value){
+    struct hid_device *hdev = input_get_drvdata(dev);
+    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u16 le_value = cpu_to_le16(value);
+    int ret, trans;
+
+    send_buffer[0] = 0x60;
+    send_buffer[1] = 0x08;
+    send_buffer[2] = 0x03;
+    
+    send_buffer[3] = le_value & 0xff;
+    send_buffer[4] = le_value >> 8;
+
+    ret = t300rs_send_int(dev, send_buffer, &trans);
+    if(ret){
+        hid_err(hdev, "failed setting autocenter");
+    }
+
+    kfree(send_buffer);
+}
+
 static void t300rs_set_gain(struct input_dev *dev, u16 gain){
     struct hid_device *hdev = input_get_drvdata(dev);
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
@@ -649,8 +670,10 @@ static void t300rs_set_gain(struct input_dev *dev, u16 gain){
     
     ret = t300rs_send_int(dev, send_buffer, &trans);
     if(ret){
-        hid_err(hdev, "failed sending interrupts\n");
+        hid_err(hdev, "failed setting gain\n");
     }
+
+    kfree(send_buffer);
 }
 
 static void t300rs_destroy(struct ff_device *ff){
@@ -834,6 +857,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     ff->upload = t300rs_upload;
     ff->playback = t300rs_play;
     ff->set_gain = t300rs_set_gain;
+    ff->set_autocenter = t300rs_set_autocenter;
     ff->destroy = t300rs_destroy;
 
     input_dev->open = t300rs_open;
