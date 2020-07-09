@@ -451,18 +451,16 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
         hid_info(t300rs->hdev, "commands stacking up, increasing timer period\n");
         return current_period;
     }
-    
-    for(effect_id = 0; effect_id < t300rs->max_id; ++effect_id){
+
+    for(effect_id = 0; effect_id < T300RS_MAX_EFFECTS; ++effect_id){
         
         state = &t300rs->states[effect_id];
 
-        if(!test_bit(FF_EFFECT_QUEUE_START, &state->flags) &&
-                !test_bit(FF_EFFECT_QUEUE_STOP, &state->flags)){
-            continue;
-        }
-
-        if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+        /*
+         * alright, for now no count support
+         * if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
             if(JIFFIES2MS(jiffies) - state->start_time >= state->effect.replay.length){
+                hid_info(t300rs->hdev, "maybe dangerous?");
                 __clear_bit(FF_EFFECT_PLAYING, &state->flags);
 
                 if(state->count){
@@ -470,7 +468,7 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
                     state->count--;
                 }
             }
-        }
+        }*/
 
         if(test_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags)){
             __clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
@@ -537,7 +535,7 @@ static int t300rs_upload(struct input_dev *dev, struct ff_effect *effect, struct
     struct t300rs_effect_state *state;
 
     t300rs = t300rs_get_device(hdev);
-
+    
     if(effect->type == FF_PERIODIC && effect->u.periodic.period == 0){
         return -EINVAL;
     }
@@ -566,11 +564,11 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
     t300rs = t300rs_get_device(hdev);
 
     state = &t300rs->states[effect_id];
-
+    
     spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
 
     if(value > 0){
-        if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+        if(test_bit(FF_EFFECT_QUEUE_START, &state->flags)){
             __set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
         } else {
             t300rs->effects_used++;
@@ -593,6 +591,7 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
     return 0;
 }
 
+/* we should set a default range */
 static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *attr,
         const char *buf, size_t count){
     struct hid_device *hdev = to_hid_device(dev);
@@ -728,7 +727,7 @@ err:
     return ret;
 }
 
-static void t300rs_close(struct input_dev *dev){
+/*static void t300rs_close(struct input_dev *dev){
     int ret, trans;
     struct hid_device *hdev = input_get_drvdata(dev);
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
@@ -744,7 +743,7 @@ static void t300rs_close(struct input_dev *dev){
 err:
     kfree(send_buffer);
     return;
-}
+}*/
 
 int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     struct t300rs_device_entry *t300rs;
@@ -860,19 +859,20 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     ff->set_autocenter = t300rs_set_autocenter;
     ff->destroy = t300rs_destroy;
 
-    input_dev->open = t300rs_open;
-    input_dev->close = t300rs_close;
+    /* input_dev->open = t300rs_open;
+    input_dev->close = t300rs_close; */
 
     ret = device_create_file(&hdev->dev, &dev_attr_range);
     if(ret){
         hid_warn(hdev, "unable to create sysfs interface for range\n");
         goto out;
     }
-
+    
 
     hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     t300rs->hrtimer.function = t300rs_timer;
 
+    t300rs_open(input_dev);
     hid_info(hdev, "force feedback for T300RS\n");
     return 0;
 
@@ -940,7 +940,6 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
     struct t300rs_data *drv_data;
 
     spin_lock_init(&lock);
-    spin_lock_irqsave(&lock, lock_flags);
 
     drv_data = kzalloc(sizeof(struct t300rs_data), GFP_ATOMIC);
     if(!drv_data){
@@ -973,7 +972,6 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
         goto err;
     }
 
-    spin_unlock_irqrestore(&lock, lock_flags);
     return 0;
 err:
     kfree(drv_data);

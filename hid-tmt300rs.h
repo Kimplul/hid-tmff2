@@ -7,7 +7,7 @@
 #define T300RS_MAX_EFFECTS FF_MAX_EFFECTS
 #define T300RS_BUFFER_LENGTH 64
 
-#define DEFAULT_TIMER_PERIOD 2
+#define DEFAULT_TIMER_PERIOD 16 /* the wheel seems to be bad at stuff*/
 
 #define FF_EFFECT_QUEUE_UPLOAD 0
 #define FF_EFFECT_QUEUE_START 1
