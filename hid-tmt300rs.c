@@ -869,6 +869,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
         goto out;
     }
 
+
     hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     t300rs->hrtimer.function = t300rs_timer;
 
@@ -885,6 +886,48 @@ err:
     hid_err(hdev, "failed creating force feedback device\n");
     return ret;
 
+}
+
+/* for some reason this specific command must be sent before hid_hw_start. Odd.
+ * */
+static int t300rs_preinit(struct hid_device *hdev){
+	int ret;
+	u8 *setup_packet;
+	
+    /* this is sort of unnecessary, as later on I compile the interfaces etc
+     * into one struct, but for now this will do
+     * */
+    struct device *dev = &hdev->dev;
+	struct usb_interface *usbif = to_usb_interface(dev->parent);
+	struct usb_device *usbdev = interface_to_usbdev(usbif);
+	struct urb *urb;
+
+	setup_packet = kmalloc(8, GFP_ATOMIC);
+
+	memcpy(setup_packet, t300rs_ctrl_out, ARRAY_SIZE(t300rs_ctrl_out));
+	urb = usb_alloc_urb(0, GFP_ATOMIC);
+	
+    usb_fill_control_urb(urb,
+			usbdev,
+			usb_sndctrlpipe(usbdev, 0),
+			setup_packet,
+			NULL,
+			0,
+            /* technically speaking this isn't an interrupt usb, but hey, this
+             * works.
+             * */
+			t300rs_int_callback,
+			hdev);
+
+	ret = usb_submit_urb(urb, GFP_ATOMIC);
+	if(ret != 0){
+		hid_err(hdev, "Failed sending ctrl out with ERRNO: %i", ret);
+		goto error;
+	}
+
+error:
+	kfree(setup_packet);
+	return ret;
 }
 
 static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id){
@@ -909,6 +952,9 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
         hid_err(hdev, "parse failed\n");
         goto err;
     }
+
+    /* lord have mercy */
+    t300rs_preinit(hdev);
 
     ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT & ~HID_CONNECT_FF);
     if(ret){
