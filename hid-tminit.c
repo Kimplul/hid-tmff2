@@ -1,10 +1,39 @@
 #include "hid-tminit.h"
 
-
-
 static void tminit_callback(struct urb *urb){
-    ctx.status = urb->status;
     hid_info(urb->dev, "urb status %d received\n", urb->status);
+}
+
+/* for some godawful reason these interrupts are absolutely necessary, otherwise
+ * the whole kernel crashes. I have no idea why.
+ * */
+static void tminit_interrupts(struct hid_device *hdev){
+    int ret, trans, i, b_ep;
+    u8 *send_buf = kmalloc(256, GFP_KERNEL);
+
+    struct usb_host_endpoint *ep;
+    struct device *dev = &hdev->dev;
+    struct usb_interface *usbif = to_usb_interface(dev->parent);
+    struct usb_device *usbdev = interface_to_usbdev(usbif);
+    
+    ep = &usbif->cur_altsetting->endpoint[1];
+    b_ep = ep->desc.bEndpointAddress;
+
+    for(i = 0; i < ARRAY_SIZE(setup_arr); ++i){
+        memcpy(send_buf, setup_arr[i], setup_arr_sizes[i]);
+
+        ret = usb_interrupt_msg(usbdev,
+                usb_sndintpipe(usbdev, b_ep),
+                send_buf,
+                setup_arr_sizes[i],
+                &trans,
+                USB_CTRL_SET_TIMEOUT);
+
+        if(ret){
+            hid_err(hdev, "setup data couldn't be sent\n");
+            return;
+        }
+    }
 }
 
 int tminit(struct hid_device *hdev){
@@ -14,7 +43,9 @@ int tminit(struct hid_device *hdev){
     struct usb_interface *usbif = to_usb_interface(dev->parent);
     struct usb_device *usbdev = interface_to_usbdev(usbif);
     int ret;
-    
+   
+    tminit_interrupts(hdev);
+
     setup_packet = kmalloc(8, GFP_ATOMIC);
     transfer_buffer = kmalloc(8, GFP_ATOMIC);
 
@@ -34,9 +65,9 @@ int tminit(struct hid_device *hdev){
 
     /* we sort of have to go on faith that the message is sent, because the
      * wheel usually completely dies as soon as it receives the message.
+     * No need to even check the return value.
      */
-    ret = usb_start_wait_urb(urb, 5, NULL);
-
+    ret = usb_submit_urb(urb, GFP_ATOMIC);
     kfree(setup_packet);
     kfree(transfer_buffer);
     return ret;

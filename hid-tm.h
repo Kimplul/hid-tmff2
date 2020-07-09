@@ -15,7 +15,6 @@ struct api_context ctx;
 
 int usb_start_wait_urb(struct urb *urb, int timeout, int *actual_length)
 {
-
 	unsigned long expire;
 	int retval;
 
