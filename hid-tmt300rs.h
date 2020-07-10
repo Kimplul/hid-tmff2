@@ -21,6 +21,9 @@
 spinlock_t lock;
 unsigned long lock_flags;
 
+spinlock_t data_lock;
+unsigned long data_flags;
+
 static int timer_msecs = DEFAULT_TIMER_PERIOD;
 
 static const signed short t300rs_ff_effects[] = {
@@ -57,6 +60,9 @@ struct t300rs_device_entry {
     struct usb_interface *usbif;
     struct t300rs_effect_state *states;
     struct hrtimer hrtimer;
+
+    int (*open)(struct input_dev *dev);
+    void (*close)(struct input_dev *dev);
 
     spinlock_t lock;
     unsigned long lock_flags;

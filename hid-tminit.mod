@@ -1,2 +1,2 @@
-/home/kimi/Documents/Projects/hid-tmff2/hid-tminit.o
+/home/kimi/Documents/tmff2/hid-tminit.o
 

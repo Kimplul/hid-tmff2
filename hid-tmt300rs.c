@@ -38,6 +38,9 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
 
     t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+    }
 
     usbdev = t300rs->usbdev;
     usbif = t300rs->usbif;
@@ -495,11 +498,11 @@ static enum hrtimer_restart t300rs_timer(struct hrtimer *t){
     struct t300rs_device_entry *t300rs = container_of(t, struct t300rs_device_entry, hrtimer);
     int max_count;
 
-    spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
+    spin_lock_irqsave(&data_lock, data_flags);
 
     max_count = t300rs_timer_helper(t300rs);
     
-    spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
+    spin_unlock_irqrestore(&data_lock, data_flags);
 
     if(max_count > 0){
         hrtimer_forward_now(&t300rs->hrtimer, ms_to_ktime(timer_msecs));
@@ -663,9 +666,12 @@ static void t300rs_destroy(struct ff_device *ff){
 
 
 static int t300rs_open(struct input_dev *dev){
+    struct t300rs_device_entry *t300rs;
     struct hid_device *hdev = input_get_drvdata(dev);
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     int ret, trans;
+
+    t300rs = t300rs_get_device(hdev);
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
@@ -705,13 +711,16 @@ static int t300rs_open(struct input_dev *dev){
 
 err:
     kfree(send_buffer);
-    return ret;
+    return t300rs->open(dev);
 }
 
-/*static void t300rs_close(struct input_dev *dev){
+static void t300rs_close(struct input_dev *dev){
     int ret, trans;
     struct hid_device *hdev = input_get_drvdata(dev);
+    struct t300rs_device_entry *t300rs;
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+
+    t300rs = t300rs_get_device(hdev);
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
@@ -723,8 +732,10 @@ err:
     }
 err:
     kfree(send_buffer);
+
+    t300rs->close(dev);
     return;
-}*/
+}
 
 int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     struct t300rs_device_entry *t300rs;
@@ -841,8 +852,11 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     ff->set_autocenter = t300rs_set_autocenter;
     ff->destroy = t300rs_destroy;
 
-    /* input_dev->open = t300rs_open;
-    input_dev->close = t300rs_close; */
+    t300rs->open = input_dev->open;
+    t300rs->close = input_dev->close;
+
+    input_dev->open = t300rs_open;
+    input_dev->close = t300rs_close;
 
     ret = device_create_file(&hdev->dev, &dev_attr_range);
     if(ret){
@@ -874,53 +888,6 @@ err:
 
 }
 
-/* for some reason this specific command must be sent before hid_hw_start. Odd.
- * */
-static int t300rs_preinit(struct hid_device *hdev){
-	int ret;
-	u8 *setup_packet, *send_buffer;
-	
-    /* this is sort of unnecessary, as later on I compile the interfaces etc
-     * into one struct, but for now this will do
-     * */
-    struct device *dev = &hdev->dev;
-	struct usb_interface *usbif = to_usb_interface(dev->parent);
-	struct usb_device *usbdev = interface_to_usbdev(usbif);
-    struct urb *urb;
-
-	setup_packet = kmalloc(8, GFP_ATOMIC);
-    send_buffer = kzalloc(8, GFP_ATOMIC);
-
-	memcpy(setup_packet, t300rs_ctrl_out, ARRAY_SIZE(t300rs_ctrl_out));
-	urb = usb_alloc_urb(0, GFP_ATOMIC);
-	
-    usb_fill_control_urb(urb,
-			usbdev,
-			usb_sndctrlpipe(usbdev, 0),
-			setup_packet,
-            /* why is it important we have a pointer, when we send out 0 bytes?
-             * No clue.
-             * */
-			send_buffer,
-			0,
-            /* technically speaking this isn't an interrupt usb, but hey, this
-             * works.
-             * */
-			t300rs_int_callback,
-			hdev);
-
-	ret = usb_submit_urb(urb, GFP_ATOMIC);
-	if(ret != 0){
-		hid_err(hdev, "Failed sending ctrl out with ERRNO: %i", ret);
-		goto error;
-	}
-
-error:
-    kfree(send_buffer);
-	kfree(setup_packet);
-	return ret;
-}
-
 static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id){
     int ret;
     struct t300rs_data *drv_data;
@@ -942,9 +909,6 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
         hid_err(hdev, "parse failed\n");
         goto err;
     }
-
-    /* lord have mercy */
-    //t300rs_preinit(hdev);
 
     ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT & ~HID_CONNECT_FF);
     if(ret){
@@ -969,20 +933,21 @@ static void t300rs_remove(struct hid_device *hdev){
     struct t300rs_device_entry *t300rs;
     struct t300rs_data *drv_data;
 
-    spin_lock_irqsave(&lock, lock_flags);
     device_remove_file(&hdev->dev, &dev_attr_range);
 
     drv_data = hid_get_drvdata(hdev);
     t300rs = t300rs_get_device(hdev);
 
+    spin_lock_irqsave(&data_lock, data_flags);
+
     hrtimer_cancel(&t300rs->hrtimer);
 
+    hid_hw_stop(hdev);
     kfree(t300rs->states);
     kfree(drv_data);
     kfree(t300rs);
-    hid_hw_stop(hdev);
 
-    spin_unlock_irqrestore(&lock, lock_flags);
+    spin_unlock_irqrestore(&data_lock, data_flags);
 
     return;
 }
