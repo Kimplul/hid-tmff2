@@ -498,12 +498,8 @@ static enum hrtimer_restart t300rs_timer(struct hrtimer *t){
     struct t300rs_device_entry *t300rs = container_of(t, struct t300rs_device_entry, hrtimer);
     int max_count;
 
-    spin_lock_irqsave(&data_lock, data_flags);
-
     max_count = t300rs_timer_helper(t300rs);
     
-    spin_unlock_irqrestore(&data_lock, data_flags);
-
     if(max_count > 0){
         hrtimer_forward_now(&t300rs->hrtimer, ms_to_ktime(timer_msecs));
         return HRTIMER_RESTART;
@@ -719,7 +715,7 @@ static void t300rs_close(struct input_dev *dev){
     struct hid_device *hdev = input_get_drvdata(dev);
     struct t300rs_device_entry *t300rs;
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
-
+    
     t300rs = t300rs_get_device(hdev);
 
     send_buffer[0] = 0x60;
@@ -732,7 +728,6 @@ static void t300rs_close(struct input_dev *dev){
     }
 err:
     kfree(send_buffer);
-
     t300rs->close(dev);
     return;
 }
@@ -782,7 +777,6 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     spin_lock_init(&t300rs->lock);
 
     drv_data->device_props = t300rs;
-
 
     report_list = &hdev->report_enum[HID_OUTPUT_REPORT].report_list;
     list_for_each_entry(report, report_list, list){
@@ -867,12 +861,12 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 
     hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     t300rs->hrtimer.function = t300rs_timer;
-
+    
+    spin_unlock_irqrestore(&lock, lock_flags);
 
     t300rs_range_store(dev, &dev_attr_range, range, 10);
     t300rs_set_gain(input_dev, 0xffff);
 
-    t300rs_open(input_dev);
     hid_info(hdev, "force feedback for T300RS\n");
     return 0;
 
@@ -893,6 +887,7 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
     struct t300rs_data *drv_data;
 
     spin_lock_init(&lock);
+    spin_lock_irqsave(&lock, lock_flags);
 
     drv_data = kzalloc(sizeof(struct t300rs_data), GFP_ATOMIC);
     if(!drv_data){
@@ -921,7 +916,6 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
         hid_err(hdev, "t300rs_init failed\n");
         goto err;
     }
-
     return 0;
 err:
     kfree(drv_data);
@@ -938,16 +932,12 @@ static void t300rs_remove(struct hid_device *hdev){
     drv_data = hid_get_drvdata(hdev);
     t300rs = t300rs_get_device(hdev);
 
-    spin_lock_irqsave(&data_lock, data_flags);
-
     hrtimer_cancel(&t300rs->hrtimer);
 
     hid_hw_stop(hdev);
     kfree(t300rs->states);
     kfree(drv_data);
     kfree(t300rs);
-
-    spin_unlock_irqrestore(&data_lock, data_flags);
 
     return;
 }
