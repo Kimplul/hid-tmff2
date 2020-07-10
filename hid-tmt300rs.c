@@ -71,7 +71,6 @@ static int t300rs_play_effect(struct t300rs_device_entry *t300rs, struct t300rs_
         hid_err(t300rs->hdev, "failed starting effect play\n");
     }
 
-    hid_info(t300rs->hdev, "sent play\n");
     kfree(send_buffer);
     return ret;
 }
@@ -89,7 +88,7 @@ static int t300rs_stop_effect(struct t300rs_device_entry *t300rs, struct t300rs_
         hid_err(t300rs->hdev, "failed stopping effect play\n");
     }
 
-    hid_info(t300rs->hdev, "stopping effect\n");
+    kfree(send_buffer);
     return ret;
 }
 
@@ -160,7 +159,6 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
     if(ret){
         hid_err(t300rs->hdev, "failed uploading constant effect\n");
     }
-    hid_info(t300rs->hdev, "uploading constant");
     kfree(send_buffer);
     return ret;
 }
@@ -225,7 +223,6 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
         hid_err(t300rs->hdev, "failed uploading ramp");
     }
     kfree(send_buffer);
-    hid_info(t300rs->hdev, "uploading ramp");
     return ret;
 }
 
@@ -256,8 +253,6 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
     le_duration = cpu_to_le16(effect.replay.length);
     le_offset = cpu_to_le16(effect.replay.delay);
 
-    hid_info(t300rs->hdev, "coeffs: %x vs %x\n", le_right_coeff, spring.right_coeff);
-
     send_buffer[4] = le_right_coeff & 0xff;
     send_buffer[5] = le_right_coeff >> 8;
 
@@ -287,7 +282,6 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
         hid_err(t300rs->hdev, "failed uploading spring\n");
     }
     kfree(send_buffer);
-    hid_info(t300rs->hdev, "uploading spring");
     return ret;
 }
 
@@ -318,8 +312,6 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
     le_duration = cpu_to_le16(effect.replay.length);
     le_offset = cpu_to_le16(effect.replay.delay);
 
-    hid_info(t300rs->hdev, "coeffs: %x vs %x\n", le_right_coeff, spring.right_coeff);
-
     send_buffer[4] = le_right_coeff & 0xff;
     send_buffer[5] = le_right_coeff >> 8;
 
@@ -348,10 +340,8 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
     if(ret){
         hid_err(t300rs->hdev, "failed uploading spring\n");
     }
-
-    hid_info(t300rs->hdev, "uploading spring");
+    kfree(send_buffer);
     return ret;
-    return 0;
 }
 
 static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
@@ -367,10 +357,8 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
         __clear_bit(FF_EFFECT_PLAYING, &state->flags);
     }
 
-
     magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
-    hid_warn(t300rs->hdev, "magnitude %i vs %i\n", periodic.magnitude, magnitude);
     le_magnitude = cpu_to_le16(magnitude);
     le_phase = cpu_to_le16(periodic.phase);
     le_periodic_offset = cpu_to_le16(periodic.offset);
@@ -415,8 +403,8 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     if(ret){
         hid_err(t300rs->hdev, "failed uploading periodic effect");
     }
+    
     kfree(send_buffer);
-    hid_info(t300rs->hdev, "uploaded periodic effect");
     return ret;
 }
 
@@ -441,34 +429,23 @@ static int t300rs_upload_effect(struct t300rs_device_entry *t300rs, struct t300r
 } 
 
 static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
-    struct usbhid_device *usbhid = t300rs->hdev->driver_data;
     struct t300rs_effect_state *state;
-    int current_period, effect_id, ret;
-
-    if(usbhid->outhead != usbhid->outtail){
-        current_period = timer_msecs;
-        timer_msecs *= 2;
-        hid_info(t300rs->hdev, "commands stacking up, increasing timer period\n");
-        return current_period;
-    }
-
+    unsigned long jiffies_now = JIFFIES2MS(jiffies);
+    int max_count = 0, effect_id, ret;
+    
     for(effect_id = 0; effect_id < T300RS_MAX_EFFECTS; ++effect_id){
         
         state = &t300rs->states[effect_id];
 
-        /*
-         * alright, for now no count support
-         * if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-            if(JIFFIES2MS(jiffies) - state->start_time >= state->effect.replay.length){
-                hid_info(t300rs->hdev, "maybe dangerous?");
+         if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+            if((jiffies_now - state->start_time) >= state->effect.replay.length){
                 __clear_bit(FF_EFFECT_PLAYING, &state->flags);
 
                 if(state->count){
                     __set_bit(FF_EFFECT_QUEUE_START, &state->flags);
-                    state->count--;
                 }
             }
-        }*/
+        }
 
         if(test_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags)){
             __clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
@@ -484,12 +461,14 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
             __clear_bit(FF_EFFECT_QUEUE_START, &state->flags);
             __set_bit(FF_EFFECT_PLAYING, &state->flags);
 
-            state->start_time = JIFFIES2MS(jiffies);
-
             ret = t300rs_play_effect(t300rs, state);
             if(ret){
                 hid_err(t300rs->hdev, "failed starting effects\n");
                 return ret;
+            }
+
+            if(state->count){
+                state->count--;
             }
         }
 
@@ -503,29 +482,31 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
                 return ret;
             }
         }
+
+        if(state->count > max_count){
+            max_count = state->count;
+        }
     }
 
-    return 0;
+    return max_count;
 }
 
 static enum hrtimer_restart t300rs_timer(struct hrtimer *t){
     struct t300rs_device_entry *t300rs = container_of(t, struct t300rs_device_entry, hrtimer);
-    int overruns, delay_timer;
+    int max_count;
 
-    delay_timer = t300rs_timer_helper(t300rs);
+    spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
 
-    if(delay_timer){
-        hrtimer_forward_now(&t300rs->hrtimer, ms_to_ktime(delay_timer));
-        return HRTIMER_RESTART;
-    }
+    max_count = t300rs_timer_helper(t300rs);
+    
+    spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
 
-    if(t300rs->effects_used){
-        overruns = hrtimer_forward_now(&t300rs->hrtimer, ms_to_ktime(timer_msecs));
-        overruns--;
+    if(max_count > 0){
+        hrtimer_forward_now(&t300rs->hrtimer, ms_to_ktime(timer_msecs));
         return HRTIMER_RESTART;
     } else {
         return HRTIMER_NORESTART;
-    } 
+    }
 } 
 
 
@@ -572,19 +553,19 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
             __set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
         } else {
             t300rs->effects_used++;
-
-            if(!hrtimer_active(&t300rs->hrtimer)){
-                hrtimer_start(&t300rs->hrtimer, ms_to_ktime(timer_msecs), HRTIMER_MODE_REL);
-            }
         }
 
         state->count = value;
-
+        state->start_time = JIFFIES2MS(jiffies);
         __set_bit(FF_EFFECT_QUEUE_START, &state->flags);
+
     } else {
         __set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
         t300rs->effects_used--;
+    }
 
+    if(!hrtimer_active(&t300rs->hrtimer)){
+        hrtimer_start(&t300rs->hrtimer, ms_to_ktime(timer_msecs), HRTIMER_MODE_REL);
     }
 
     spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
@@ -757,6 +738,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     struct usb_device *usbdev = interface_to_usbdev(usbif);
     struct hid_report *report;
     struct ff_device *ff;
+    char range[10] = "54000"; /* approx 900 degress */
     int i, ret;
 
     drv_data = hid_get_drvdata(hdev);
@@ -872,6 +854,10 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     t300rs->hrtimer.function = t300rs_timer;
 
+
+    t300rs_range_store(dev, &dev_attr_range, range, 10);
+    t300rs_set_gain(input_dev, 0xffff);
+
     t300rs_open(input_dev);
     hid_info(hdev, "force feedback for T300RS\n");
     return 0;
@@ -958,7 +944,7 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
     }
 
     /* lord have mercy */
-    t300rs_preinit(hdev);
+    //t300rs_preinit(hdev);
 
     ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT & ~HID_CONNECT_FF);
     if(ret){
@@ -983,6 +969,7 @@ static void t300rs_remove(struct hid_device *hdev){
     struct t300rs_device_entry *t300rs;
     struct t300rs_data *drv_data;
 
+    spin_lock_irqsave(&lock, lock_flags);
     device_remove_file(&hdev->dev, &dev_attr_range);
 
     drv_data = hid_get_drvdata(hdev);
@@ -994,6 +981,9 @@ static void t300rs_remove(struct hid_device *hdev){
     kfree(drv_data);
     kfree(t300rs);
     hid_hw_stop(hdev);
+
+    spin_unlock_irqrestore(&lock, lock_flags);
+
     return;
 }
 

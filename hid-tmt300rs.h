@@ -4,10 +4,10 @@
 #include <linux/ktime.h>
 #include <linux/fixp-arith.h>
 
-#define T300RS_MAX_EFFECTS FF_MAX_EFFECTS
+#define T300RS_MAX_EFFECTS 16
 #define T300RS_BUFFER_LENGTH 64
 
-#define DEFAULT_TIMER_PERIOD 16 /* the wheel seems to be bad at stuff*/
+#define DEFAULT_TIMER_PERIOD 4 /* the wheel seems to be bad at stuff*/
 
 #define FF_EFFECT_QUEUE_UPLOAD 0
 #define FF_EFFECT_QUEUE_START 1
@@ -44,7 +44,7 @@ static const signed short t300rs_ff_effects[] = {
 struct t300rs_effect_state {
     struct ff_effect effect;
     unsigned long flags;
-    unsigned int start_time;
+    unsigned long start_time;
     unsigned long count;
 };
 
