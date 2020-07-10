@@ -124,10 +124,15 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
     u16 duration, le_offset, le_duration;
 
     int ret, trans;
-
+    
+    /* currently this driver doesn't support dynamic effect updating quite like
+     * many games would assume. There's not a huge drawback to this method, the
+     * wheel maybe feels a bit more jittery because of this but it's not a
+     * massive downside. At some point in the future I'd like to improve the
+     * dynamic updating, but this will do for now.
+     * */
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
-        __clear_bit(FF_EFFECT_PLAYING, &state->flags);
     }
 
     level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
@@ -162,6 +167,11 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
     if(ret){
         hid_err(t300rs->hdev, "failed uploading constant effect\n");
     }
+
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+        t300rs_play_effect(t300rs, state);
+    }
+
     kfree(send_buffer);
     return ret;
 }
@@ -176,7 +186,6 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
 
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
-        __clear_bit(FF_EFFECT_PLAYING, &state->flags);
     }
 
     top = ramp.end_level > ramp.start_level ? ramp.end_level : ramp.start_level;
@@ -225,6 +234,11 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
     if(ret){
         hid_err(t300rs->hdev, "failed uploading ramp");
     }
+
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+        t300rs_play_effect(t300rs, state);
+    }
+
     kfree(send_buffer);
     return ret;
 }
@@ -240,7 +254,6 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
     
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
-        __clear_bit(FF_EFFECT_PLAYING, &state->flags);
     }
 
     send_buffer[0] = 0x60;
@@ -284,6 +297,11 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
     if(ret){
         hid_err(t300rs->hdev, "failed uploading spring\n");
     }
+
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+        t300rs_play_effect(t300rs, state);
+    }
+
     kfree(send_buffer);
     return ret;
 }
@@ -299,7 +317,6 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
     
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
-        __clear_bit(FF_EFFECT_PLAYING, &state->flags);
     }
 
     send_buffer[0] = 0x60;
@@ -343,6 +360,11 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
     if(ret){
         hid_err(t300rs->hdev, "failed uploading spring\n");
     }
+
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+        t300rs_play_effect(t300rs, state);
+    }
+
     kfree(send_buffer);
     return ret;
 }
@@ -357,7 +379,6 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
 
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
-        __clear_bit(FF_EFFECT_PLAYING, &state->flags);
     }
 
     magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
@@ -406,7 +427,11 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     if(ret){
         hid_err(t300rs->hdev, "failed uploading periodic effect");
     }
-    
+     
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+        t300rs_play_effect(t300rs, state);
+    }
+
     kfree(send_buffer);
     return ret;
 }
@@ -426,7 +451,7 @@ static int t300rs_upload_effect(struct t300rs_device_entry *t300rs, struct t300r
         case FF_PERIODIC:
             return t300rs_upload_periodic(t300rs, state);
         default:
-            hid_err(t300rs->hdev, "invalid effect type");
+            hid_err(t300rs->hdev, "invalid effect type: %x", state->effect.type);
             return -1;
     }
 } 
