@@ -3,7 +3,7 @@
         "arguments": [
             "gcc-9",
             "-c",
-            "-Wp,-MD,/home/kimi/Documents/Projects/hid-tmff2/.hid-tmff2.o.d",
+            "-Wp,-MD,/home/kimi/Documents/Projects/hid-tmff2/.hid-tmt300rs.o.d",
             "-nostdinc",
             "-isystem",
             "/usr/lib/gcc/x86_64-linux-gnu/9/include",
@@ -92,13 +92,13 @@
             "-fcf-protection=none",
             "-Wno-packed-not-aligned",
             "-DMODULE",
-            "-DKBUILD_BASENAME=\"hid_tmff2\"",
-            "-DKBUILD_MODNAME=\"hid_tmff2\"",
+            "-DKBUILD_BASENAME=\"hid_tmt300rs\"",
+            "-DKBUILD_MODNAME=\"hid_tmt300rs\"",
             "-o",
-            "/home/kimi/Documents/Projects/hid-tmff2/hid-tmff2.o",
-            "../../../home/kimi/Documents/Projects/hid-tmff2/hid-tmff2.c"
+            "/home/kimi/Documents/Projects/hid-tmff2/hid-tmt300rs.o",
+            "../../../home/kimi/Documents/Projects/hid-tmff2/hid-tmt300rs.c"
         ],
         "directory": "/usr/src/linux-headers-5.7.0-1-amd64",
-        "file": "../../../home/kimi/Documents/Projects/hid-tmff2/hid-tmff2.c"
+        "file": "../../../home/kimi/Documents/Projects/hid-tmff2/hid-tmt300rs.c"
     }
 ]

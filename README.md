@@ -1,20 +1,45 @@
 # Linux kernel module for the Thrustmaster T300RS wheel
 
-## General information for the curious:
-* This driver is heavily under development, and is currently missing some major features, such as force feedback among many other things.
+## Current state
 
-* I try to only push to Github whenever I'm relatively sure the driver won't freeze up the kernel, but I absolutely do not recommend running this driver on your main computer. Set up a virtual machine if you want to test this out. I personally recommend QEMU/libvirt: https://www.qemu.org/download/
+    Playable. Dynamic updating of effects isn't baked into the wheel quite as
+    well as I'd hoped, and so the driver in its current state doesn't really
+    support it. At some point in the future I'd like to add it to the feature
+    list, but it will need a lot more research and might take a while.
 
-* In case you want to try installing this driver, it should be fairly simple:
-  ```
-  make
-  sudo make install 
-  ```
-  And possibly some ```sudo depmod -a && sudo modprobe hid-tmff2```
-  To see if the driver is being loaded, run ```dmesg```. The feed should be filled with debugging messages that honestly probably should be improved. A lot.
+    One other issue is that if you have the T3PA pedals, the clutch doesn't seem
+    to be registered by most(all?) games. It is registered and works as expected
+    in jstest and jstest-gtk, no clue what that is about.
 
-Update as of 27.06.2020 21:21
+    Anycase, *this version is usable in most force feedback games, supports
+    rangesetting as well as gain and autocentering along with most force feedback effects.**
+## Small note
+    
+    While I haven't personally come across any crashes or lockups with this
+    version, I can't promise that they won't occur under any circumstances.
 
-I managed to somewhat successfully play DiRT Rally. The force feedback works, but isn't anywhere near as high quality as on windows. I've experiences some odd cases where the wheel decides to lock up, but it doesn't seem to affect the host computer in any way. No clue why it happens, but they seem to be relatively rare and reseating the USB plug has so far always returned the wheel to a usable state.
+    With that in mind,
 
-NOTE: I still don't necessarily recommend using this driver, unless you're really desperate for some ffb. I can't promise that this driver won't freeze up your kernel, corrupt all your data and kick your dog.
+## Installation
+
+    + Unplug wheel from computer
+    + `git clone this-repo`
+    + `make`
+    + `sudo make install`
+    + Plug wheel back in
+    + reboot (not strictly necessary, but recommended)
+    
+    Done!
+
+## Additional tidbits
+    
+    + Change range:
+        
+        Write a value between 0 and 65535 to
+        /sys/bus/devices/XXXX:044F:B66E.XXX/range
+
+    + Change autocenter and gain:
+
+        Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.html
+    
+    + Currently there is no support for this driver in oversteer(https://github.com/berarma/oversteer), but ffbwrap(https://github.com/berarma/ffbtools) should, at least in theory, work. Although I have to say that I haven't got it to work so far.
