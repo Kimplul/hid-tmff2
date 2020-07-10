@@ -41,4 +41,5 @@ Write a value between 0 and 65535 to
 
 Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.html
     
-+ Currently there is no support for this driver in oversteer(https://github.com/berarma/oversteer), but ffbwrap(https://github.com/berarma/ffbtools) should, at least in theory, work. Although I have to say that I haven't got it to work so far.
++ Currently there is no support for this driver in oversteer(https://github.com/berarma/oversteer).
+I opened a pull request to add support(to some degree) for this driver to ffbtools(https://github.com/berarma/ffbtools), but until it gets merged I have a repo here: https://github.com/Kimplul/ffbtools
