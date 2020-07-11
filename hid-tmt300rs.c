@@ -662,10 +662,11 @@ static ssize_t t300rs_range_show(struct device *dev, struct device_attribute *at
         char *buf){
     struct hid_device *hdev = to_hid_device(dev);
     struct t300rs_device_entry *t300rs;
+    size_t count;
 
     t300rs = t300rs_get_device(hdev);
-
-    return t300rs->range;
+    count = scnprintf(buf, PAGE_SIZE, "%u\n", t300rs->range);
+    return count;
 }
 
 static DEVICE_ATTR(range, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, t300rs_range_show, t300rs_range_store);
