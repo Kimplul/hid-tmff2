@@ -42,4 +42,4 @@
 
         Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.html
     
-    + Currently there is no support for this driver in oversteer(https://github.com/berarma/oversteer), but ffbwrap(https://github.com/berarma/ffbtools) should, at least in theory, work. Although I have to say that I haven't got it to work so far.
+    + Currently there is no support for this driver in oversteer(https://github.com/berarma/oversteer), but ffbwrap(https://github.com/berarma/ffbtools) should work.

@@ -136,7 +136,11 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
     }
 
     level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
-    duration = effect.replay.length;
+    if(effect.replay.length == 0){
+        duration = 0xffff;
+    } else {
+        duration = effect.replay.length;
+    }
 
     le_level = cpu_to_le16(level);
     le_offset = cpu_to_le16(effect.replay.delay);
@@ -181,11 +185,17 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
     struct ff_effect effect = state->effect;
     struct ff_ramp_effect ramp = state->effect.u.ramp;
     int ret, trans;
-    u16 difference, le_difference, top, bottom, le_duration, le_offset;
+    u16 difference, le_difference, top, bottom, duration, le_duration, le_offset;
     s16 level, le_level;
 
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
+    }
+
+    if(effect.replay.length == 0){
+        duration = 0xffff;
+    } else {
+        duration = effect.replay.length;
     }
 
     top = ramp.end_level > ramp.start_level ? ramp.end_level : ramp.start_level;
@@ -197,7 +207,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
     
     le_difference = cpu_to_le16(difference);
     le_level = cpu_to_le16(level);
-    le_duration = cpu_to_le16(effect.replay.length);
+    le_duration = cpu_to_le16(duration);
     le_offset = cpu_to_le16(effect.replay.delay);
 
     send_buffer[0] = 0x60;
@@ -249,11 +259,17 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
     /* we only care about the first axis */
     struct ff_condition_effect spring = state->effect.u.condition[0];
     int ret, trans;
-    u16 le_right_coeff, le_left_coeff, le_deadband_right, le_deadband_left,
+    u16 duration, le_right_coeff, le_left_coeff, le_deadband_right, le_deadband_left,
         le_duration, le_offset;
     
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
+    }
+
+    if(effect.replay.length == 0){
+        duration = 0xffff;
+    } else {
+        duration = effect.replay.length;
     }
 
     send_buffer[0] = 0x60;
@@ -266,7 +282,7 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
     le_deadband_right = cpu_to_le16(0xfffe - spring.deadband - spring.center);
     le_deadband_left = cpu_to_le16(0xfffe - spring.deadband + spring.center);
 
-    le_duration = cpu_to_le16(effect.replay.length);
+    le_duration = cpu_to_le16(duration);
     le_offset = cpu_to_le16(effect.replay.delay);
 
     send_buffer[4] = le_right_coeff & 0xff;
@@ -312,11 +328,17 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
     /* we only care about the first axis */
     struct ff_condition_effect spring = state->effect.u.condition[0];
     int ret, trans;
-    u16 le_right_coeff, le_left_coeff, le_deadband_right, le_deadband_left,
+    u16 duration, le_right_coeff, le_left_coeff, le_deadband_right, le_deadband_left,
         le_duration, le_offset;
     
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
+    }
+
+    if(effect.replay.length == 0){
+        duration = 0xffff;
+    } else {
+        duration = effect.replay.length;
     }
 
     send_buffer[0] = 0x60;
@@ -329,7 +351,7 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
     le_deadband_right = cpu_to_le16(0xfffe - spring.deadband - spring.center);
     le_deadband_left = cpu_to_le16(0xfffe - spring.deadband + spring.center);
 
-    le_duration = cpu_to_le16(effect.replay.length);
+    le_duration = cpu_to_le16(duration);
     le_offset = cpu_to_le16(effect.replay.delay);
 
     send_buffer[4] = le_right_coeff & 0xff;
@@ -374,11 +396,17 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     struct ff_effect effect = state->effect;
     struct ff_periodic_effect periodic = state->effect.u.periodic;
     int ret, trans;
-    u16 magnitude, le_magnitude, le_phase, le_period, le_offset, le_duration;
+    u16 duration, magnitude, le_magnitude, le_phase, le_period, le_offset, le_duration;
     s16 le_periodic_offset;
 
     if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
         t300rs_stop_effect(t300rs, state);
+    }
+
+    if(effect.replay.length == 0){
+        duration = 0xffff;
+    } else {
+        duration = effect.replay.length;
     }
 
     magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
@@ -388,7 +416,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     le_periodic_offset = cpu_to_le16(periodic.offset);
     le_period = cpu_to_le16(periodic.period);
     le_offset = cpu_to_le16(effect.replay.delay);
-    le_duration = cpu_to_le16(effect.replay.length);
+    le_duration = cpu_to_le16(duration);
     
         send_buffer[0] = 0x60;
     send_buffer[2] = effect.id + 1;
