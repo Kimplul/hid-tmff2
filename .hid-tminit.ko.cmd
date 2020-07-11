@@ -1,1 +1,0 @@
-cmd_/home/kimi/Documents/Projects/hid-tmff2/hid-tminit.ko := ld -r -m elf_x86_64  -z max-page-size=0x200000  --build-id  -T /usr/src/linux-headers-5.7.0-1-common/scripts/module-common.lds -o /home/kimi/Documents/Projects/hid-tmff2/hid-tminit.ko /home/kimi/Documents/Projects/hid-tmff2/hid-tminit.o /home/kimi/Documents/Projects/hid-tmff2/hid-tminit.mod.o;  true
