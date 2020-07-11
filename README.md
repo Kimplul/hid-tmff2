@@ -43,10 +43,13 @@ Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.h
     
 + Currently there is no support for this driver in oversteer(https://github.com/berarma/oversteer), but ffbwrap(https://github.com/berarma/ffbtools) should work.
 + If the wheel has a deadzone in games, you can set up a udev rule:
-    /etc/udev/rules.d/99-joydev.rules
+    
+    `/etc/udev/rules.d/99-joydev.rules`
 
+    ```
     SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e"
     RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+    ```
 
 This should make sure that the wheel behaves like you'd want from a
 wheel.
