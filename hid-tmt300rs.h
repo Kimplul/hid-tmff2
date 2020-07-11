@@ -7,12 +7,19 @@
 #define T300RS_MAX_EFFECTS 16
 #define T300RS_BUFFER_LENGTH 64
 
-#define DEFAULT_TIMER_PERIOD 4 /* the wheel seems to be bad at stuff*/
+/* the wheel seems to only be capable of processing a certain number of
+ * interrupts per second, and if this value is too low the kernel urb buffer(or
+ * some buffer at least) fills up. Optimally I would figure out some way to
+ * space out the interrupts so that they all leave at regular intervals, but for
+ * now this is good enough, go slow enough that everything works.
+ * */
+#define DEFAULT_TIMER_PERIOD 8
 
 #define FF_EFFECT_QUEUE_UPLOAD 0
 #define FF_EFFECT_QUEUE_START 1
 #define FF_EFFECT_QUEUE_STOP 2
 #define FF_EFFECT_PLAYING 3
+#define FF_EFFECT_QUEUE_UPDATE 4
 
 #define CLAMP_VALUE_U16(x) ((unsigned short)((x) > 0xffff ? 0xffff : (x)))
 #define SCALE_VALUE_U16(x, bits) (CLAMP_VALUE_U16(x) >> (16 - bits))
@@ -20,6 +27,9 @@
 
 spinlock_t lock;
 unsigned long lock_flags;
+
+spinlock_t data_lock;
+unsigned long data_flags;
 
 static int timer_msecs = DEFAULT_TIMER_PERIOD;
 

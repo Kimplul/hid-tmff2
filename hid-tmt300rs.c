@@ -36,7 +36,7 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     struct usb_interface *usbif;
     struct usb_host_endpoint *ep;
     struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
-
+    
     t300rs = t300rs_get_device(hdev);
     if(!t300rs){
         hid_err(hdev, "could not get device\n");
@@ -297,7 +297,9 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
 
     int ret, trans;
     
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags) && state->old_set){
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags) && 
+            test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)){
+        __clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
         return t300rs_modify_constant(t300rs, state, send_buffer);
     }
 
@@ -746,9 +748,7 @@ static int t300rs_upload(struct input_dev *dev, struct ff_effect *effect, struct
     state->effect = *effect;
     if(old){
         state->old = *old;
-        state->old_set = true;
-    } else {
-        state->old_set = false;
+        __set_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
     }
     __set_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
@@ -997,6 +997,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     }
 
     spin_lock_init(&t300rs->lock);
+    spin_lock_init(&data_lock);
 
     drv_data->device_props = t300rs;
 
