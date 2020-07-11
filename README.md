@@ -1,14 +1,10 @@
 # Linux kernel module for the Thrustmaster T300RS wheel
 
 ## Current state
-Playable. Dynamic updating of effects isn't baked into the wheel quite as
-well as I'd hoped, and so the driver in its current state doesn't really
-support it. At some point in the future I'd like to add it to the feature
-list, but it will need a lot more research and might take a while.
-
-One other issue is that if you have the T3PA pedals, the clutch doesn't seem
-to be registered by most(all?) games. It is registered and works as expected
-in jstest and jstest-gtk, no clue what that is about.
+Playable. I've made some improvements to the dynamic updating of effects, and
+while still far for perfect, the experience is slowly getting better and better.
+Some drawbacks include missing dynamic updating of ramp effects and in some
+games inconsistent pedal mapping. Meaning that all pedals should be detected in games, but may be mapped incorrectly.
 
 Anycase, **this version is usable in most force feedback games, supports
 rangesetting as well as gain and autocentering along with most force feedback effects.**
@@ -22,11 +18,11 @@ With that in mind,
 ## Installation
 
 + Unplug wheel from computer
-+ `git clone this-repo`
++ `git clone https://github.com/Kimplul/hid-tmff2.git`
 + `make`
 + `sudo make install`
 + Plug wheel back in
-+ reboot (not strictly necessary, but recommended)
++ reboot (not strictly necessary, but definitely recommended)
     
 Done!
 
@@ -41,7 +37,7 @@ Write a value between 0 and 1080 to
 
 Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.html
     
-+ Currently there is support for this driver in oversteer(https://github.com/berarma/oversteer), and ffbwrap(https://github.com/berarma/ffbtools) should work.
++ Currently there is support for this driver in oversteer(https://github.com/berarma/oversteer), and ffbwrap(https://github.com/berarma/ffbtools) should work just fine.
 + If the wheel has a deadzone in games, you can set up a udev rule:
     
     `/etc/udev/rules.d/99-joydev.rules`

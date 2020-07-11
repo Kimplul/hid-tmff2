@@ -36,7 +36,7 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     struct usb_interface *usbif;
     struct usb_host_endpoint *ep;
     struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
-
+    
     t300rs = t300rs_get_device(hdev);
     if(!t300rs){
         hid_err(hdev, "could not get device\n");
@@ -96,25 +96,474 @@ static int t300rs_stop_effect(struct t300rs_device_entry *t300rs, struct t300rs_
 }
 
 static void t300rs_fill_envelope(u8 *send_buffer, int i, s16 level, u16 duration, struct ff_envelope *envelope){
+    u16 le_attack_level, le_attack_length, le_fade_level, le_fade_length;
     u16 attack_length = (duration * envelope->attack_length) / 0x7fff;
     u16 attack_level = (level * envelope->attack_level) / 0x7fff;
     u16 fade_length = (duration * envelope->fade_length) / 0x7fff;
     u16 fade_level = (level * envelope->fade_level) / 0x7fff;
 
-    attack_length = cpu_to_le16(attack_length);
-    attack_level = cpu_to_le16(attack_level);
-    fade_length = cpu_to_le16(fade_length);
-    fade_level = cpu_to_le16(fade_level);
+    le_attack_length = cpu_to_le16(attack_length);
+    le_attack_level = cpu_to_le16(attack_level);
+    le_fade_length = cpu_to_le16(fade_length);
+    le_fade_level = cpu_to_le16(fade_level);
 
-    send_buffer[i    ] = attack_length & 0xff;
-    send_buffer[i + 1] = attack_length >> 8;
-    send_buffer[i + 2] = attack_level & 0xff;
-    send_buffer[i + 3] = attack_level >> 8;
-    send_buffer[i + 4] = fade_length & 0xff;
-    send_buffer[i + 5] = fade_length >> 8;
-    send_buffer[i + 6] = fade_level & 0xff;
-    send_buffer[i + 7] = fade_level >> 8;
+    send_buffer[i    ] = le_attack_length & 0xff;
+    send_buffer[i + 1] = le_attack_length >> 8;
+    send_buffer[i + 2] = le_attack_level & 0xff;
+    send_buffer[i + 3] = le_attack_level >> 8;
+    send_buffer[i + 4] = le_fade_length & 0xff;
+    send_buffer[i + 5] = le_fade_length >> 8;
+    send_buffer[i + 6] = le_fade_level & 0xff;
+    send_buffer[i + 7] = le_fade_level >> 8;
 }
+
+static int t300rs_modify_periodic_envelope(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state, u8 *send_buffer){
+    struct ff_effect effect = state->effect;
+    struct ff_effect old = state->old;
+    struct ff_periodic_effect periodic = effect.u.periodic;
+    struct ff_periodic_effect periodic_old = old.u.periodic;
+    struct ff_envelope envelope = periodic.envelope;
+    struct ff_envelope envelope_old = periodic_old.envelope;
+    u16 duration, attack_length, attack_level, fade_length, fade_level;
+    u16 le_attack_length, le_attack_level, le_fade_length, le_fade_level;
+    s16 level;
+    int ret = 0, trans;
+
+    level = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+
+    if(effect.replay.length == 0){
+        duration = 0xffff;
+    } else {
+        duration = effect.replay.length;
+    }
+
+    attack_length = (duration * envelope.attack_length) / 0x7fff;
+    attack_level = (level * envelope.attack_level) / 0x7fff;
+    fade_length = (duration * envelope.fade_length) / 0x7fff;
+    fade_level = (level * envelope.fade_level) / 0x7fff;
+
+    le_attack_length = cpu_to_le16(attack_length);
+    le_attack_level = cpu_to_le16(attack_level);
+    le_fade_length = cpu_to_le16(fade_length);
+    le_fade_level = cpu_to_le16(fade_level);
+
+    send_buffer[0] = 0x60;
+    send_buffer[2] = effect.id + 1;
+    send_buffer[3] = 0x31;
+
+    if(envelope.attack_length != envelope_old.attack_length){
+        send_buffer[4] = 0x81;
+
+        send_buffer[5] = le_attack_length & 0xff;
+        send_buffer[6] = le_attack_length >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+    }
+
+    if(envelope.attack_level != envelope_old.attack_level){
+        send_buffer[4] = 0x82;
+
+        send_buffer[5] = le_attack_level & 0xff;
+        send_buffer[6] = le_attack_level >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+    }
+
+    if(envelope.fade_length != envelope_old.fade_length){
+        send_buffer[4] = 0x84;
+
+        send_buffer[5] = le_fade_length & 0xff;
+        send_buffer[6] = le_fade_length >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+    }
+
+    if(envelope.fade_level != envelope_old.fade_level){
+        send_buffer[4] = 0x88;
+
+        send_buffer[5] = le_fade_level & 0xff;
+        send_buffer[6] = le_fade_level >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+    }
+    
+error:
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    return ret;
+}
+static int t300rs_modify_constant_envelope(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state, u8 *send_buffer){
+    struct ff_effect effect = state->effect;
+    struct ff_effect old = state->old;
+    struct ff_constant_effect constant = effect.u.constant;
+    struct ff_constant_effect constant_old = old.u.constant;
+    struct ff_envelope envelope = constant.envelope;
+    struct ff_envelope envelope_old = constant_old.envelope;
+    u16 duration, attack_length, attack_level, fade_length, fade_level;
+    u16 le_attack_length, le_attack_level, le_fade_length, le_fade_level;
+    s16 level;
+    int ret = 0, trans;
+
+    level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+
+    if(effect.replay.length == 0){
+        duration = 0xffff;
+    } else {
+        duration = effect.replay.length;
+    }
+
+    attack_length = (duration * envelope.attack_length) / 0x7fff;
+    attack_level = (level * envelope.attack_level) / 0x7fff;
+    fade_length = (duration * envelope.fade_length) / 0x7fff;
+    fade_level = (level * envelope.fade_level) / 0x7fff;
+
+    le_attack_length = cpu_to_le16(attack_length);
+    le_attack_level = cpu_to_le16(attack_level);
+    le_fade_length = cpu_to_le16(fade_length);
+    le_fade_level = cpu_to_le16(fade_level);
+
+    send_buffer[0] = 0x60;
+    send_buffer[2] = effect.id + 1;
+    send_buffer[3] = 0x31;
+
+    if(envelope.attack_length != envelope_old.attack_length){
+        send_buffer[4] = 0x81;
+
+        send_buffer[5] = le_attack_length & 0xff;
+        send_buffer[6] = le_attack_length >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+    }
+
+    if(envelope.attack_level != envelope_old.attack_level){
+        send_buffer[4] = 0x82;
+
+        send_buffer[5] = le_attack_level & 0xff;
+        send_buffer[6] = le_attack_level >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+    }
+
+    if(envelope.fade_length != envelope_old.fade_length){
+        send_buffer[4] = 0x84;
+
+        send_buffer[5] = le_fade_length & 0xff;
+        send_buffer[6] = le_fade_length >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+    }
+
+    if(envelope.fade_level != envelope_old.fade_level){
+        send_buffer[4] = 0x88;
+
+        send_buffer[5] = le_fade_level & 0xff;
+        send_buffer[6] = le_fade_level >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+    }
+    
+error:
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    return ret;
+}
+
+static int t300rs_modify_duration(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state, u8 *send_buffer){
+    struct ff_effect effect = state->effect;
+    struct ff_effect old = state->old;
+    u16 duration, le_duration;
+    int ret = 0, trans;
+    
+    if(effect.replay.length == 0){
+        duration = 0xffff;
+    } else {
+        duration = effect.replay.length;
+    }
+
+    le_duration = cpu_to_le16(duration);
+
+    if(effect.replay.length != old.replay.length){
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x49;
+        send_buffer[5] = 0x41;
+
+        send_buffer[6] = le_duration & 0xff;
+        send_buffer[7] = le_duration >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying duration\n");
+            goto error;
+        }
+    }
+error:
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    return ret;
+}
+
+static int t300rs_modify_constant(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state, u8 *send_buffer){
+    struct ff_effect effect = state->effect;
+    struct ff_effect old = state->old;
+    struct ff_constant_effect constant = effect.u.constant;
+    struct ff_constant_effect constant_old = old.u.constant;
+    int ret, trans;
+    
+    if(constant.level != constant_old.level){
+        s16 level, le_level;
+
+        level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+        le_level = cpu_to_le16(level);
+
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x0a;
+
+        send_buffer[4] = le_level & 0xff;
+        send_buffer[5] = le_level >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying constant effect\n");
+            goto error;
+        }
+
+        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    }
+
+    ret = t300rs_modify_constant_envelope(t300rs, state, send_buffer);
+    if(ret){
+        hid_err(t300rs->hdev, "failed modifying constant envelope\n");
+        goto error;
+    }
+
+    ret = t300rs_modify_duration(t300rs, state, send_buffer);
+    if(ret){
+        hid_err(t300rs->hdev, "failed modifying constant duration\n");
+        goto error;
+    }
+
+error:
+    kfree(send_buffer);
+    return ret;
+}
+
+static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state, u8 *send_buffer){
+    struct ff_effect effect = state->effect;
+    struct ff_effect old = state->old;
+    struct ff_condition_effect damper = effect.u.condition[0];
+    struct ff_condition_effect damper_old = old.u.condition[0];
+    int ret, trans;
+
+    if(damper.right_coeff != damper_old.right_coeff){
+        s16 le_coeff = cpu_to_le16(damper.right_coeff);
+
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x0e;
+        send_buffer[4] = 0x41;
+
+        send_buffer[5] = le_coeff & 0xff;
+        send_buffer[6] = le_coeff >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying damper rc\n");
+            goto error;
+        }
+
+        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    }
+
+    if(damper.left_coeff != damper_old.left_coeff){
+        s16 le_coeff = cpu_to_le16(damper.left_coeff);
+
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x0e;
+        send_buffer[4] = 0x42;
+
+        send_buffer[5] = le_coeff & 0xff;
+        send_buffer[6] = le_coeff >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying damper lc\n");
+        }
+
+        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    }
+    
+    if((damper.deadband != damper_old.deadband) ||
+            (damper.center != damper_old.center)){
+        u16 le_deadband_right = cpu_to_le16(0xfffe - damper.deadband - damper.center);
+        u16 le_deadband_left = cpu_to_le16(0xfffe - damper.deadband + damper.center);
+        
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x0e;
+        send_buffer[4] = 0x4c;
+
+        send_buffer[5] = le_deadband_right & 0xff;
+        send_buffer[6] = le_deadband_right >> 8;
+
+        send_buffer[7] = le_deadband_left & 0xff;
+        send_buffer[8] = le_deadband_left >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying damper deadband\n");
+        }
+
+        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    }
+
+    ret = t300rs_modify_duration(t300rs, state, send_buffer);
+    if(ret){
+        hid_err(t300rs->hdev, "failed modifying constant duration\n");
+        goto error;
+    }
+
+error:
+    kfree(send_buffer);
+    return ret;
+}
+
+
+static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state, u8 *send_buffer){
+    struct ff_effect effect = state->effect;
+    struct ff_effect old = state->old;
+    struct ff_periodic_effect periodic = effect.u.periodic;
+    struct ff_periodic_effect periodic_old = old.u.periodic;
+    int ret, trans;
+
+    if(periodic.magnitude != periodic_old.magnitude){
+        s16 level, le_level;
+
+        level = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+        le_level = cpu_to_le16(level);
+
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x0e;
+        send_buffer[4] = 0x01;
+
+        send_buffer[5] = le_level & 0xff;
+        send_buffer[6] = le_level >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying periodic magnitude\n");
+            goto error;
+        }
+
+        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    }
+
+    if(periodic.offset != periodic_old.offset){
+        s16 le_offset = cpu_to_le16(periodic.offset);
+
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x0e;
+        send_buffer[4] = 0x04;
+
+        send_buffer[5] = le_offset & 0xff;
+        send_buffer[6] = le_offset >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying periodic offset\n");
+        }
+
+        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    }
+    
+    if(periodic.phase != periodic_old.phase){
+        s16 le_phase = cpu_to_le16(periodic.phase);
+
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x0e;
+        send_buffer[4] = 0x02;
+
+        send_buffer[5] = le_phase & 0xff;
+        send_buffer[6] = le_phase >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying periodic phase\n");
+        }
+
+        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    }
+
+    if(periodic.period != periodic_old.period){
+        s16 le_period = cpu_to_le16(periodic.period);
+
+        send_buffer[0] = 0x60;
+        send_buffer[2] = effect.id + 1;
+        send_buffer[3] = 0x0e;
+        send_buffer[4] = 0x08;
+
+        send_buffer[5] = le_period & 0xff;
+        send_buffer[6] = le_period >> 8;
+
+        ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+        if(ret){
+            hid_err(t300rs->hdev, "failed modifying periodic period\n");
+        }
+
+        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    }
+
+    ret = t300rs_modify_periodic_envelope(t300rs, state, send_buffer);
+    if(ret){
+        hid_err(t300rs->hdev, "failed modifying constant envelope\n");
+        goto error;
+    }
+
+    ret = t300rs_modify_duration(t300rs, state, send_buffer);
+    if(ret){
+        hid_err(t300rs->hdev, "failed modifying constant duration\n");
+        goto error;
+    }
+
+error:
+    kfree(send_buffer);
+    return ret;
+}
+
 
 static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
@@ -124,15 +573,16 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
     u16 duration, le_offset, le_duration;
 
     int ret, trans;
-    
-    /* currently this driver doesn't support dynamic effect updating quite like
-     * many games would assume. There's not a huge drawback to this method, the
-     * wheel maybe feels a bit more jittery because of this but it's not a
-     * massive downside. At some point in the future I'd like to improve the
-     * dynamic updating, but this will do for now.
-     * */
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_stop_effect(t300rs, state);
+
+    /* some games, such as DiRT Rally 2 have a weird feeling to them, sort of
+     * like the wheel pulls just a bit to the right or left and then it just
+     * stops. I wouldn't be surprised if it's got something to do with the
+     * constant envelope, but right now I don't know. */
+
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags) && 
+            test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)){
+        __clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
+        return t300rs_modify_constant(t300rs, state, send_buffer);
     }
 
     level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
@@ -170,10 +620,6 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed uploading constant effect\n");
-    }
-
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_play_effect(t300rs, state);
     }
 
     kfree(send_buffer);
@@ -262,8 +708,10 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
     u16 duration, le_right_coeff, le_left_coeff, le_deadband_right, le_deadband_left,
         le_duration, le_offset;
     
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_stop_effect(t300rs, state);
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags) && 
+            test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)){
+        __clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
+        return t300rs_modify_damper(t300rs, state, send_buffer);
     }
 
     if(effect.replay.length == 0){
@@ -314,10 +762,6 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
         hid_err(t300rs->hdev, "failed uploading spring\n");
     }
 
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_play_effect(t300rs, state);
-    }
-
     kfree(send_buffer);
     return ret;
 }
@@ -331,8 +775,10 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
     u16 duration, le_right_coeff, le_left_coeff, le_deadband_right, le_deadband_left,
         le_duration, le_offset;
     
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_stop_effect(t300rs, state);
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags) && 
+            test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)){
+        __clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
+        return t300rs_modify_damper(t300rs, state, send_buffer);
     }
 
     if(effect.replay.length == 0){
@@ -383,10 +829,6 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
         hid_err(t300rs->hdev, "failed uploading spring\n");
     }
 
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_play_effect(t300rs, state);
-    }
-
     kfree(send_buffer);
     return ret;
 }
@@ -399,8 +841,10 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     u16 duration, magnitude, le_magnitude, le_phase, le_period, le_offset, le_duration;
     s16 le_periodic_offset;
 
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_stop_effect(t300rs, state);
+    if(test_bit(FF_EFFECT_PLAYING, &state->flags) && 
+            test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)){
+        __clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
+        return t300rs_modify_periodic(t300rs, state, send_buffer);
     }
 
     if(effect.replay.length == 0){
@@ -456,10 +900,6 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
         hid_err(t300rs->hdev, "failed uploading periodic effect");
     }
      
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_play_effect(t300rs, state);
-    }
-
     kfree(send_buffer);
     return ret;
 }
@@ -493,9 +933,12 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
         
         state = &t300rs->states[effect_id];
 
-         if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-            if((jiffies_now - state->start_time) >= state->effect.replay.length){
+         if(test_bit(FF_EFFECT_PLAYING, &state->flags) && state->effect.replay.length){
+             if((jiffies_now - state->start_time) >= state->effect.replay.length){
                 __clear_bit(FF_EFFECT_PLAYING, &state->flags);
+
+                /* lazy bum fix? */
+                __clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 
                 if(state->count){
                     __set_bit(FF_EFFECT_QUEUE_START, &state->flags);
@@ -582,6 +1025,10 @@ static int t300rs_upload(struct input_dev *dev, struct ff_effect *effect, struct
     spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
 
     state->effect = *effect;
+    if(old){
+        state->old = *old;
+        __set_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
+    }
     __set_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
     spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
@@ -601,11 +1048,12 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
     spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
 
     if(value > 0){
+        /*
         if(test_bit(FF_EFFECT_QUEUE_START, &state->flags)){
             __set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
         } else {
             t300rs->effects_used++;
-        }
+        }*/
 
         state->count = value;
         state->start_time = JIFFIES2MS(jiffies);
@@ -631,21 +1079,28 @@ static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *a
     struct t300rs_device_entry *t300rs;
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     u16 range = simple_strtoul(buf, NULL, 10);
+    u16 le_range;
     int ret, trans;
 
     t300rs = t300rs_get_device(hdev);
 
-    if(range < 0x097b){
-        range = 0x097b;
+    if(range < 40){
+        range = 40;
     }
 
-    range = cpu_to_le16(range);
+    if(range > 1080){
+        range = 1080;
+    }
+
+    range *= 0x3c;
+
+    le_range = cpu_to_le16(range);
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x08;
     send_buffer[2] = 0x11;
-    send_buffer[3] = range & 0xff;
-    send_buffer[4] = range >> 8;
+    send_buffer[3] = le_range & 0xff;
+    send_buffer[4] = le_range >> 8;
 
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
@@ -653,7 +1108,7 @@ static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *a
         return -1;
     }
 
-    t300rs->range = range;
+    t300rs->range = range / 0x3c;
     kfree(send_buffer);
     return count;
 }
@@ -798,7 +1253,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     struct usb_device *usbdev = interface_to_usbdev(usbif);
     struct hid_report *report;
     struct ff_device *ff;
-    char range[10] = "54000"; /* approx 900 degress */
+    char range[10] = "1080"; /* max */
     int i, ret;
 
     drv_data = hid_get_drvdata(hdev);
@@ -829,6 +1284,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     }
 
     spin_lock_init(&t300rs->lock);
+    spin_lock_init(&data_lock);
 
     drv_data->device_props = t300rs;
 
