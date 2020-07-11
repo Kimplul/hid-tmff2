@@ -43,6 +43,8 @@ static const signed short t300rs_ff_effects[] = {
 
 struct t300rs_effect_state {
     struct ff_effect effect;
+    struct ff_effect old;
+    bool old_set;
     unsigned long flags;
     unsigned long start_time;
     unsigned long count;
