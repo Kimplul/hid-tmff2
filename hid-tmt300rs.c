@@ -32,30 +32,32 @@ static struct t300rs_device_entry *t300rs_get_device(struct hid_device *hdev){
 static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     struct hid_device *hdev = input_get_drvdata(dev);
     struct t300rs_device_entry *t300rs;
-    s32 *value;
-    int i;
-
+    struct usb_device *usbdev;
+    struct usb_interface *usbif;
+    struct usb_host_endpoint *ep;
+    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+    
     t300rs = t300rs_get_device(hdev);
     if(!t300rs){
         hid_err(hdev, "could not get device\n");
-        return 1;
     }
 
-    value = t300rs->ff_field->value;
+    usbdev = t300rs->usbdev;
+    usbif = t300rs->usbif;
+    ep = &usbif->cur_altsetting->endpoint[1];
 
-    spin_lock_irqsave(&data_lock, data_flags);
-   
-    /* cool hotfix, I should change the other values here and there but for now,
-     * this works */
-    for(i = 0; i < T300RS_BUFFER_LENGTH; ++i){
-        value[i] = 0;
-        value[i] = send_buffer[i + 1];
-    }
+    usb_fill_int_urb(
+            urb,
+            usbdev,
+            usb_sndintpipe(usbdev, 1),
+            send_buffer,
+            T300RS_BUFFER_LENGTH,
+            t300rs_int_callback,
+            hdev,
+            ep->desc.bInterval
+            );
 
-    hid_hw_request(hdev, t300rs->report, HID_REQ_SET_REPORT);
-    spin_unlock_irqrestore(&data_lock, data_flags);
-
-    return 0;
+    return usb_submit_urb(urb, GFP_ATOMIC);
 }
 
 static int t300rs_play_effect(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
@@ -648,15 +650,8 @@ static int t300rs_upload_effect(struct t300rs_device_entry *t300rs, struct t300r
 
 static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
     struct t300rs_effect_state *state;
-    struct usbhid_device *usbhid = t300rs->hdev->driver_data;
     unsigned long jiffies_now = JIFFIES2MS(jiffies);
     int max_count = 0, effect_id, ret;
-
-    if(usbhid->outhead != usbhid->outtail){
-        timer_msecs *= 2;
-        hid_info(t300rs->hdev, "Commands stacking up\n");
-        return 1;
-    }
     
     for(effect_id = 0; effect_id < T300RS_MAX_EFFECTS; ++effect_id){
         
@@ -985,7 +980,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     if(!t300rs){
         hid_err(hdev, "device entry could not be created\n");
         ret = -ENOMEM;
-        goto err;
+        goto t300rs_err;
     }
 
     t300rs->input_dev = input_dev;
@@ -1049,7 +1044,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
                     break;
 
                 default:
-                    hid_warn(hdev, "ignoring unknown output usage: %i\n", field->usage[0].hid);
+                    hid_warn(hdev, "ignoring unknown output usage\n");
                     continue;
             }
         }
@@ -1102,6 +1097,8 @@ out:
     kfree(t300rs->states);
 states_err:
     kfree(t300rs);
+t300rs_err:
+    kfree(drv_data);
 err:
     hid_err(hdev, "failed creating force feedback device\n");
     return ret;
