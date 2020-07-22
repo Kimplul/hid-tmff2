@@ -1,0 +1,12 @@
+hid-tminit.o
+hid-tminit.ko
+hid-tminit.mod
+hid-tminit.mod.c
+hid-tminit.mod.o
+hid-tmt300rs.o
+hid-tmt300rs.ko
+hid-tmt300rs.mod
+hid-tmt300rs.mod.c
+hid-tmt300rs.mod.o
+Modules.symvers
+modules.order
