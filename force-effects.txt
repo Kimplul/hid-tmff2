@@ -53,15 +53,14 @@ FF_CONSTANT:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
 
-    Modifying: (It may be possible to modify the effects all at once, not sure)
-        (In any case, so far I only investigated the constant modifiers)
+    Modifying: (For dynamic updating of effects)
         Direction: n/a
         
         Constant force:
         60 00 - standard header
         01 - ID
         0a - modify constant force
-        05 16 - constant force
+        05 16 - constant force ***
         00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -75,7 +74,7 @@ FF_CONSTANT:
                                         attack_length 81,
                                         fade_level 88,
                                         fade_length 84  )
-        63 04 - value attribute should be set to
+        63 04 - value attribute should be set to ?***?
         00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -90,6 +89,9 @@ FF_CONSTANT:
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        Offset:
+        Not supported?
 
 
 FF_RAMP:
@@ -117,6 +119,40 @@ FF_RAMP:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
+    Modifying:
+        Sweet baby jesus
+        I'll figure this out later
+        
+        Envelope:
+        60 00 - standard header
+        01 - ID
+        31 - modify envelope
+        84 - ID of envelope attribute ( attack_level 82,
+                                        attack_length 81,
+                                        fade_level 88,
+                                        fade_length 84  )
+        63 04 - value attribute should be set to
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        Duration:
+         
+        60 00
+        01 - ID
+        4e 08 - ?
+        01 00 - time in milliseconds
+        05 41 - ?
+        01 00 - time in milliseconds
+        00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        Offset:
+        Not supported?
+
 FF_SPRING:
     Init:
     60 00 - standard header
@@ -137,6 +173,9 @@ FF_SPRING:
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
+    Modifying:
+        Same as under
+
 FF_DAMPER + FF_FRICTION + FF_INERTIA:
     Init:
     60 00 - standard header
@@ -155,6 +194,51 @@ FF_DAMPER + FF_FRICTION + FF_INERTIA:
     00 ff ff - end of init
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    
+    Modifying:
+        positive coefficient:
+        60 00
+        02 - ID
+        0e 41
+        64 35 - value, signed (between 00 00 and 01 80?)
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        negative coefficient:
+        60 00
+        02 - ID
+        0e 42
+        64 35 - value, signed (between 00 00 and ff 7f?)
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        deadband/offset:
+        60 00
+        02 - ID
+        0e 4c
+        64 35 - deadband (right?) (deadband + offset) (fe ff means no deadband)
+        00 00 - deadband (left?) (deadband + offset)
+        00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        Duration:
+        60 00 - standard header
+        01 - ID
+        49 06 41 - modify timing?
+        6c 20 - length in milliseconds
+        00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        Offset:
+        Not supported?
 
 FF_PERIODIC:
     60 00 - standard header
@@ -181,6 +265,80 @@ FF_PERIODIC:
     00 ff ff - end of init
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    Modifying:
+        magnitude:
+        60 00
+        02 - ID
+        0e 01
+        64 35 - value, signed (between 00 00 and ff 7f?)
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        offset of effect:
+        60 00
+        02 - ID
+        0e 04
+        64 35 - value, signed (between 00 00 and ff 7f?)
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        phase:
+        60 00
+        02 - ID
+        0e 02
+        64 35 - value, signed (between 80 01 and ff 7f?)
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        period:
+        60 00
+        02 - ID
+        0e 08
+        64 35 - value, signed (between 00 00 and I guess ff 7f?) (max value in
+        wireshark is 0d 07, but I don't know if that's a driver or program issue)
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+
+        Envelope:
+        60 00 - standard header
+        01 - ID
+        31 - modify envelope
+        84 - ID of envelope attribute ( attack_level 82,
+                                        attack_length 81,
+                                        fade_level 88,
+                                        fade_length 84  )
+        63 04 - value attribute should be set to
+        00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        Duration:
+         
+        60 00
+        01 - ID
+        4e 08 - ?
+        01 00 - time in milliseconds
+        05 41 - ?
+        01 00 - time in milliseconds
+        00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+        Offset:
+        Not supported?
+
 
 FF_AUTOCENTER:
     60 08 - header plus settings?
