@@ -937,6 +937,9 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
              if((jiffies_now - state->start_time) >= state->effect.replay.length){
                 __clear_bit(FF_EFFECT_PLAYING, &state->flags);
 
+                /* lazy bum fix? */
+                __clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
+
                 if(state->count){
                     __set_bit(FF_EFFECT_QUEUE_START, &state->flags);
                 }
