@@ -34,14 +34,14 @@ Done!
     
 + Change range:
   
-Write a value between 0 and 65535 to
+Write a value between 0 and 1080 to
 /sys/bus/devices/XXXX:044F:B66E.XXX/range
 
 + Change autocenter and gain:
 
 Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.html
     
-+ Currently there is no support for this driver in oversteer(https://github.com/berarma/oversteer), but ffbwrap(https://github.com/berarma/ffbtools) should work.
++ Currently there is support for this driver in oversteer(https://github.com/berarma/oversteer), and ffbwrap(https://github.com/berarma/ffbtools) should work.
 + If the wheel has a deadzone in games, you can set up a udev rule:
     
     `/etc/udev/rules.d/99-joydev.rules`
