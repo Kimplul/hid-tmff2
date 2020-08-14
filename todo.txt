@@ -1,3 +1,0 @@
-1. set a default range for the wheel so that it syncs up correctly
-2. figure out the bug where the effects suddenly stop being sent (happens in
-dirt rally at least)
