@@ -1,5 +1,8 @@
 # Linux kernel module for the Thrustmaster T300RS wheel
 
+## This branch
+is for 'testing' dynamic updating of the ramp effect. Should be merged into master soon.
+
 ## Current state
 Playable. I've made some improvements to the dynamic updating of effects, and
 while still far for perfect, the experience is slowly getting better and better.
