@@ -25,7 +25,6 @@ static struct t300rs_device_entry *t300rs_get_device(struct hid_device *hdev){
         return NULL;
     }
     spin_unlock_irqrestore(&lock, lock_flags);
-
     return t300rs;
 }
 
@@ -889,11 +888,11 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     send_buffer[24] = le_duration & 0xff;
     send_buffer[25] = le_duration >> 8;
 
-    send_buffer[27] = le_offset & 0xff;
-    send_buffer[28] = le_offset >> 8;
+    send_buffer[28] = le_offset & 0xff;
+    send_buffer[29] = le_offset >> 8;
 
-    send_buffer[30] = 0xff;
     send_buffer[31] = 0xff;
+    send_buffer[32] = 0xff;
     
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
