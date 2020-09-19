@@ -43,8 +43,7 @@ Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.h
     `/etc/udev/rules.d/99-joydev.rules`
 
     ```
-    SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e"
-    RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+    SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
     ```
 
 This should make sure that the wheel behaves like you'd want from a
