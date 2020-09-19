@@ -122,6 +122,19 @@ FF_RAMP:
     Modifying:
         Sweet baby jesus
         I'll figure this out later
+        Ramp(?):
+       60 00 - standard header
+       01 - ID
+       0e - ???
+       03 - ramp?
+       e3 04 - difference?
+       7d 75 - "level"?
+       05 - ????
+       00 00 00 00 00 00
+       00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+       00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+       00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
         
         Envelope:
         60 00 - standard header
