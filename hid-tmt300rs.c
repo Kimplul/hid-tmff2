@@ -665,8 +665,6 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
     send_buffer[22] = ramp.end_level > ramp.start_level ? 0x04 : 0x05;
     send_buffer[23] = 0x4f;
 
-    hid_info(t300rs->hdev, "uploading ramp effect with dir %i", send_buffer[22]);
-
     send_buffer[24] = le_duration & 0xff;
     send_buffer[25] = le_duration >> 8;
 
