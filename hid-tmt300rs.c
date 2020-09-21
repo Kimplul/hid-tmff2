@@ -925,6 +925,10 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
                 __clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 
                 if(state->count){
+                    state->count--;
+                }
+
+                if(state->count){
                     __set_bit(FF_EFFECT_QUEUE_START, &state->flags);
                 }
             }
@@ -950,9 +954,6 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs){
                 return ret;
             }
 
-            if(state->count){
-                state->count--;
-            }
         }
 
         if(test_bit(FF_EFFECT_QUEUE_STOP, &state->flags)){
@@ -1042,11 +1043,16 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
             t300rs->effects_used++;
         }*/
 
+
+
         state->count = value;
         state->start_time = JIFFIES2MS(jiffies);
         __set_bit(FF_EFFECT_QUEUE_START, &state->flags);
 
-    } else if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+        if(test_bit(FF_EFFECT_QUEUE_STOP, &state->flags))
+            __clear_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
+
+    } else {
             __set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
     }
 
