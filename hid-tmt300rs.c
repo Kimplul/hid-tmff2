@@ -665,6 +665,8 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
     send_buffer[22] = ramp.end_level > ramp.start_level ? 0x04 : 0x05;
     send_buffer[23] = 0x4f;
 
+    hid_info(t300rs->hdev, "uploading ramp effect with dir %i", send_buffer[22]);
+
     send_buffer[24] = le_duration & 0xff;
     send_buffer[25] = le_duration >> 8;
 
@@ -850,7 +852,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     le_offset = cpu_to_le16(effect.replay.delay);
     le_duration = cpu_to_le16(duration);
     
-        send_buffer[0] = 0x60;
+    send_buffer[0] = 0x60;
     send_buffer[2] = effect.id + 1;
     send_buffer[3] = 0x6b;
     
@@ -1122,6 +1124,16 @@ static void t300rs_set_autocenter(struct input_dev *dev, u16 value){
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x08;
+    send_buffer[2] = 0x04;
+    send_buffer[3] = 0x01;
+    
+    ret = t300rs_send_int(dev, send_buffer, &trans);
+    if(ret){
+        hid_err(hdev, "failed setting autocenter");
+    }
+
+    send_buffer[0] = 0x60;
+    send_buffer[1] = 0x08;
     send_buffer[2] = 0x03;
     
     send_buffer[3] = le_value & 0xff;
@@ -1163,7 +1175,7 @@ static int t300rs_open(struct input_dev *dev){
     struct hid_device *hdev = input_get_drvdata(dev);
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     int ret, trans;
-
+    
     t300rs = t300rs_get_device(hdev);
 
     send_buffer[0] = 0x60;
@@ -1229,6 +1241,105 @@ err:
     return;
 }
 
+void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
+    int ret, trans;
+    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+
+    send_buffer[0] = 0x42;
+    send_buffer[1] = 0x01;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x90;
+    send_buffer[3] = 0x03;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x00;
+    send_buffer[3] = 0x0c;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x12;
+    send_buffer[3] = 0x10;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x00;
+    send_buffer[3] = 0x06;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x03;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x03;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x03;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+err:
+    kfree(send_buffer);
+    return;
+}
+
 int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     struct t300rs_device_entry *t300rs;
     struct t300rs_data *drv_data;
@@ -1241,7 +1352,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     struct usb_device *usbdev = interface_to_usbdev(usbif);
     struct hid_report *report;
     struct ff_device *ff;
-    char range[10] = "1080"; /* max */
+    char range[10] = "900"; /* max */
     int i, ret;
 
     drv_data = hid_get_drvdata(hdev);
@@ -1364,6 +1475,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 
     t300rs_range_store(dev, &dev_attr_range, range, 10);
     t300rs_set_gain(input_dev, 0xffff);
+
+    t300rs_init_interrupts(t300rs);
 
     hid_info(hdev, "force feedback for T300RS\n");
     return 0;
