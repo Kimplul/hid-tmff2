@@ -679,10 +679,6 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
         hid_err(t300rs->hdev, "failed uploading ramp");
     }
 
-    if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
-        t300rs_play_effect(t300rs, state);
-    }
-
     kfree(send_buffer);
     return ret;
 }
@@ -1032,6 +1028,9 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
     t300rs = t300rs_get_device(hdev);
 
     state = &t300rs->states[effect_id];
+
+    if(&state->effect == 0)
+        return 0;
     
     spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
 
@@ -1047,9 +1046,8 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
         state->start_time = JIFFIES2MS(jiffies);
         __set_bit(FF_EFFECT_QUEUE_START, &state->flags);
 
-    } else {
-        __set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
-        t300rs->effects_used--;
+    } else if(test_bit(FF_EFFECT_PLAYING, &state->flags)){
+            __set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
     }
 
     if(!hrtimer_active(&t300rs->hrtimer)){
