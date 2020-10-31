@@ -1500,7 +1500,7 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
     struct t300rs_data *drv_data;
 
     spin_lock_init(&lock);
-    spin_lock_irqsave(&lock, lock_flags);
+    //spin_lock_irqsave(&lock, lock_flags);
 
     drv_data = kzalloc(sizeof(struct t300rs_data), GFP_ATOMIC);
     if(!drv_data){
@@ -1532,7 +1532,7 @@ static int t300rs_probe(struct hid_device *hdev, const struct hid_device_id *id)
     return 0;
 err:
     kfree(drv_data);
-    spin_unlock_irqrestore(&lock, lock_flags);
+    //spin_unlock_irqrestore(&lock, lock_flags);
     return ret;
 }
 
