@@ -8,23 +8,16 @@ static void tminit_callback(struct urb *urb){
  * the whole kernel crashes. I have no idea why.
  * */
 static void tminit_interrupts(struct hid_device *hdev){
-    int ret, trans, i, b_ep, b_ip;
+    int ret, trans, i, b_ep;
     u8 *send_buf = kmalloc(256, GFP_KERNEL);
-    u8 *feck = kmalloc(64, GFP_KERNEL);
 
     struct usb_host_endpoint *ep;
-    struct usb_host_endpoint *ip;
     struct device *dev = &hdev->dev;
     struct usb_interface *usbif = to_usb_interface(dev->parent);
     struct usb_device *usbdev = interface_to_usbdev(usbif);
 
     ep = &usbif->cur_altsetting->endpoint[1];
     b_ep = ep->desc.bEndpointAddress;
-
-    ip = &usbif->cur_altsetting->endpoint[2];
-    b_ip = ep->desc.bEndpointAddress;
-
-    hid_info(hdev, "bEndPointAddress: %hhx %hhx", b_ep, b_ip);
 
     for(i = 0; i < ARRAY_SIZE(setup_arr); ++i){
         memcpy(send_buf, setup_arr[i], setup_arr_sizes[i]);
@@ -41,17 +34,6 @@ static void tminit_interrupts(struct hid_device *hdev){
             return;
         }
         
-
-        ret = usb_interrupt_msg(usbdev,
-                usb_rcvintpipe(usbdev, 0x02),
-                (char*)feck,
-                28,
-                &trans,
-                USB_CTRL_SET_TIMEOUT);
-
-        if(ret){
-            hid_err(hdev, "fuck: %i\n", ret);
-        }
     }
 
     kzfree(send_buf);
@@ -147,10 +129,6 @@ int tminit(struct hid_device *hdev){
     tminit_controls(hdev);
 
     tminit_interrupts(hdev);
-
-    if(ret < 0){
-        hid_err(hdev, "failed with the ctrl: %i", ret);
-    }
 
     setup_packet = kmalloc(8, GFP_ATOMIC);
     transfer_buffer = kmalloc(8, GFP_ATOMIC);
