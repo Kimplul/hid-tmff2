@@ -475,7 +475,7 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
         send_buffer[0] = 0x60;
         send_buffer[2] = effect.id + 1;
         send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x04;
+        send_buffer[4] = 0x02;
 
         send_buffer[5] = le_offset & 0xff;
         send_buffer[6] = le_offset >> 8;
@@ -494,7 +494,7 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
         send_buffer[0] = 0x60;
         send_buffer[2] = effect.id + 1;
         send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x02;
+        send_buffer[4] = 0x04;
 
         send_buffer[5] = le_phase & 0xff;
         send_buffer[6] = le_phase >> 8;
@@ -853,11 +853,11 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     send_buffer[4] = le_magnitude & 0xff;
     send_buffer[5] = le_magnitude >> 8;
 
-    send_buffer[6] = le_phase & 0xff;
-    send_buffer[7] = le_phase >> 8;
+    send_buffer[8] = le_phase & 0xff;
+    send_buffer[9] = le_phase >> 8;
 
-    send_buffer[8] = le_periodic_offset & 0xff;
-    send_buffer[9] = le_periodic_offset >> 8;
+    send_buffer[6] = le_periodic_offset & 0xff;
+    send_buffer[7] = le_periodic_offset >> 8;
 
     send_buffer[10] = le_period & 0xff;
     send_buffer[11] = le_period >> 8;

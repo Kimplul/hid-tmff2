@@ -258,8 +258,8 @@ FF_PERIODIC:
     01 - ID
     6b - new periodic effect
     00 00 - magnitude ***
-    fe ff - phase (left/right)
-    00 00 - offset of effect (forward/backward)
+    fe ff - offset (up/down)
+    00 00 - phase (left/right)
     e8 03 - period
     00 80 
     00 00 - attack_length
@@ -293,7 +293,7 @@ FF_PERIODIC:
         offset of effect:
         60 00
         02 - ID
-        0e 04
+        0e 02
         64 35 - value, signed (between 00 00 and ff 7f?)
         00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -303,7 +303,7 @@ FF_PERIODIC:
         phase:
         60 00
         02 - ID
-        0e 02
+        0e 04
         64 35 - value, signed (between 80 01 and ff 7f?)
         00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00

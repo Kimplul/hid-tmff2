@@ -120,6 +120,7 @@ void tminit_controls(struct hid_device *hdev){
     if(ret < 0){
         hid_err(hdev, "failed with the ctrl: %i", ret);
     }
+
     ret = usb_control_msg(usbdev,
             usb_rcvctrlpipe(usbdev, 0),
             86,
@@ -146,6 +147,10 @@ int tminit(struct hid_device *hdev){
     tminit_controls(hdev);
 
     tminit_interrupts(hdev);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
 
     setup_packet = kmalloc(8, GFP_ATOMIC);
     transfer_buffer = kmalloc(8, GFP_ATOMIC);
