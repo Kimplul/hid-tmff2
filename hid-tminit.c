@@ -8,16 +8,23 @@ static void tminit_callback(struct urb *urb){
  * the whole kernel crashes. I have no idea why.
  * */
 static void tminit_interrupts(struct hid_device *hdev){
-    int ret, trans, i, b_ep;
+    int ret, trans, i, b_ep, b_ip;
     u8 *send_buf = kmalloc(256, GFP_KERNEL);
+    u8 *feck = kmalloc(64, GFP_KERNEL);
 
     struct usb_host_endpoint *ep;
+    struct usb_host_endpoint *ip;
     struct device *dev = &hdev->dev;
     struct usb_interface *usbif = to_usb_interface(dev->parent);
     struct usb_device *usbdev = interface_to_usbdev(usbif);
-    
+
     ep = &usbif->cur_altsetting->endpoint[1];
     b_ep = ep->desc.bEndpointAddress;
+
+    ip = &usbif->cur_altsetting->endpoint[2];
+    b_ip = ep->desc.bEndpointAddress;
+
+    hid_info(hdev, "bEndPointAddress: %hhx %hhx", b_ep, b_ip);
 
     for(i = 0; i < ARRAY_SIZE(setup_arr); ++i){
         memcpy(send_buf, setup_arr[i], setup_arr_sizes[i]);
@@ -33,9 +40,99 @@ static void tminit_interrupts(struct hid_device *hdev){
             hid_err(hdev, "setup data couldn't be sent\n");
             return;
         }
+        
+
+        ret = usb_interrupt_msg(usbdev,
+                usb_rcvintpipe(usbdev, 0x02),
+                (char*)feck,
+                28,
+                &trans,
+                USB_CTRL_SET_TIMEOUT);
+
+        if(ret){
+            hid_err(hdev, "fuck: %i\n", ret);
+        }
     }
 
     kzfree(send_buf);
+}
+
+void tminit_controls(struct hid_device *hdev){
+    int i = 0, ret;
+    struct usb_host_endpoint *ep;
+    struct usb_host_endpoint *ip;
+    struct device *dev = &hdev->dev;
+    struct usb_interface *usbif = to_usb_interface(dev->parent);
+    struct usb_device *usbdev = interface_to_usbdev(usbif);
+
+    u8 *transfer = kzalloc(64, GFP_ATOMIC);
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            86,
+            0xc1,
+            0,
+            0,
+            transfer,
+            8,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            73,
+            0xc1,
+            0,
+            0,
+            transfer,
+            16,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            66,
+            0xc1,
+            0,
+            0,
+            transfer,
+            8,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            78,
+            0xc1,
+            0,
+            0,
+            transfer,
+            8,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            86,
+            0xc1,
+            0,
+            0,
+            transfer,
+            8,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
 }
 
 int tminit(struct hid_device *hdev){
@@ -45,7 +142,9 @@ int tminit(struct hid_device *hdev){
     struct usb_interface *usbif = to_usb_interface(dev->parent);
     struct usb_device *usbdev = interface_to_usbdev(usbif);
     int ret;
-   
+
+    tminit_controls(hdev);
+
     tminit_interrupts(hdev);
 
     setup_packet = kmalloc(8, GFP_ATOMIC);
@@ -57,13 +156,13 @@ int tminit(struct hid_device *hdev){
     urb = usb_alloc_urb(0, GFP_ATOMIC);
 
     usb_fill_control_urb(urb,
-           usbdev,
-           usb_sndctrlpipe(usbdev, 0),
-           setup_packet,
-           transfer_buffer,
-           8,
-           tminit_callback,
-           hdev);
+            usbdev,
+            usb_sndctrlpipe(usbdev, 0),
+            setup_packet,
+            transfer_buffer,
+            8,
+            tminit_callback,
+            hdev);
 
     /* we sort of have to go on faith that the message is sent, because the
      * wheel usually completely dies as soon as it receives the message.
@@ -94,7 +193,7 @@ static int tminit_probe(struct hid_device *hdev, const struct hid_device_id *id)
         hid_err(hdev, "hw start failed\n");
         goto err;
     }
-    
+
     ret = tminit(hdev);
     if(ret){
         hid_err(hdev, "tminit exited, error might be intended behaviour\n");

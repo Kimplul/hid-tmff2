@@ -1259,11 +1259,13 @@ void t300rs_ctrl_handler(struct urb *urb){
             response[3]);
 
     usb_free_urb(urb);
+    kzfree(response);
 }
 
 void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
-    int ret, trans;
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    int ret;
+    //int trans;
+    //u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
     struct usb_ctrlrequest* rq = kzalloc(sizeof(struct usb_ctrlrequest), GFP_ATOMIC);
     response = kzalloc(4, GFP_ATOMIC);
@@ -1289,6 +1291,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
 
     usb_submit_urb(urb, GFP_ATOMIC);
 
+    /*
     send_buffer[0] = 0x42;
     send_buffer[1] = 0x01;
 
@@ -1380,7 +1383,13 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     }
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 err:
-    kfree(send_buffer);
+    */
+    //kfree(send_buffer);
+    return;
+
+err:
+    usb_free_urb(urb);
+    kzfree(response);
     return;
 }
 
