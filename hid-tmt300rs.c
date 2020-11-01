@@ -1243,9 +1243,51 @@ err:
     return;
 }
 
+char* response;
+
+void t300rs_ctrl_handler(struct urb *urb){
+    struct hid_device *hdev = urb->context;
+    if(urb->status){
+        hid_err(hdev, "ctrl failed");
+        return;
+    }
+
+    hid_info(hdev, "Response: %hhx %hhx %hhx %hhx",
+            response[0],
+            response[1],
+            response[2],
+            response[3]);
+
+    usb_free_urb(urb);
+}
+
 void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     int ret, trans;
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+    struct usb_ctrlrequest* rq = kzalloc(sizeof(struct usb_ctrlrequest), GFP_ATOMIC);
+    response = kzalloc(4, GFP_ATOMIC);
+
+    if(!rq){
+        ret = -1;
+        hid_err(t300rs->hdev, "failed allocating usb_ctrlrequest\n");
+        goto err;
+    }
+
+    rq->bRequestType = 0xc1;
+    rq->bRequest = 86;
+    rq->wLength = 8;
+
+    usb_fill_control_urb(urb,
+            t300rs->usbdev,
+            usb_rcvctrlpipe(t300rs->usbdev, 0),
+            (char*)rq,
+            response,
+            4,
+            t300rs_ctrl_handler,
+            t300rs->hdev);
+
+    usb_submit_urb(urb, GFP_ATOMIC);
 
     send_buffer[0] = 0x42;
     send_buffer[1] = 0x01;
@@ -1385,7 +1427,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     }
 
     spin_lock_init(&t300rs->lock);
-    spin_lock_init(&data_lock);
+    //spin_lock_init(&data_lock);
 
     drv_data->device_props = t300rs;
 
@@ -1468,7 +1510,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
         hid_warn(hdev, "unable to create sysfs interface for range\n");
         goto out;
     }
-    
+
+    t300rs_init_interrupts(t300rs);
 
     hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     t300rs->hrtimer.function = t300rs_timer;
@@ -1477,8 +1520,6 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 
     t300rs_range_store(dev, &dev_attr_range, range, 10);
     t300rs_set_gain(input_dev, 0xffff);
-
-    t300rs_init_interrupts(t300rs);
 
     hid_info(hdev, "force feedback for T300RS\n");
     return 0;
