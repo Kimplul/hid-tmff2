@@ -1171,6 +1171,49 @@ static void t300rs_destroy(struct ff_device *ff){
     return;
 }
 
+void t300rs_open_interrupts(struct t300rs_device_entry *t300rs){
+    int ret;
+    int trans;
+    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x12;
+    send_buffer[3] = 0x10;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x00;
+    send_buffer[3] = 0x0c;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
+    send_buffer[0] = 0x0a;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x03;
+
+    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    if(ret){
+        hid_err(t300rs->hdev, "failed sending interrupts\n");
+        goto err;
+    }
+
+err:
+    kzfree(send_buffer);
+    return;
+}
 
 static int t300rs_open(struct input_dev *dev){
     struct t300rs_device_entry *t300rs;
@@ -1180,6 +1223,7 @@ static int t300rs_open(struct input_dev *dev){
     
     t300rs = t300rs_get_device(hdev);
 
+    
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
     send_buffer[2] = 0x04;
@@ -1189,7 +1233,7 @@ static int t300rs_open(struct input_dev *dev){
         hid_err(hdev, "failed sending interrupts\n");
         goto err;
     }
-    /*
+    
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x60;
@@ -1207,6 +1251,8 @@ static int t300rs_open(struct input_dev *dev){
     }
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
+    t300rs_open_interrupts(t300rs);
+
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
     send_buffer[2] = 0x05;
@@ -1216,7 +1262,7 @@ static int t300rs_open(struct input_dev *dev){
         hid_err(hdev, "failed sending interrupts\n");
         goto err;
     }
-*/
+    
 err:
 
     kfree(send_buffer);
@@ -1245,55 +1291,13 @@ err:
     return;
 }
 
-char* response;
-
-void t300rs_ctrl_handler(struct urb *urb){
-    struct hid_device *hdev = urb->context;
-    if(urb->status){
-        hid_err(hdev, "ctrl failed");
-        return;
-    }
-
-    hid_info(hdev, "Response: %hhx %hhx %hhx %hhx",
-            response[0],
-            response[1],
-            response[2],
-            response[3]);
-
-    usb_free_urb(urb);
-    kzfree(response);
-}
 
 void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     int ret;
-    //int trans;
-    //u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
-    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
-    struct usb_ctrlrequest* rq = kzalloc(sizeof(struct usb_ctrlrequest), GFP_ATOMIC);
-    response = kzalloc(4, GFP_ATOMIC);
+    int trans;
+    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
 
-    if(!rq){
-        ret = -1;
-        hid_err(t300rs->hdev, "failed allocating usb_ctrlrequest\n");
-        goto err;
-    }
-
-    rq->bRequestType = 0xc1;
-    rq->bRequest = 86;
-    rq->wLength = 8;
-
-    usb_fill_control_urb(urb,
-            t300rs->usbdev,
-            usb_rcvctrlpipe(t300rs->usbdev, 0),
-            (char*)rq,
-            response,
-            4,
-            t300rs_ctrl_handler,
-            t300rs->hdev);
-
-    usb_submit_urb(urb, GFP_ATOMIC);
-
-    /*
+    
     send_buffer[0] = 0x42;
     send_buffer[1] = 0x01;
 
@@ -1384,14 +1388,9 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         goto err;
     }
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+    
 err:
-    */
-    //kfree(send_buffer);
-    return;
-
-err:
-    usb_free_urb(urb);
-    kzfree(response);
+    kfree(send_buffer);
     return;
 }
 
@@ -1515,7 +1514,6 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 
     // input_dev->open = t300rs_open;
     // input_dev->close = t300rs_close;
-    t300rs_open(input_dev);
 
     ret = device_create_file(&hdev->dev, &dev_attr_range);
     if(ret){
@@ -1531,7 +1529,9 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     //spin_unlock_irqrestore(&lock, lock_flags);
 
     t300rs_range_store(dev, &dev_attr_range, range, 10);
-    t300rs_set_gain(input_dev, 0xffff);
+    t300rs_set_gain(input_dev, 0xeeee);
+
+    t300rs_open(input_dev);
 
     hid_info(hdev, "force feedback for T300RS\n");
     return 0;
