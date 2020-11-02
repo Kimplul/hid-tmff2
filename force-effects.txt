@@ -389,7 +389,7 @@ Open:
     
     (this command doesn't appear every time, odd)
     60 12 - ?
-    bf 04 00 00 03 b7 1e - ?
+    bf 04 00 00 03 b7 1e - ? /* wow, this is different on different wheels? */
     00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00

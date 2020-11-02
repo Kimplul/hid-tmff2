@@ -1189,6 +1189,7 @@ static int t300rs_open(struct input_dev *dev){
         hid_err(hdev, "failed sending interrupts\n");
         goto err;
     }
+    /*
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x60;
@@ -1196,8 +1197,8 @@ static int t300rs_open(struct input_dev *dev){
     send_buffer[2] = 0xbf;
     send_buffer[3] = 0x04;
     send_buffer[6] = 0x03;
-    send_buffer[7] = 0xb7;
-    send_buffer[8] = 0x1e;
+    send_buffer[7] = 0xc3; //0xb7;
+    send_buffer[8] = 0x20; //0x1e;
 
     ret = t300rs_send_int(dev, send_buffer, &trans); 
     if(ret){
@@ -1215,10 +1216,11 @@ static int t300rs_open(struct input_dev *dev){
         hid_err(hdev, "failed sending interrupts\n");
         goto err;
     }
-
+*/
 err:
+
     kfree(send_buffer);
-    return t300rs->open(dev);
+    return 0; //t300rs->open(dev);
 }
 
 static void t300rs_close(struct input_dev *dev){
@@ -1511,8 +1513,9 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     t300rs->open = input_dev->open;
     t300rs->close = input_dev->close;
 
-    input_dev->open = t300rs_open;
-    input_dev->close = t300rs_close;
+    // input_dev->open = t300rs_open;
+    // input_dev->close = t300rs_close;
+    t300rs_open(input_dev);
 
     ret = device_create_file(&hdev->dev, &dev_attr_range);
     if(ret){
