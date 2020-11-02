@@ -1533,6 +1533,25 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 
     t300rs_open(input_dev);
 
+    u8 *transfer = kzalloc(64, GFP_ATOMIC);
+
+    // Hello?
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            72,
+            0x41,
+            0x40,
+            0,
+            transfer,
+            0,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+
+    kfree(transfer);
+
     hid_info(hdev, "force feedback for T300RS\n");
     return 0;
 

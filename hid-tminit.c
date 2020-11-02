@@ -63,11 +63,12 @@ void tminit_controls(struct hid_device *hdev){
         hid_err(hdev, "failed with the ctrl: %i", ret);
     }
 
+    // Hello?
     ret = usb_control_msg(usbdev,
             usb_rcvctrlpipe(usbdev, 0),
             73,
-            0xc1,
-            0,
+            0x41,
+            0x40,
             0,
             transfer,
             16,
