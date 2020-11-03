@@ -35,6 +35,7 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     struct usb_interface *usbif;
     struct usb_host_endpoint *ep;
     struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+    int ret;
     
     t300rs = t300rs_get_device(hdev);
     if(!t300rs){
@@ -1266,7 +1267,7 @@ static int t300rs_open(struct input_dev *dev){
 err:
 
     kfree(send_buffer);
-    return t300rs->open(dev);
+    return 0; // t300rs->open(dev);
 }
 
 static void t300rs_close(struct input_dev *dev){
@@ -1657,8 +1658,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     t300rs->open = input_dev->open;
     t300rs->close = input_dev->close;
 
-    input_dev->open = t300rs_open;
-    input_dev->close = t300rs_close;
+    //input_dev->open = t300rs_open;
+    //input_dev->close = t300rs_close;
 
     ret = device_create_file(&hdev->dev, &dev_attr_range);
     if(ret){
@@ -1674,7 +1675,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     t300rs->hrtimer.function = t300rs_timer;
     
     //spin_unlock_irqrestore(&lock, lock_flags);
-    //t300rs_open(input_dev);
+    t300rs_open(input_dev);
 
 
     // this is starting to become a bit silly
