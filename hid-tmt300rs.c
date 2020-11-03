@@ -1226,7 +1226,7 @@ static int t300rs_open(struct input_dev *dev){
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
-    send_buffer[2] = 0x05;
+    send_buffer[2] = 0x04;
 
     ret = t300rs_send_int(dev, send_buffer, &trans); 
     if(ret){
@@ -1253,7 +1253,7 @@ static int t300rs_open(struct input_dev *dev){
     }
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
-    //t300rs_open_interrupts(t300rs);
+    t300rs_open_interrupts(t300rs);
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
