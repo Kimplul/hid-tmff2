@@ -1223,7 +1223,6 @@ static int t300rs_open(struct input_dev *dev){
     
     t300rs = t300rs_get_device(hdev);
 
-    
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
     send_buffer[2] = 0x04;
@@ -1237,9 +1236,10 @@ static int t300rs_open(struct input_dev *dev){
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x60;
-    send_buffer[1] = 0x12;
-    send_buffer[2] = 0xbf;
-    send_buffer[3] = 0x04;
+    send_buffer[1] = 0x12; // 0x12;
+    send_buffer[2] = 0xbf; // 0xbf;
+    send_buffer[3] = 0x04; // 0x04;
+
     send_buffer[6] = 0x03;
     send_buffer[7] = 0xc3; //0xb7;
     send_buffer[8] = 0x20; //0x1e;
@@ -1251,7 +1251,7 @@ static int t300rs_open(struct input_dev *dev){
     }
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
-    t300rs_open_interrupts(t300rs);
+    //t300rs_open_interrupts(t300rs);
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
@@ -1266,7 +1266,7 @@ static int t300rs_open(struct input_dev *dev){
 err:
 
     kfree(send_buffer);
-    return 0; //t300rs->open(dev);
+    return t300rs->open(dev);
 }
 
 static void t300rs_close(struct input_dev *dev){
@@ -1354,6 +1354,23 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
+    // Hello?
+    ret = usb_control_msg(t300rs->usbdev,
+            usb_rcvctrlpipe(t300rs->usbdev, 0),
+            72,
+            0x41,
+            0x40,
+            0,
+            send_buffer,
+            0,
+            USB_CTRL_SET_TIMEOUT
+            );
+
+    if(ret < 0){
+        hid_err(t300rs->hdev, "failed ctrl 72: %i", ret);
+    }
+
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x0a;
@@ -1394,6 +1411,115 @@ err:
     return;
 }
 
+void tmt300rs_controls(struct hid_device *hdev){
+    int i = 0, ret;
+    struct usb_host_endpoint *ep;
+    struct usb_host_endpoint *ip;
+    struct device *dev = &hdev->dev;
+    struct usb_interface *usbif = to_usb_interface(dev->parent);
+    struct usb_device *usbdev = interface_to_usbdev(usbif);
+
+    u8 *transfer = kzalloc(64, GFP_ATOMIC);
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            86,
+            0xc1,
+            0,
+            0,
+            transfer,
+            8,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            73,
+            0xc1,
+            0,
+            0,
+            transfer,
+            16,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+    hid_info(hdev, "tr: %i\n", transfer[6]);
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            72,
+            0xc1,
+            0,
+            0,
+            transfer,
+            64,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            85,
+            0xc1,
+            0,
+            0,
+            transfer,
+            16,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            66,
+            0xc1,
+            0,
+            0,
+            transfer,
+            8,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            78,
+            0xc1,
+            0,
+            0,
+            transfer,
+            8,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            86,
+            0xc1,
+            0,
+            0,
+            transfer,
+            8,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed with the ctrl: %i", ret);
+    }
+}
+
 int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     struct t300rs_device_entry *t300rs;
     struct t300rs_data *drv_data;
@@ -1406,6 +1532,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     struct usb_device *usbdev = interface_to_usbdev(usbif);
     struct hid_report *report;
     struct ff_device *ff;
+    u8 *transfer = kzalloc(64, GFP_ATOMIC);
     char range[10] = "900"; /* max */
     int i, ret;
 
@@ -1512,8 +1639,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     t300rs->open = input_dev->open;
     t300rs->close = input_dev->close;
 
-    // input_dev->open = t300rs_open;
-    // input_dev->close = t300rs_close;
+    input_dev->open = t300rs_open;
+    input_dev->close = t300rs_close;
 
     ret = device_create_file(&hdev->dev, &dev_attr_range);
     if(ret){
@@ -1521,34 +1648,20 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
         goto out;
     }
 
+    tmt300rs_controls(t300rs->hdev);
+
     t300rs_init_interrupts(t300rs);
 
     hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     t300rs->hrtimer.function = t300rs_timer;
     
     //spin_unlock_irqrestore(&lock, lock_flags);
+    //t300rs_open(input_dev);
 
-    t300rs_range_store(dev, &dev_attr_range, range, 10);
-    t300rs_set_gain(input_dev, 0xeeee);
 
-    t300rs_open(input_dev);
-
-    u8 *transfer = kzalloc(64, GFP_ATOMIC);
-
-    // Hello?
-    ret = usb_control_msg(usbdev,
-            usb_rcvctrlpipe(usbdev, 0),
-            72,
-            0x41,
-            0x40,
-            0,
-            transfer,
-            0,
-            USB_CTRL_SET_TIMEOUT);
-
-    if(ret < 0){
-        hid_err(hdev, "failed with the ctrl: %i", ret);
-    }
+    // this is starting to become a bit silly
+    //t300rs_range_store(dev, &dev_attr_range, range, 10);
+    //t300rs_set_gain(input_dev, 0xffff);
 
     kfree(transfer);
 

@@ -39,6 +39,7 @@ static void tminit_interrupts(struct hid_device *hdev){
     kzfree(send_buf);
 }
 
+/*
 void tminit_controls(struct hid_device *hdev){
     int i = 0, ret;
     struct usb_host_endpoint *ep;
@@ -63,12 +64,11 @@ void tminit_controls(struct hid_device *hdev){
         hid_err(hdev, "failed with the ctrl: %i", ret);
     }
 
-    // Hello?
     ret = usb_control_msg(usbdev,
             usb_rcvctrlpipe(usbdev, 0),
             73,
-            0x41,
-            0x40,
+            0xc1,
+            0,
             0,
             transfer,
             16,
@@ -118,6 +118,7 @@ void tminit_controls(struct hid_device *hdev){
         hid_err(hdev, "failed with the ctrl: %i", ret);
     }
 }
+*/
 
 int tminit(struct hid_device *hdev){
     struct urb *urb;
@@ -127,7 +128,7 @@ int tminit(struct hid_device *hdev){
     struct usb_device *usbdev = interface_to_usbdev(usbif);
     int ret;
 
-    tminit_controls(hdev);
+    //tminit_controls(hdev);
 
     tminit_interrupts(hdev);
 
