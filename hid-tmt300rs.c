@@ -1226,7 +1226,7 @@ static int t300rs_open(struct input_dev *dev){
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
-    send_buffer[2] = 0x04;
+    send_buffer[2] = 0x05;
 
     ret = t300rs_send_int(dev, send_buffer, &trans); 
     if(ret){
@@ -1237,13 +1237,14 @@ static int t300rs_open(struct input_dev *dev){
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x60;
-    send_buffer[1] = 0x12; // 0x12;
-    send_buffer[2] = 0xbf; // 0xbf;
-    send_buffer[3] = 0x04; // 0x04;
+    send_buffer[1] = 0x13; // 0x12;
+    send_buffer[2] = 0x04; // 0xbf;
+    send_buffer[3] = 0xbf; // 0x04;
+    send_buffer[4] = 0x04;
 
-    send_buffer[6] = 0x03;
-    send_buffer[7] = 0xc3; //0xb7;
-    send_buffer[8] = 0x20; //0x1e;
+    send_buffer[7] = 0x03;
+    send_buffer[8] = 0xc3; //0xb7;
+    send_buffer[9] = 0x20; //0x1e;
 
     ret = t300rs_send_int(dev, send_buffer, &trans); 
     if(ret){
@@ -1677,10 +1678,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     //spin_unlock_irqrestore(&lock, lock_flags);
     t300rs_open(input_dev);
 
-
-    // this is starting to become a bit silly
-    //t300rs_range_store(dev, &dev_attr_range, range, 10);
-    //t300rs_set_gain(input_dev, 0xffff);
+    t300rs_range_store(dev, &dev_attr_range, range, 10);
+    t300rs_set_gain(input_dev, 0xffff);
 
     kfree(transfer);
 
