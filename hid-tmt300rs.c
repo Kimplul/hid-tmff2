@@ -1306,6 +1306,9 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+    
+    msleep(10);
+
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x0a;
@@ -1318,6 +1321,9 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
+    msleep(10);
+
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x0a;
@@ -1330,6 +1336,9 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
+    msleep(10);
+
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x0a;
@@ -1342,6 +1351,9 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
+    msleep(10);
+
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x0a;
@@ -1382,6 +1394,9 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
+    msleep(10);
+
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x0a;
@@ -1393,6 +1408,9 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
+    msleep(10);
+
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x0a;

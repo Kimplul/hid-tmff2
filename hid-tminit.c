@@ -39,7 +39,7 @@ static void tminit_interrupts(struct hid_device *hdev){
     kzfree(send_buf);
 }
 
-/*
+
 void tminit_controls(struct hid_device *hdev){
     int i = 0, ret;
     struct usb_host_endpoint *ep;
@@ -61,7 +61,7 @@ void tminit_controls(struct hid_device *hdev){
             USB_CTRL_SET_TIMEOUT);
 
     if(ret < 0){
-        hid_err(hdev, "failed with the ctrl: %i", ret);
+        hid_err(hdev, "failed retrieveing ctrl 86: %i", ret);
     }
 
     ret = usb_control_msg(usbdev,
@@ -75,8 +75,9 @@ void tminit_controls(struct hid_device *hdev){
             USB_CTRL_SET_TIMEOUT);
 
     if(ret < 0){
-        hid_err(hdev, "failed with the ctrl: %i", ret);
+        hid_err(hdev, "failed retrieving ctrl 73: %i", ret);
     }
+
     ret = usb_control_msg(usbdev,
             usb_rcvctrlpipe(usbdev, 0),
             66,
@@ -88,8 +89,9 @@ void tminit_controls(struct hid_device *hdev){
             USB_CTRL_SET_TIMEOUT);
 
     if(ret < 0){
-        hid_err(hdev, "failed with the ctrl: %i", ret);
+        hid_err(hdev, "failed retreiving ctrl 66: %i", ret);
     }
+
     ret = usb_control_msg(usbdev,
             usb_rcvctrlpipe(usbdev, 0),
             78,
@@ -101,7 +103,7 @@ void tminit_controls(struct hid_device *hdev){
             USB_CTRL_SET_TIMEOUT);
 
     if(ret < 0){
-        hid_err(hdev, "failed with the ctrl: %i", ret);
+        hid_err(hdev, "failed retrieving ctrl 78: %i", ret);
     }
 
     ret = usb_control_msg(usbdev,
@@ -115,10 +117,9 @@ void tminit_controls(struct hid_device *hdev){
             USB_CTRL_SET_TIMEOUT);
 
     if(ret < 0){
-        hid_err(hdev, "failed with the ctrl: %i", ret);
+        hid_err(hdev, "failed retrieving 86: %i", ret);
     }
 }
-*/
 
 int tminit(struct hid_device *hdev){
     struct urb *urb;
@@ -127,8 +128,9 @@ int tminit(struct hid_device *hdev){
     struct usb_interface *usbif = to_usb_interface(dev->parent);
     struct usb_device *usbdev = interface_to_usbdev(usbif);
     int ret;
+    u8 *transfer = kzalloc(64, GFP_ATOMIC);
 
-    //tminit_controls(hdev);
+    tminit_controls(hdev);
 
     tminit_interrupts(hdev);
 
@@ -137,6 +139,20 @@ int tminit(struct hid_device *hdev){
 
     memcpy(setup_packet, hw_rq_out, 8);
     memcpy(transfer_buffer, hw_rq_in, 8);
+
+    ret = usb_control_msg(usbdev,
+            usb_rcvctrlpipe(usbdev, 0),
+            73,
+            0xc1,
+            0,
+            0,
+            transfer,
+            16,
+            USB_CTRL_SET_TIMEOUT);
+
+    if(ret < 0){
+        hid_err(hdev, "failed retrieving 73 after interrupts: %i", ret);
+    }
 
     urb = usb_alloc_urb(0, GFP_ATOMIC);
 
@@ -156,6 +172,7 @@ int tminit(struct hid_device *hdev){
     ret = usb_submit_urb(urb, GFP_ATOMIC);
     kfree(setup_packet);
     kfree(transfer_buffer);
+    kfree(transfer);
     return ret;
 }
 
