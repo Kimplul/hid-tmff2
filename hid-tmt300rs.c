@@ -1294,6 +1294,54 @@ err:
 }
 
 
+static int t300rs_send_int_in(struct input_dev *dev, u8 *send_buffer, int *trans){
+    struct hid_device *hdev = input_get_drvdata(dev);
+    struct t300rs_device_entry *t300rs;
+    struct usb_device *usbdev;
+    struct usb_interface *usbif;
+    struct usb_host_endpoint *ep;
+    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+    int ret;
+    
+    t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+    }
+
+    usbdev = t300rs->usbdev;
+    usbif = t300rs->usbif;
+    ep = &usbif->cur_altsetting->endpoint[1];
+
+    usb_fill_int_urb(
+            urb,
+            usbdev,
+            usb_rcvintpipe(usbdev, 2),
+            send_buffer,
+            T300RS_BUFFER_LENGTH,
+            t300rs_int_callback,
+            hdev,
+            ep->desc.bInterval
+            );
+
+    return usb_submit_urb(urb, GFP_ATOMIC);
+}
+
+void t300rs_send_five_ints(struct t300rs_device_entry *t300rs){
+    int i, ret, trans; 
+    u8 *send_buf = kmalloc(64, GFP_KERNEL);
+
+    for(i = 0; i < 5; ++i){
+        ret = t300rs_send_int_in(t300rs->input_dev, send_buf, &trans);
+
+        if(ret){
+            hid_err(t300rs->hdev, "in int not sent at index: %i error: %i\n", i, ret);
+            return;
+        }
+        
+    }
+}
+
+
 void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     int ret;
     int trans;
@@ -1308,6 +1356,8 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
+    t300rs_send_five_ints(t300rs);
     
     msleep(10);
 
@@ -1323,6 +1373,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
 
     msleep(10);
 
