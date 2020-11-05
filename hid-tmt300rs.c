@@ -1286,7 +1286,6 @@ err:
 
     kfree(send_buffer);
     return 0; //t300rs->open(dev);
-    return 0; // t300rs->open(dev);
 }
 
 static void t300rs_close(struct input_dev *dev){
@@ -1728,8 +1727,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     t300rs->open = input_dev->open;
     t300rs->close = input_dev->close;
 
-    //input_dev->open = t300rs_open;
-    //input_dev->close = t300rs_close;
+    input_dev->open = t300rs_open;
+    input_dev->close = t300rs_close;
 
     ret = device_create_file(&hdev->dev, &dev_attr_range);
     if(ret){
@@ -1748,7 +1747,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     t300rs->hrtimer.function = t300rs_timer;
     
     //spin_unlock_irqrestore(&lock, lock_flags);
-    t300rs_open(input_dev);
+    //t300rs_open(input_dev);
 
     t300rs_range_store(dev, &dev_attr_range, range, 10);
     t300rs_set_gain(input_dev, 0xffff);
