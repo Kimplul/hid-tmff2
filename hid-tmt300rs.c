@@ -1273,11 +1273,8 @@ static int t300rs_open(struct input_dev *dev){
 err:
 
     kfree(send_buffer);
-<<<<<<< HEAD
     return 0; //t300rs->open(dev);
-=======
     return 0; // t300rs->open(dev);
->>>>>>> f605352ef1a78145c01323633eeb15664ebb3cc4
 }
 
 static void t300rs_close(struct input_dev *dev){
@@ -1739,10 +1736,6 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     
     //spin_unlock_irqrestore(&lock, lock_flags);
     t300rs_open(input_dev);
-<<<<<<< HEAD
-
-=======
->>>>>>> f605352ef1a78145c01323633eeb15664ebb3cc4
 
     t300rs_range_store(dev, &dev_attr_range, range, 10);
     t300rs_set_gain(input_dev, 0xffff);
