@@ -31,6 +31,38 @@ static struct t300rs_device_entry *t300rs_get_device(struct hid_device *hdev){
     return t300rs;
 }
 
+static int t300rs_send_dumb_int(struct input_dev *dev, u8 *send_buffer, int *trans){
+    struct hid_device *hdev = input_get_drvdata(dev);
+    struct t300rs_device_entry *t300rs;
+    struct usb_device *usbdev;
+    struct usb_interface *usbif;
+    struct usb_host_endpoint *ep;
+    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+    int ret, i;
+    
+    t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+    }
+
+    usbdev = t300rs->usbdev;
+    usbif = t300rs->usbif;
+    ep = &usbif->cur_altsetting->endpoint[1];
+
+    usb_fill_int_urb(
+            urb,
+            usbdev,
+            usb_sndintpipe(usbdev, 1),
+            send_buffer,
+            T300RS_BUFFER_LENGTH,
+            t300rs_int_callback,
+            hdev,
+            ep->desc.bInterval
+            );
+        
+    return usb_submit_urb(urb, GFP_ATOMIC);
+}
+
 static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     struct hid_device *hdev = input_get_drvdata(dev);
     struct t300rs_device_entry *t300rs;
@@ -1240,7 +1272,7 @@ static int t300rs_open(struct input_dev *dev){
     int ret, trans;
     
     t300rs = t300rs_get_device(hdev);
-
+/*
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
     send_buffer[2] = 0x04;
@@ -1271,6 +1303,7 @@ static int t300rs_open(struct input_dev *dev){
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     t300rs_open_interrupts(t300rs);
+    */
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
@@ -1368,7 +1401,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     send_buffer[0] = 0x42;
     send_buffer[1] = 0x01;
 
-    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    ret = t300rs_send_dumb_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
@@ -1385,7 +1418,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     send_buffer[2] = 0x90;
     send_buffer[3] = 0x03;
 
-    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    ret = t300rs_send_dumb_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
@@ -1401,7 +1434,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     send_buffer[2] = 0x00;
     send_buffer[3] = 0x0c;
 
-    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    ret = t300rs_send_dumb_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
@@ -1416,7 +1449,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     send_buffer[2] = 0x12;
     send_buffer[3] = 0x10;
 
-    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    ret = t300rs_send_dumb_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
@@ -1431,7 +1464,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     send_buffer[2] = 0x00;
     send_buffer[3] = 0x06;
 
-    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    ret = t300rs_send_dumb_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
@@ -1459,7 +1492,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     send_buffer[1] = 0x04;
     send_buffer[2] = 0x03;
 
-    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    ret = t300rs_send_dumb_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
@@ -1473,7 +1506,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     send_buffer[1] = 0x04;
     send_buffer[2] = 0x03;
 
-    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    ret = t300rs_send_dumb_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
@@ -1487,7 +1520,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     send_buffer[1] = 0x04;
     send_buffer[2] = 0x03;
 
-    ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+    ret = t300rs_send_dumb_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
