@@ -38,6 +38,7 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     struct usb_interface *usbif;
     struct usb_host_endpoint *ep;
     struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+    int ret;
     
     t300rs = t300rs_get_device(hdev);
     if(!t300rs){
@@ -1241,13 +1242,14 @@ static int t300rs_open(struct input_dev *dev){
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
     send_buffer[0] = 0x60;
-    send_buffer[1] = 0x12; // 0x12;
-    send_buffer[2] = 0xbf; // 0xbf;
-    send_buffer[3] = 0x04; // 0x04;
+    send_buffer[1] = 0x13; // 0x12;
+    send_buffer[2] = 0x04; // 0xbf;
+    send_buffer[3] = 0xbf; // 0x04;
+    send_buffer[4] = 0x04;
 
-    send_buffer[6] = 0x03;
-    send_buffer[7] = 0xc3; //0xb7;
-    send_buffer[8] = 0x20; //0x1e;
+    send_buffer[7] = 0x03;
+    send_buffer[8] = 0xc3; //0xb7;
+    send_buffer[9] = 0x20; //0x1e;
 
     ret = t300rs_send_int(dev, send_buffer, &trans); 
     if(ret){
@@ -1256,7 +1258,7 @@ static int t300rs_open(struct input_dev *dev){
     }
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
-    //t300rs_open_interrupts(t300rs);
+    t300rs_open_interrupts(t300rs);
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
@@ -1271,7 +1273,11 @@ static int t300rs_open(struct input_dev *dev){
 err:
 
     kfree(send_buffer);
+<<<<<<< HEAD
     return 0; //t300rs->open(dev);
+=======
+    return 0; // t300rs->open(dev);
+>>>>>>> f605352ef1a78145c01323633eeb15664ebb3cc4
 }
 
 static void t300rs_close(struct input_dev *dev){
@@ -1297,6 +1303,54 @@ err:
 }
 
 
+static int t300rs_send_int_in(struct input_dev *dev, u8 *send_buffer, int *trans){
+    struct hid_device *hdev = input_get_drvdata(dev);
+    struct t300rs_device_entry *t300rs;
+    struct usb_device *usbdev;
+    struct usb_interface *usbif;
+    struct usb_host_endpoint *ep;
+    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+    int ret;
+    
+    t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+    }
+
+    usbdev = t300rs->usbdev;
+    usbif = t300rs->usbif;
+    ep = &usbif->cur_altsetting->endpoint[1];
+
+    usb_fill_int_urb(
+            urb,
+            usbdev,
+            usb_rcvintpipe(usbdev, 2),
+            send_buffer,
+            T300RS_BUFFER_LENGTH,
+            t300rs_int_callback,
+            hdev,
+            ep->desc.bInterval
+            );
+
+    return usb_submit_urb(urb, GFP_ATOMIC);
+}
+
+void t300rs_send_five_ints(struct t300rs_device_entry *t300rs){
+    int i, ret, trans; 
+    u8 *send_buf = kmalloc(64, GFP_KERNEL);
+
+    for(i = 0; i < 5; ++i){
+        ret = t300rs_send_int_in(t300rs->input_dev, send_buf, &trans);
+
+        if(ret){
+            hid_err(t300rs->hdev, "in int not sent at index: %i error: %i\n", i, ret);
+            return;
+        }
+        
+    }
+}
+
+
 void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
     int ret;
     int trans;
@@ -1311,6 +1365,8 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
+    t300rs_send_five_ints(t300rs);
     
     msleep(10);
 
@@ -1326,6 +1382,7 @@ void t300rs_init_interrupts(struct t300rs_device_entry *t300rs){
         hid_err(t300rs->hdev, "failed sending interrupts\n");
         goto err;
     }
+
 
     msleep(10);
 
@@ -1682,11 +1739,13 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     
     //spin_unlock_irqrestore(&lock, lock_flags);
     t300rs_open(input_dev);
+<<<<<<< HEAD
 
+=======
+>>>>>>> f605352ef1a78145c01323633eeb15664ebb3cc4
 
-    // this is starting to become a bit silly
-    //t300rs_range_store(dev, &dev_attr_range, range, 10);
-    //t300rs_set_gain(input_dev, 0xffff);
+    t300rs_range_store(dev, &dev_attr_range, range, 10);
+    t300rs_set_gain(input_dev, 0xffff);
 
     kfree(transfer);
 
