@@ -1,10 +1,13 @@
 #include "hid-tmt300rs.h"
 
+DEFINE_MUTEX(mtx);
+
 static void t300rs_int_callback(struct urb *urb){
     if(urb->status){
         hid_warn(urb->dev, "urb status %i received\n", urb->status);
     }
-
+    
+    mutex_unlock(&mtx);
     usb_free_urb(urb);
 }
 
@@ -55,6 +58,8 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
             hdev,
             ep->desc.bInterval
             );
+
+    mutex_lock(&mtx);
 
     return usb_submit_urb(urb, GFP_ATOMIC);
 }
@@ -1266,7 +1271,7 @@ static int t300rs_open(struct input_dev *dev){
 err:
 
     kfree(send_buffer);
-    return t300rs->open(dev);
+    return 0; //t300rs->open(dev);
 }
 
 static void t300rs_close(struct input_dev *dev){
@@ -1554,6 +1559,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     char range[10] = "900"; /* max */
     int i, ret;
 
+    mutex_init(&mtx);
+
     drv_data = hid_get_drvdata(hdev);
     if(!drv_data){
         hid_err(hdev, "private driver data not allocated\n");
@@ -1657,8 +1664,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     t300rs->open = input_dev->open;
     t300rs->close = input_dev->close;
 
-    input_dev->open = t300rs_open;
-    input_dev->close = t300rs_close;
+    //input_dev->open = t300rs_open;
+    //input_dev->close = t300rs_close;
 
     ret = device_create_file(&hdev->dev, &dev_attr_range);
     if(ret){
@@ -1674,7 +1681,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     t300rs->hrtimer.function = t300rs_timer;
     
     //spin_unlock_irqrestore(&lock, lock_flags);
-    //t300rs_open(input_dev);
+    t300rs_open(input_dev);
 
 
     // this is starting to become a bit silly
