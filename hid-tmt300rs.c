@@ -1272,7 +1272,7 @@ static int t300rs_open(struct input_dev *dev){
     int ret, trans;
     
     t300rs = t300rs_get_device(hdev);
-/*
+
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
     send_buffer[2] = 0x04;
@@ -1302,8 +1302,7 @@ static int t300rs_open(struct input_dev *dev){
     }
     memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
 
-    t300rs_open_interrupts(t300rs);
-    */
+    //t300rs_open_interrupts(t300rs);
 
     send_buffer[0] = 0x60;
     send_buffer[1] = 0x01;
@@ -1318,7 +1317,7 @@ static int t300rs_open(struct input_dev *dev){
 err:
 
     kfree(send_buffer);
-    return 0; //t300rs->open(dev);
+    return t300rs->open(dev);
 }
 
 static void t300rs_close(struct input_dev *dev){
@@ -1772,9 +1771,9 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     greport_list = &t300rs->hdev->report_enum[HID_OUTPUT_REPORT].report_list;
     greport = list_entry(report_list->next, struct hid_report, list);;
 
-    tmt300rs_controls(t300rs->hdev);
+    //tmt300rs_controls(t300rs->hdev);
 
-    t300rs_init_interrupts(t300rs);
+    //t300rs_init_interrupts(t300rs);
 
     hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     t300rs->hrtimer.function = t300rs_timer;
