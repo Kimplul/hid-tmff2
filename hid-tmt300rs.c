@@ -1,13 +1,13 @@
 #include "hid-tmt300rs.h"
 
-DEFINE_MUTEX(mtx);
+struct hid_report *greport;
+struct list_head *greport_list;
 
 static void t300rs_int_callback(struct urb *urb){
     if(urb->status){
         hid_warn(urb->dev, "urb status %i received\n", urb->status);
     }
     
-    mutex_unlock(&mtx);
     usb_free_urb(urb);
 }
 
@@ -38,14 +38,14 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     struct usb_interface *usbif;
     struct usb_host_endpoint *ep;
     struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
-    int ret;
+    int ret, i;
     
     t300rs = t300rs_get_device(hdev);
     if(!t300rs){
         hid_err(hdev, "could not get device\n");
     }
 
-    usbdev = t300rs->usbdev;
+   /* usbdev = t300rs->usbdev;
     usbif = t300rs->usbif;
     ep = &usbif->cur_altsetting->endpoint[1];
 
@@ -59,10 +59,22 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
             hdev,
             ep->desc.bInterval
             );
+            */
 
-    mutex_lock(&mtx);
+    //ret = hid_hw_raw_request(t300rs->hdev, 0, send_buffer, T300RS_BUFFER_LENGTH, 73, HID_REQ_SET_REPORT);
+    s32 *value = greport->field[0]->value;
+    if(!value)
+        hid_err(t300rs->hdev, "fuck\n");
 
-    return usb_submit_urb(urb, GFP_ATOMIC);
+    for(i = 0; i < 63; ++i){
+        value[i] = send_buffer[i + 1];
+    }
+    hid_hw_request(t300rs->hdev, greport, HID_REQ_SET_REPORT);
+
+    return 0;
+
+
+   // return usb_submit_urb(urb, GFP_ATOMIC);
 }
 
 static int t300rs_play_effect(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
@@ -1166,7 +1178,7 @@ static void t300rs_set_gain(struct input_dev *dev, u16 gain){
     
     ret = t300rs_send_int(dev, send_buffer, &trans);
     if(ret){
-        hid_err(hdev, "failed setting gain\n");
+        hid_err(hdev, "failed setting gain: %i\n", ret);
     }
 
     kfree(send_buffer);
@@ -1613,8 +1625,6 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     char range[10] = "900"; /* max */
     int i, ret;
 
-    mutex_init(&mtx);
-
     drv_data = hid_get_drvdata(hdev);
     if(!drv_data){
         hid_err(hdev, "private driver data not allocated\n");
@@ -1659,7 +1669,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
             }
 
             switch(field->usage[0].hid){
-                case 0xff00000a:
+                case -16777120:
                     if(field->report_count < 2){
                         hid_warn(hdev, "ignoring FF field with report_count < 2\n");
                         continue;
@@ -1690,7 +1700,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
                     break;
 
                 default:
-                    hid_warn(hdev, "ignoring unknown output usage\n");
+                    hid_warn(hdev, "ignoring unknown output usage: %i\n", field->usage[0].hid);
                     continue;
             }
         }
@@ -1726,6 +1736,9 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
         hid_warn(hdev, "unable to create sysfs interface for range\n");
         goto out;
     }
+
+    greport_list = &t300rs->hdev->report_enum[HID_OUTPUT_REPORT].report_list;
+    greport = list_entry(report_list->next, struct hid_report, list);;
 
     tmt300rs_controls(t300rs->hdev);
 
