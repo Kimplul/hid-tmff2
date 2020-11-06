@@ -1029,10 +1029,10 @@ static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *a
     range *= 0x3c;
 
     
-    send_buffer[1] = 0x08;
-    send_buffer[2] = 0x11;
-    send_buffer[3] = range & 0xff;
-    send_buffer[4] = range >> 8;
+    send_buffer[0] = 0x08;
+    send_buffer[1] = 0x11;
+    send_buffer[2] = range & 0xff;
+    send_buffer[3] = range >> 8;
 
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
@@ -1073,7 +1073,6 @@ static void t300rs_set_autocenter(struct input_dev *dev, u16 value){
         hid_err(hdev, "failed setting autocenter");
     }
 
-    
     send_buffer[0] = 0x08;
     send_buffer[1] = 0x03;
     
