@@ -8,45 +8,6 @@ static void tminit_callback(struct urb *urb){
     usb_free_urb(urb);
 }
 
-static int tminit_send_int(struct hid_device *hdev, struct usb_device *usbdev, struct usb_interface *usbif, u8 *send_buffer, int *trans){
-    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
-    struct usb_host_endpoint *ep;
-
-    ep = &usbif->cur_altsetting->endpoint[1];
-
-    usb_fill_int_urb(
-            urb,
-            usbdev,
-            usb_sndintpipe(usbdev, 1),
-            send_buffer,
-            9,
-            tminit_callback,
-            hdev,
-            ep->desc.bInterval
-            );
-
-    return usb_submit_urb(urb, GFP_ATOMIC);
-}
-
-static int tminit_send_int_in(struct hid_device *hdev, struct usb_device *usbdev, struct usb_interface *usbif, u8 *send_buffer, int *trans){
-    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
-    struct usb_host_endpoint *ep;
-
-    ep = &usbif->cur_altsetting->endpoint[1];
-
-    usb_fill_int_urb(
-            urb,
-            usbdev,
-            usb_rcvintpipe(usbdev, 2),
-            send_buffer,
-            27,
-            tminit_callback,
-            hdev,
-            ep->desc.bInterval
-            );
-
-    return usb_submit_urb(urb, GFP_ATOMIC);
-}
 /* for some godawful reason these interrupts are absolutely necessary, otherwise
  * the whole kernel crashes. I have no idea why.
  * */
@@ -62,30 +23,7 @@ static void tminit_interrupts(struct hid_device *hdev){
     ep = &usbif->cur_altsetting->endpoint[1];
     b_ep = ep->desc.bEndpointAddress;
 
-    memcpy(send_buf, setup_arr[0], setup_arr_sizes[0]);
-    ret = usb_interrupt_msg(usbdev,
-            usb_sndintpipe(usbdev, b_ep),
-            send_buf,
-            setup_arr_sizes[0],
-            &trans,
-            USB_CTRL_SET_TIMEOUT
-            );
-
-    if(ret){
-        hid_err(hdev, "setup int couldn't be sent: %i\n", ret);
-    }
-
-    for(i = 0; i < 4; ++i){
-        ret = tminit_send_int_in(hdev, usbdev, usbif, send_buf, trans);
-
-        if(ret){
-            hid_err(hdev, "setup int in couldn't be sent: %i\n", ret);
-        }
-    }
-
-    msleep(100);
-
-    for(i = 1; i < ARRAY_SIZE(setup_arr); ++i){
+    for(i = 0; i < ARRAY_SIZE(setup_arr); ++i){
         memcpy(send_buf, setup_arr[i], setup_arr_sizes[i]);
 
         ret = usb_interrupt_msg(usbdev,
@@ -101,93 +39,9 @@ static void tminit_interrupts(struct hid_device *hdev){
             return;
         }
 
-        msleep(10);
-        
     }
 
     kzfree(send_buf);
-}
-
-
-void tminit_controls(struct hid_device *hdev){
-    int i = 0, ret;
-    struct usb_host_endpoint *ep;
-    struct usb_host_endpoint *ip;
-    struct device *dev = &hdev->dev;
-    struct usb_interface *usbif = to_usb_interface(dev->parent);
-    struct usb_device *usbdev = interface_to_usbdev(usbif);
-
-    u8 *transfer = kzalloc(64, GFP_ATOMIC);
-
-    ret = usb_control_msg(usbdev,
-            usb_rcvctrlpipe(usbdev, 0),
-            86,
-            0xc1,
-            0,
-            0,
-            transfer,
-            8,
-            USB_CTRL_SET_TIMEOUT);
-
-    if(ret < 0){
-        hid_err(hdev, "failed retrieveing ctrl 86: %i", ret);
-    }
-
-    ret = usb_control_msg(usbdev,
-            usb_rcvctrlpipe(usbdev, 0),
-            73,
-            0xc1,
-            0,
-            0,
-            transfer,
-            16,
-            USB_CTRL_SET_TIMEOUT);
-
-    if(ret < 0){
-        hid_err(hdev, "failed retrieving ctrl 73: %i", ret);
-    }
-
-    ret = usb_control_msg(usbdev,
-            usb_rcvctrlpipe(usbdev, 0),
-            66,
-            0xc1,
-            0,
-            0,
-            transfer,
-            8,
-            USB_CTRL_SET_TIMEOUT);
-
-    if(ret < 0){
-        hid_err(hdev, "failed retreiving ctrl 66: %i", ret);
-    }
-
-    ret = usb_control_msg(usbdev,
-            usb_rcvctrlpipe(usbdev, 0),
-            78,
-            0xc1,
-            0,
-            0,
-            transfer,
-            8,
-            USB_CTRL_SET_TIMEOUT);
-
-    if(ret < 0){
-        hid_err(hdev, "failed retrieving ctrl 78: %i", ret);
-    }
-
-    ret = usb_control_msg(usbdev,
-            usb_rcvctrlpipe(usbdev, 0),
-            86,
-            0xc1,
-            0,
-            0,
-            transfer,
-            8,
-            USB_CTRL_SET_TIMEOUT);
-
-    if(ret < 0){
-        hid_err(hdev, "failed retrieving 86: %i", ret);
-    }
 }
 
 int tminit(struct hid_device *hdev){
@@ -199,8 +53,6 @@ int tminit(struct hid_device *hdev){
     int ret;
     u8 *transfer = kzalloc(64, GFP_ATOMIC);
 
-    tminit_controls(hdev);
-
     tminit_interrupts(hdev);
 
     setup_packet = kmalloc(8, GFP_ATOMIC);
@@ -208,24 +60,6 @@ int tminit(struct hid_device *hdev){
 
     memcpy(setup_packet, hw_rq_out, 8);
     memcpy(transfer_buffer, hw_rq_in, 8);
-
-    // this is really ugly but it'll work for now I suppose
-    msleep(200);
-
-    ret = usb_control_msg(usbdev,
-            usb_rcvctrlpipe(usbdev, 0),
-            73,
-            0xc1,
-            0,
-            0,
-            transfer,
-            16,
-            USB_CTRL_SET_TIMEOUT);
-
-    if(ret < 0){
-        hid_err(hdev, "failed retrieving 73 after interrupts: %i", ret);
-    }
-
 
     urb = usb_alloc_urb(0, GFP_ATOMIC);
 
