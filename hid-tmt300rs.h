@@ -5,7 +5,7 @@
 #include <linux/fixp-arith.h>
 
 #define T300RS_MAX_EFFECTS 16
-#define T300RS_BUFFER_LENGTH 64
+#define T300RS_BUFFER_LENGTH 63
 
 /* the wheel seems to only be capable of processing a certain number of
  * interrupts per second, and if this value is too low the kernel urb buffer(or

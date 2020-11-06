@@ -28,10 +28,11 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
     t300rs = t300rs_get_device(hdev);
     if(!t300rs){
         hid_err(hdev, "could not get device\n");
+        return -1;
     }
 
-    for(i = 0; i < 63; ++i){
-        t300rs->ff_field->value[i] = send_buffer[i + 1];
+    for(i = 0; i < T300RS_BUFFER_LENGTH; ++i){
+        t300rs->ff_field->value[i] = send_buffer[i];
     }
 
     hid_hw_request(t300rs->hdev, t300rs->report, HID_REQ_SET_REPORT);
@@ -43,10 +44,10 @@ static int t300rs_play_effect(struct t300rs_device_entry *t300rs, struct t300rs_
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     int ret, trans;
 
-    send_buffer[0] = 0x60;
-    send_buffer[2] = state->effect.id + 1;
-    send_buffer[3] = 0x89;
-    send_buffer[4] = 0x01;
+    
+    send_buffer[1] = state->effect.id + 1;
+    send_buffer[2] = 0x89;
+    send_buffer[3] = 0x01;
 
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
@@ -61,9 +62,9 @@ static int t300rs_stop_effect(struct t300rs_device_entry *t300rs, struct t300rs_
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     int ret, trans;
 
-    send_buffer[0] = 0x60;
-    send_buffer[2] = state->effect.id + 1;
-    send_buffer[3] = 0x89;
+    
+    send_buffer[1] = state->effect.id + 1;
+    send_buffer[2] = 0x89;
 
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
@@ -111,15 +112,15 @@ static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
     fade_length = (duration * envelope.fade_length) / 0x7fff;
     fade_level = (level * envelope.fade_level) / 0x7fff;
 
-    send_buffer[0] = 0x60;
-    send_buffer[2] = id + 1;
-    send_buffer[3] = 0x31;
+    
+    send_buffer[1] = id + 1;
+    send_buffer[2] = 0x31;
 
     if(envelope.attack_length != envelope_old.attack_length){
-        send_buffer[4] = 0x81;
+        send_buffer[3] = 0x81;
 
-        send_buffer[5] = attack_length & 0xff;
-        send_buffer[6] = attack_length >> 8;
+        send_buffer[4] = attack_length & 0xff;
+        send_buffer[5] = attack_length >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -129,10 +130,10 @@ static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
     }
 
     if(envelope.attack_level != envelope_old.attack_level){
-        send_buffer[4] = 0x82;
+        send_buffer[3] = 0x82;
 
-        send_buffer[5] = attack_level & 0xff;
-        send_buffer[6] = attack_level >> 8;
+        send_buffer[4] = attack_level & 0xff;
+        send_buffer[5] = attack_level >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -142,10 +143,10 @@ static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
     }
 
     if(envelope.fade_length != envelope_old.fade_length){
-        send_buffer[4] = 0x84;
+        send_buffer[3] = 0x84;
 
-        send_buffer[5] = fade_length & 0xff;
-        send_buffer[6] = fade_length >> 8;
+        send_buffer[4] = fade_length & 0xff;
+        send_buffer[5] = fade_length >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -155,10 +156,10 @@ static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
     }
 
     if(envelope.fade_level != envelope_old.fade_level){
-        send_buffer[4] = 0x88;
+        send_buffer[3] = 0x88;
 
-        send_buffer[5] = fade_level & 0xff;
-        send_buffer[6] = fade_level >> 8;
+        send_buffer[4] = fade_level & 0xff;
+        send_buffer[5] = fade_level >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -185,13 +186,13 @@ static int t300rs_modify_duration(struct t300rs_device_entry *t300rs, struct t30
     }
 
     if(effect.replay.length != old.replay.length){
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x49;
-        send_buffer[5] = 0x41;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x49;
+        send_buffer[4] = 0x41;
 
-        send_buffer[6] = duration & 0xff;
-        send_buffer[7] = duration >> 8;
+        send_buffer[5] = duration & 0xff;
+        send_buffer[6] = duration >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -215,12 +216,12 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs, struct t30
     level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
     if(constant.level != constant_old.level){
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x0a;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x0a;
 
-        send_buffer[4] = level & 0xff;
-        send_buffer[5] = level >> 8;
+        send_buffer[3] = level & 0xff;
+        send_buffer[4] = level >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -276,7 +277,7 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
         level = (top * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
     if(ramp.start_level != ramp_old.start_level || ramp.end_level != ramp_old.end_level){
-        send_buffer[0] = 0x60;
+
         send_buffer[1] = effect.id + 1;
         send_buffer[2] = 0x0e;
         send_buffer[3] = 0x03;
@@ -331,13 +332,13 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
     if(damper.right_coeff != damper_old.right_coeff){
         s16 coeff = damper.right_coeff;
 
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x41;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x0e;
+        send_buffer[3] = 0x41;
 
-        send_buffer[5] = coeff & 0xff;
-        send_buffer[6] = coeff >> 8;
+        send_buffer[4] = coeff & 0xff;
+        send_buffer[5] = coeff >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -351,13 +352,13 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
     if(damper.left_coeff != damper_old.left_coeff){
         s16 coeff = damper.left_coeff;
 
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x42;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x0e;
+        send_buffer[3] = 0x42;
 
-        send_buffer[5] = coeff & 0xff;
-        send_buffer[6] = coeff >> 8;
+        send_buffer[4] = coeff & 0xff;
+        send_buffer[5] = coeff >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -372,16 +373,16 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
         u16 deadband_right = 0xfffe - damper.deadband - damper.center;
         u16 deadband_left = 0xfffe - damper.deadband + damper.center;
         
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x4c;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x0e;
+        send_buffer[3] = 0x4c;
 
-        send_buffer[5] = deadband_right & 0xff;
-        send_buffer[6] = deadband_right >> 8;
+        send_buffer[4] = deadband_right & 0xff;
+        send_buffer[5] = deadband_right >> 8;
 
-        send_buffer[7] = deadband_left & 0xff;
-        send_buffer[8] = deadband_left >> 8;
+        send_buffer[6] = deadband_left & 0xff;
+        send_buffer[7] = deadband_left >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -415,13 +416,13 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
 
 
     if(periodic.magnitude != periodic_old.magnitude){
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x01;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x0e;
+        send_buffer[3] = 0x01;
 
-        send_buffer[5] = level & 0xff;
-        send_buffer[6] = level >> 8;
+        send_buffer[4] = level & 0xff;
+        send_buffer[5] = level >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -435,13 +436,13 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
     if(periodic.offset != periodic_old.offset){
         s16 offset = periodic.offset;
 
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x02;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x0e;
+        send_buffer[3] = 0x02;
 
-        send_buffer[5] = offset & 0xff;
-        send_buffer[6] = offset >> 8;
+        send_buffer[4] = offset & 0xff;
+        send_buffer[5] = offset >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -454,13 +455,13 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
     if(periodic.phase != periodic_old.phase){
         s16 phase = periodic.phase;
 
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x04;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x0e;
+        send_buffer[3] = 0x04;
 
-        send_buffer[5] = phase & 0xff;
-        send_buffer[6] = phase >> 8;
+        send_buffer[4] = phase & 0xff;
+        send_buffer[5] = phase >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -473,13 +474,13 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
     if(periodic.period != periodic_old.period){
         s16 period = periodic.period;
 
-        send_buffer[0] = 0x60;
-        send_buffer[2] = effect.id + 1;
-        send_buffer[3] = 0x0e;
-        send_buffer[4] = 0x08;
+        
+        send_buffer[1] = effect.id + 1;
+        send_buffer[2] = 0x0e;
+        send_buffer[3] = 0x08;
 
-        send_buffer[5] = period & 0xff;
-        send_buffer[6] = period >> 8;
+        send_buffer[4] = period & 0xff;
+        send_buffer[5] = period >> 8;
 
         ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
         if(ret){
@@ -543,26 +544,26 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
 
     offset = effect.replay.delay;
 
-    send_buffer[0] = 0x60;
-    send_buffer[2] = effect.id + 1;
-    send_buffer[3] = 0x6a;
+    
+    send_buffer[1] = effect.id + 1;
+    send_buffer[2] = 0x6a;
 
-    send_buffer[4] = level & 0xff;
-    send_buffer[5] = level >> 8;
+    send_buffer[3] = level & 0xff;
+    send_buffer[4] = level >> 8;
 
-    t300rs_fill_envelope(send_buffer, 6, level,
+    t300rs_fill_envelope(send_buffer, 5, level,
             duration, &constant.envelope);
 
-    send_buffer[15] = 0x4f;
+    send_buffer[14] = 0x4f;
 
-    send_buffer[16] = duration & 0xff;
-    send_buffer[17] = duration >> 8;
+    send_buffer[15] = duration & 0xff;
+    send_buffer[16] = duration >> 8;
 
-    send_buffer[20] = offset & 0xff;
-    send_buffer[21] = offset >> 8;
+    send_buffer[19] = offset & 0xff;
+    send_buffer[20] = offset >> 8;
 
+    send_buffer[22] = 0xff;
     send_buffer[23] = 0xff;
-    send_buffer[24] = 0xff;
 
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
@@ -601,7 +602,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
     level = (top * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
     offset = effect.replay.delay;
 
-    send_buffer[0] = 0x60;
+    
     send_buffer[1] = effect.id + 1;
     send_buffer[2] = 0x6b;
     
@@ -616,7 +617,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
 
     send_buffer[12] = 0x80;
 
-    t300rs_fill_envelope(send_buffer, 14, level,
+    t300rs_fill_envelope(send_buffer, 13, level,
             effect.replay.length, &ramp.envelope);
 
     send_buffer[22] = ramp.end_level > ramp.start_level ? 0x04 : 0x05;
@@ -660,9 +661,9 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
         duration = effect.replay.length;
     }
 
-    send_buffer[0] = 0x60;
-    send_buffer[2] = effect.id + 1;
-    send_buffer[3] = 0x64;
+    
+    send_buffer[1] = effect.id + 1;
+    send_buffer[2] = 0x64;
     
     right_coeff = spring.right_coeff;
     left_coeff = spring.left_coeff;
@@ -672,29 +673,29 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
 
     offset = effect.replay.delay;
 
-    send_buffer[4] = right_coeff & 0xff;
-    send_buffer[5] = right_coeff >> 8;
+    send_buffer[3] = right_coeff & 0xff;
+    send_buffer[4] = right_coeff >> 8;
 
-    send_buffer[6] = left_coeff & 0xff;
-    send_buffer[7] = left_coeff >> 8;
+    send_buffer[5] = left_coeff & 0xff;
+    send_buffer[6] = left_coeff >> 8;
 
-    send_buffer[8] = deadband_right & 0xff;
-    send_buffer[9] = deadband_right >> 8;
+    send_buffer[7] = deadband_right & 0xff;
+    send_buffer[8] = deadband_right >> 8;
 
-    send_buffer[10] = deadband_left & 0xff;
-    send_buffer[11] = deadband_left >> 8;
+    send_buffer[9] = deadband_left & 0xff;
+    send_buffer[10] = deadband_left >> 8;
 
-    memcpy(&send_buffer[12], spring_values, ARRAY_SIZE(spring_values));
-    send_buffer[29] = 0x4f;
+    memcpy(&send_buffer[11], spring_values, ARRAY_SIZE(spring_values));
+    send_buffer[28] = 0x4f;
 
-    send_buffer[30] = duration & 0xff;
-    send_buffer[31] = duration >> 8;
+    send_buffer[29] = duration & 0xff;
+    send_buffer[30] = duration >> 8;
 
-    send_buffer[34] = offset & 0xff;
-    send_buffer[35] = offset >> 8;
+    send_buffer[33] = offset & 0xff;
+    send_buffer[34] = offset >> 8;
 
+    send_buffer[36] = 0xff;
     send_buffer[37] = 0xff;
-    send_buffer[38] = 0xff;
 
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
@@ -725,9 +726,9 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
         duration = effect.replay.length;
     }
 
-    send_buffer[0] = 0x60;
-    send_buffer[2] = effect.id + 1;
-    send_buffer[3] = 0x64;
+    
+    send_buffer[1] = effect.id + 1;
+    send_buffer[2] = 0x64;
     
     right_coeff = spring.right_coeff;
     left_coeff = spring.left_coeff;
@@ -737,29 +738,29 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
 
     offset = effect.replay.delay;
 
-    send_buffer[4] = right_coeff & 0xff;
-    send_buffer[5] = right_coeff >> 8;
+    send_buffer[3] = right_coeff & 0xff;
+    send_buffer[4] = right_coeff >> 8;
 
-    send_buffer[6] = left_coeff & 0xff;
-    send_buffer[7] = left_coeff >> 8;
+    send_buffer[5] = left_coeff & 0xff;
+    send_buffer[6] = left_coeff >> 8;
 
-    send_buffer[8] = deadband_right & 0xff;
-    send_buffer[9] = deadband_right >> 8;
+    send_buffer[7] = deadband_right & 0xff;
+    send_buffer[8] = deadband_right >> 8;
 
-    send_buffer[10] = deadband_left & 0xff;
-    send_buffer[11] = deadband_left >> 8;
+    send_buffer[9] = deadband_left & 0xff;
+    send_buffer[10] = deadband_left >> 8;
 
-    memcpy(&send_buffer[12], damper_values, ARRAY_SIZE(damper_values));
-    send_buffer[29] = 0x4f;
+    memcpy(&send_buffer[11], damper_values, ARRAY_SIZE(damper_values));
+    send_buffer[28] = 0x4f;
 
-    send_buffer[30] = duration & 0xff;
-    send_buffer[31] = duration >> 8;
+    send_buffer[29] = duration & 0xff;
+    send_buffer[30] = duration >> 8;
 
-    send_buffer[34] = offset & 0xff;
-    send_buffer[35] = offset >> 8;
+    send_buffer[33] = offset & 0xff;
+    send_buffer[34] = offset >> 8;
 
+    send_buffer[36] = 0xff;
     send_buffer[37] = 0xff;
-    send_buffer[38] = 0xff;
 
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
@@ -797,38 +798,38 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
     period = periodic.period;
     offset = effect.replay.delay;
     
-    send_buffer[0] = 0x60;
-    send_buffer[2] = effect.id + 1;
-    send_buffer[3] = 0x6b;
     
-    send_buffer[4] = magnitude & 0xff;
-    send_buffer[5] = magnitude >> 8;
+    send_buffer[1] = effect.id + 1;
+    send_buffer[2] = 0x6b;
+    
+    send_buffer[3] = magnitude & 0xff;
+    send_buffer[4] = magnitude >> 8;
 
-    send_buffer[8] = phase & 0xff;
-    send_buffer[9] = phase >> 8;
+    send_buffer[7] = phase & 0xff;
+    send_buffer[8] = phase >> 8;
 
-    send_buffer[6] = periodic_offset & 0xff;
-    send_buffer[7] = periodic_offset >> 8;
+    send_buffer[5] = periodic_offset & 0xff;
+    send_buffer[6] = periodic_offset >> 8;
 
-    send_buffer[10] = period & 0xff;
-    send_buffer[11] = period >> 8;
+    send_buffer[9] = period & 0xff;
+    send_buffer[10] = period >> 8;
 
-    send_buffer[13] = 0x80;
+    send_buffer[12] = 0x80;
 
-    t300rs_fill_envelope(send_buffer, 14, magnitude,
+    t300rs_fill_envelope(send_buffer, 13, magnitude,
             effect.replay.length, &periodic.envelope);
 
-    send_buffer[22] = periodic.waveform - 0x57;
-    send_buffer[23] = 0x4f;
+    send_buffer[21] = periodic.waveform - 0x57;
+    send_buffer[22] = 0x4f;
 
-    send_buffer[24] = duration & 0xff;
-    send_buffer[25] = duration >> 8;
+    send_buffer[23] = duration & 0xff;
+    send_buffer[24] = duration >> 8;
 
-    send_buffer[28] = offset & 0xff;
-    send_buffer[29] = offset >> 8;
+    send_buffer[27] = offset & 0xff;
+    send_buffer[28] = offset >> 8;
 
+    send_buffer[30] = 0xff;
     send_buffer[31] = 0xff;
-    send_buffer[32] = 0xff;
     
     ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
     if(ret){
@@ -1027,7 +1028,7 @@ static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *a
 
     range *= 0x3c;
 
-    send_buffer[0] = 0x60;
+    
     send_buffer[1] = 0x08;
     send_buffer[2] = 0x11;
     send_buffer[3] = range & 0xff;
@@ -1062,22 +1063,22 @@ static void t300rs_set_autocenter(struct input_dev *dev, u16 value){
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     int ret, trans;
 
-    send_buffer[0] = 0x60;
-    send_buffer[1] = 0x08;
-    send_buffer[2] = 0x04;
-    send_buffer[3] = 0x01;
+    
+    send_buffer[0] = 0x08;
+    send_buffer[1] = 0x04;
+    send_buffer[2] = 0x01;
     
     ret = t300rs_send_int(dev, send_buffer, &trans);
     if(ret){
         hid_err(hdev, "failed setting autocenter");
     }
 
-    send_buffer[0] = 0x60;
-    send_buffer[1] = 0x08;
-    send_buffer[2] = 0x03;
     
-    send_buffer[3] = value & 0xff;
-    send_buffer[4] = value >> 8;
+    send_buffer[0] = 0x08;
+    send_buffer[1] = 0x03;
+    
+    send_buffer[2] = value & 0xff;
+    send_buffer[3] = value >> 8;
 
     ret = t300rs_send_int(dev, send_buffer, &trans);
     if(ret){
@@ -1092,9 +1093,9 @@ static void t300rs_set_gain(struct input_dev *dev, u16 gain){
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     int ret, trans;
 
-    send_buffer[0] = 0x60;
-    send_buffer[1] = 0x02;
-    send_buffer[2] = SCALE_VALUE_U16(gain, 8);
+    
+    send_buffer[0] = 0x02;
+    send_buffer[1] = SCALE_VALUE_U16(gain, 8);
     
     ret = t300rs_send_int(dev, send_buffer, &trans);
     if(ret){
@@ -1117,9 +1118,8 @@ static int t300rs_open(struct input_dev *dev){
     
     t300rs = t300rs_get_device(hdev);
 
-    send_buffer[0] = 0x60;
-    send_buffer[1] = 0x01;
-    send_buffer[2] = 0x05;
+    send_buffer[0] = 0x01;
+    send_buffer[1] = 0x05;
 
     ret = t300rs_send_int(dev, send_buffer, &trans); 
     if(ret){
@@ -1141,8 +1141,7 @@ static void t300rs_close(struct input_dev *dev){
     
     t300rs = t300rs_get_device(hdev);
 
-    send_buffer[0] = 0x60;
-    send_buffer[1] = 0x01;
+    send_buffer[0] = 0x01;
 
     ret = t300rs_send_int(dev, send_buffer, &trans);
     if(ret){
