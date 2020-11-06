@@ -941,7 +941,6 @@ static enum hrtimer_restart t300rs_timer(struct hrtimer *t){
     }
 } 
 
-
 static int t300rs_upload(struct input_dev *dev, struct ff_effect *effect, struct ff_effect *old){
     struct hid_device *hdev = input_get_drvdata(dev);
     struct t300rs_device_entry *t300rs;
@@ -965,6 +964,8 @@ static int t300rs_upload(struct input_dev *dev, struct ff_effect *effect, struct
     if(old){
         state->old = *old;
         __set_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
+    } else {
+        __clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
     }
     __set_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
