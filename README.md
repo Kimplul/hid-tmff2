@@ -31,7 +31,7 @@ Done!
 + Change range:
   
 Write a value between 0 and 1080 to
-/sys/bus/devices/XXXX:044F:B66E.XXX/range
+`/sys/bus/hid/devices/XXXX:044F:B66E.XXX/range`
 
 + Change autocenter and gain:
 
