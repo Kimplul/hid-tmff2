@@ -3,7 +3,7 @@
 ## Current state
 Playable. I've made some improvements to the dynamic updating of effects, and
 while still far for perfect, the experience is slowly getting better and better.
-Some drawbacks include missing dynamic updating of ramp effects and in some
+Some drawbacks include possible effect inaccuracies in comparison with the Windows driver and in some
 games inconsistent pedal mapping. Meaning that all pedals should be detected in games, but may be mapped incorrectly.
 
 Anycase, **this version is usable in most force feedback games, supports
