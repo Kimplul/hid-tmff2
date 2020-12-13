@@ -1,5 +1,18 @@
 #include "hid-tmt300rs.h"
 
+static int spring_level = 30;
+module_param(spring_level, int, 0);
+MODULE_PARM_DESC(spring_level, "Level of spring force (0-100), as per Oversteer standards");
+
+static int damper_level = 30;
+module_param(damper_level, int, 0);
+MODULE_PARM_DESC(damper_level, "Level of damper force (0-100), as per Oversteer standards");
+
+static int friction_level = 30;
+module_param(friction_level, int, 0);
+MODULE_PARM_DESC(friction_level, "Level of friction force (0-100), as per Oversteer standards");
+
+
 static struct t300rs_device_entry *t300rs_get_device(struct hid_device *hdev){
     struct t300rs_data *drv_data;
     struct t300rs_device_entry *t300rs;
@@ -327,10 +340,17 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
     struct ff_effect old = state->old;
     struct ff_condition_effect damper = effect.u.condition[0];
     struct ff_condition_effect damper_old = old.u.condition[0];
-    int ret, trans;
+    int ret, trans, input_level;
+
+    input_level = damper_level;
+    if(state->effect.type == FF_FRICTION)
+        input_level = friction_level;
+
+    if(state->effect.type == FF_SPRING)
+        input_level = spring_level;
 
     if(damper.right_coeff != damper_old.right_coeff){
-        s16 coeff = damper.right_coeff;
+        s16 coeff = damper.right_coeff * input_level / 100;
 
         
         send_buffer[1] = effect.id + 1;
@@ -350,7 +370,7 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
     }
 
     if(damper.left_coeff != damper_old.left_coeff){
-        s16 coeff = damper.left_coeff;
+        s16 coeff = damper.left_coeff * input_level / 100;
 
         
         send_buffer[1] = effect.id + 1;
@@ -665,8 +685,8 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
     send_buffer[1] = effect.id + 1;
     send_buffer[2] = 0x64;
     
-    right_coeff = spring.right_coeff;
-    left_coeff = spring.left_coeff;
+    right_coeff = spring.right_coeff * spring_level / 100;
+    left_coeff = spring.left_coeff * spring_level / 100;
 
     deadband_right = 0xfffe - spring.deadband - spring.center;
     deadband_left = 0xfffe - spring.deadband + spring.center;
@@ -711,7 +731,7 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
     struct ff_effect effect = state->effect;
     /* we only care about the first axis */
     struct ff_condition_effect spring = state->effect.u.condition[0];
-    int ret, trans;
+    int ret, trans, input_level;
     u16 duration, right_coeff, left_coeff, deadband_right, deadband_left, offset;
     
     if(test_bit(FF_EFFECT_PLAYING, &state->flags) && 
@@ -726,12 +746,16 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
         duration = effect.replay.length;
     }
 
+    input_level = damper_level;
+    if(state->effect.type == FF_FRICTION)
+        input_level = friction_level;
+
     
     send_buffer[1] = effect.id + 1;
     send_buffer[2] = 0x64;
     
-    right_coeff = spring.right_coeff;
-    left_coeff = spring.left_coeff;
+    right_coeff = spring.right_coeff * input_level / 100;
+    left_coeff = spring.left_coeff * input_level / 100;
 
     deadband_right = 0xfffe - spring.deadband - spring.center;
     deadband_left = 0xfffe - spring.deadband + spring.center;
@@ -1008,6 +1032,70 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
     return 0;
 }
 
+static ssize_t t300rs_spring_level_store(struct device *dev, struct device_attribute *attr,
+        const char *buf, size_t count){
+    unsigned value = simple_strtoul(buf, NULL, 10);
+
+    if(value > 100)
+        value = 100;
+
+    spring_level = value;
+
+    return count;
+}
+static ssize_t t300rs_spring_level_show(struct device *dev, struct device_attribute *attr, char *buf){
+    size_t count;
+
+    count = scnprintf(buf, PAGE_SIZE, "%u\n", spring_level);
+
+    return count;
+}
+
+static DEVICE_ATTR(spring_level, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, t300rs_spring_level_show, t300rs_spring_level_store);
+
+static ssize_t t300rs_damper_level_store(struct device *dev, struct device_attribute *attr,
+        const char *buf, size_t count){
+    unsigned value = simple_strtoul(buf, NULL, 10);
+
+    if(value > 100)
+        value = 100;
+
+    damper_level = value;
+
+    return count;
+}
+
+static ssize_t t300rs_damper_level_show(struct device *dev, struct device_attribute *attr, char *buf){
+    size_t count;
+
+    count = scnprintf(buf, PAGE_SIZE, "%u\n", damper_level);
+
+    return count;
+}
+
+static DEVICE_ATTR(damper_level, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, t300rs_damper_level_show, t300rs_damper_level_store);
+
+static ssize_t t300rs_friction_level_store(struct device *dev, struct device_attribute *attr,
+        const char *buf, size_t count){
+    unsigned value = simple_strtoul(buf, NULL, 10);
+
+    if(value > 100)
+        value = 100;
+
+    friction_level = value;
+
+    return count;
+}
+static ssize_t t300rs_friction_level_show(struct device *dev, struct device_attribute *attr, char *buf){
+    size_t count;
+
+    count = scnprintf(buf, PAGE_SIZE, "%u\n", friction_level);
+
+    return count;
+}
+
+static DEVICE_ATTR(friction_level, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, t300rs_friction_level_show, t300rs_friction_level_store);
+
 /* we should set a default range */
 static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *attr,
         const char *buf, size_t count){
@@ -1281,6 +1369,24 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
         goto out;
     }
 
+    ret = device_create_file(&hdev->dev, &dev_attr_spring_level);
+    if(ret){
+        hid_warn(hdev, "unable to create sysfs interface for spring_level\n");
+        goto out;
+    }
+
+    ret = device_create_file(&hdev->dev, &dev_attr_damper_level);
+    if(ret){
+        hid_warn(hdev, "unable to create sysfs interface for damper_level\n");
+        goto out;
+    }
+
+    ret = device_create_file(&hdev->dev, &dev_attr_friction_level);
+    if(ret){
+        hid_warn(hdev, "unable to create sysfs interface for friction_level\n");
+        goto out;
+    }
+
     hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     t300rs->hrtimer.function = t300rs_timer;
     
@@ -1348,6 +1454,9 @@ static void t300rs_remove(struct hid_device *hdev){
     struct t300rs_data *drv_data;
 
     device_remove_file(&hdev->dev, &dev_attr_range);
+    device_remove_file(&hdev->dev, &dev_attr_spring_level);
+    device_remove_file(&hdev->dev, &dev_attr_damper_level);
+    device_remove_file(&hdev->dev, &dev_attr_friction_level);
 
     drv_data = hid_get_drvdata(hdev);
     t300rs = t300rs_get_device(hdev);
