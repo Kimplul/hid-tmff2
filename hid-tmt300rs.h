@@ -1,6 +1,7 @@
 #include "hid-tm.h"
 #include "usbhid.h"
 #include <linux/hrtimer.h>
+#include <linux/slab.h>
 #include <linux/ktime.h>
 #include <linux/fixp-arith.h>
 

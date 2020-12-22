@@ -41,7 +41,7 @@ static void tminit_interrupts(struct hid_device *hdev){
 
     }
 
-    kzfree(send_buf);
+    kfree(send_buf);
 }
 
 int tminit(struct hid_device *hdev){
