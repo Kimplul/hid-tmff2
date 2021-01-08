@@ -1,5 +1,9 @@
 #include "hid-tmt300rs.h"
 
+static int timer_msecs = DEFAULT_TIMER_PERIOD;
+module_param(timer_msecs, int, 0660);
+MODULE_PARM_DESC(timer_msecs, "Timer resolution in msecs");
+
 static int spring_level = 30;
 module_param(spring_level, int, 0);
 MODULE_PARM_DESC(spring_level, "Level of spring force (0-100), as per Oversteer standards");

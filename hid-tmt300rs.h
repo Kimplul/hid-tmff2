@@ -32,8 +32,6 @@ unsigned long lock_flags;
 spinlock_t data_lock;
 unsigned long data_flags;
 
-static int timer_msecs = DEFAULT_TIMER_PERIOD;
-
 static const signed short t300rs_ff_effects[] = {
     FF_CONSTANT,
     FF_RAMP,
@@ -76,6 +74,8 @@ struct t300rs_device_entry {
 
     spinlock_t lock;
     unsigned long lock_flags;
+
+    int open_count;
     
     int max_id;
     u16 range;
