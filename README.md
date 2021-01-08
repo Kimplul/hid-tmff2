@@ -50,3 +50,7 @@ Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.h
 
 This should make sure that the wheel behaves like you'd want from a
 wheel.
+
++ Change timer period:
+
+There have been reports that some games work better with a different timer period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and [#10](https://github.com/Kimplul/hid-tmff2/issues/10)). To change the timer period, add `options hid-tmt300rs timer_msecs=NUMBER` in `/etc/modprobe.d/hid-tmt300rs.conf`. The default timer period is 8, but numbers as low as 2 should work alright.
