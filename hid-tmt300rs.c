@@ -975,7 +975,11 @@ static int t300rs_upload(struct input_dev *dev, struct ff_effect *effect, struct
     struct t300rs_effect_state *state;
 
     t300rs = t300rs_get_device(hdev);
-    
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+        return -1;
+    }
+
     if(effect->type == FF_PERIODIC && effect->u.periodic.period == 0){
         return -EINVAL;
     }
@@ -1008,6 +1012,10 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value){
     struct t300rs_effect_state *state;
 
     t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+        return -1;
+    }
 
     state = &t300rs->states[effect_id];
 
@@ -1110,6 +1118,10 @@ static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *a
     int ret, trans;
 
     t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+        return -1;
+    }
 
     if(range < 40){
         range = 40;
@@ -1142,9 +1154,14 @@ static ssize_t t300rs_range_show(struct device *dev, struct device_attribute *at
         char *buf){
     struct hid_device *hdev = to_hid_device(dev);
     struct t300rs_device_entry *t300rs;
-    size_t count;
+    size_t count = 0;
 
     t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+        return -1;
+    }
+
     count = scnprintf(buf, PAGE_SIZE, "%u\n", t300rs->range);
     return count;
 }
@@ -1209,6 +1226,10 @@ static int t300rs_open(struct input_dev *dev){
     int ret, trans;
     
     t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+        return -1;
+    }
 
     send_buffer[0] = 0x01;
     send_buffer[1] = 0x05;
@@ -1232,6 +1253,10 @@ static void t300rs_close(struct input_dev *dev){
     u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
     
     t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+        return;
+    }
 
     send_buffer[0] = 0x01;
 
@@ -1457,15 +1482,19 @@ static void t300rs_remove(struct hid_device *hdev){
     struct t300rs_device_entry *t300rs;
     struct t300rs_data *drv_data;
 
+    drv_data = hid_get_drvdata(hdev);
+    t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+        hid_err(hdev, "could not get device\n");
+        return;
+    }
+
+    hrtimer_cancel(&t300rs->hrtimer);
+
     device_remove_file(&hdev->dev, &dev_attr_range);
     device_remove_file(&hdev->dev, &dev_attr_spring_level);
     device_remove_file(&hdev->dev, &dev_attr_damper_level);
     device_remove_file(&hdev->dev, &dev_attr_friction_level);
-
-    drv_data = hid_get_drvdata(hdev);
-    t300rs = t300rs_get_device(hdev);
-
-    hrtimer_cancel(&t300rs->hrtimer);
 
     hid_hw_stop(hdev);
     kfree(t300rs->states);
