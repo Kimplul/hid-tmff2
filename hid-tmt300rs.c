@@ -54,11 +54,13 @@ static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans){
 
     hid_hw_request(t300rs->hdev, t300rs->report, HID_REQ_SET_REPORT);
 
+    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+
     return 0;
 }
 
 static int t300rs_play_effect(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer = t300rs->send_buffer;
     int ret, trans;
 
     
@@ -71,12 +73,12 @@ static int t300rs_play_effect(struct t300rs_device_entry *t300rs, struct t300rs_
         hid_err(t300rs->hdev, "failed starting effect play\n");
     }
 
-    kfree(send_buffer);
+    
     return ret;
 }
 
 static int t300rs_stop_effect(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer = t300rs->send_buffer;
     int ret, trans;
 
     
@@ -88,7 +90,7 @@ static int t300rs_stop_effect(struct t300rs_device_entry *t300rs, struct t300rs_
         hid_err(t300rs->hdev, "failed stopping effect play\n");
     }
 
-    kfree(send_buffer);
+    
     return ret;
 }
 
@@ -186,7 +188,6 @@ static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
     }
     
 error:
-    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     return ret;
 }
 
@@ -218,7 +219,6 @@ static int t300rs_modify_duration(struct t300rs_device_entry *t300rs, struct t30
         }
     }
 error:
-    memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     return ret;
 }
 
@@ -246,7 +246,6 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs, struct t30
             goto error;
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
 
     ret = t300rs_modify_envelope(t300rs,
@@ -270,7 +269,7 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs, struct t30
     }
 
 error:
-    kfree(send_buffer);
+    
     return ret;
 }
 
@@ -311,7 +310,6 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
             goto error;
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
 
     ret = t300rs_modify_envelope(t300rs,
@@ -336,7 +334,7 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
     }
 
 error:
-    kfree(send_buffer);
+    
     return ret;
 }
 static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state, u8 *send_buffer){
@@ -370,7 +368,6 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
             goto error;
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
 
     if(damper.left_coeff != damper_old.left_coeff){
@@ -389,7 +386,6 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
             hid_err(t300rs->hdev, "failed modifying damper lc\n");
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
     
     if((damper.deadband != damper_old.deadband) ||
@@ -413,7 +409,6 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
             hid_err(t300rs->hdev, "failed modifying damper deadband\n");
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
 
     ret = t300rs_modify_duration(t300rs, state, send_buffer);
@@ -423,7 +418,7 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs, struct t300r
     }
 
 error:
-    kfree(send_buffer);
+    
     return ret;
 }
 
@@ -454,7 +449,6 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
             goto error;
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
 
     if(periodic.offset != periodic_old.offset){
@@ -473,7 +467,6 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
             hid_err(t300rs->hdev, "failed modifying periodic offset\n");
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
     
     if(periodic.phase != periodic_old.phase){
@@ -492,7 +485,6 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
             hid_err(t300rs->hdev, "failed modifying periodic phase\n");
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
 
     if(periodic.period != periodic_old.period){
@@ -511,7 +503,6 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
             hid_err(t300rs->hdev, "failed modifying periodic period\n");
         }
 
-        memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
     }
 
     ret = t300rs_modify_envelope(t300rs,
@@ -534,13 +525,13 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs, struct t30
     }
 
 error:
-    kfree(send_buffer);
+    
     return ret;
 }
 
 
 static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer = t300rs->send_buffer;
     struct ff_effect effect = state->effect;
     struct ff_constant_effect constant = state->effect.u.constant;
     s16 level;
@@ -594,12 +585,12 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs, struct t30
         hid_err(t300rs->hdev, "failed uploading constant effect\n");
     }
 
-    kfree(send_buffer);
+    
     return ret;
 }
 
 static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer = t300rs->send_buffer;
     struct ff_effect effect = state->effect;
     struct ff_ramp_effect ramp = state->effect.u.ramp;
     int ret, trans;
@@ -661,12 +652,12 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs, struct t300rs_
         hid_err(t300rs->hdev, "failed uploading ramp");
     }
 
-    kfree(send_buffer);
+    
     return ret;
 }
 
 static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer = t300rs->send_buffer;
     struct ff_effect effect = state->effect;
     /* we only care about the first axis */
     struct ff_condition_effect spring = state->effect.u.condition[0];
@@ -726,12 +717,12 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs, struct t300r
         hid_err(t300rs->hdev, "failed uploading spring\n");
     }
 
-    kfree(send_buffer);
+    
     return ret;
 }
 
 static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer = t300rs->send_buffer;
     struct ff_effect effect = state->effect;
     /* we only care about the first axis */
     struct ff_condition_effect spring = state->effect.u.condition[0];
@@ -795,12 +786,12 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs, struct t300r
         hid_err(t300rs->hdev, "failed uploading spring\n");
     }
 
-    kfree(send_buffer);
+    
     return ret;
 }
 
 static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t300rs_effect_state *state){
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer = t300rs->send_buffer;
     struct ff_effect effect = state->effect;
     struct ff_periodic_effect periodic = state->effect.u.periodic;
     int ret, trans;
@@ -864,7 +855,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs, struct t30
         hid_err(t300rs->hdev, "failed uploading periodic effect");
     }
      
-    kfree(send_buffer);
+    
     return ret;
 }
 
@@ -1113,7 +1104,7 @@ static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *a
         const char *buf, size_t count){
     struct hid_device *hdev = to_hid_device(dev);
     struct t300rs_device_entry *t300rs;
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer;
     u16 range = simple_strtoul(buf, NULL, 10);
     int ret, trans;
 
@@ -1122,6 +1113,8 @@ static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *a
         hid_err(hdev, "could not get device\n");
         return -1;
     }
+
+    send_buffer = t300rs->send_buffer;
 
     if(range < 40){
         range = 40;
@@ -1146,7 +1139,7 @@ static ssize_t t300rs_range_store(struct device *dev, struct device_attribute *a
     }
 
     t300rs->range = range / 0x3c;
-    kfree(send_buffer);
+    
     return count;
 }
 
@@ -1170,8 +1163,17 @@ static DEVICE_ATTR(range, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, t300r
 
 static void t300rs_set_autocenter(struct input_dev *dev, u16 value){
     struct hid_device *hdev = input_get_drvdata(dev);
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    struct t300rs_device_entry *t300rs;
+    u8 *send_buffer;
     int ret, trans;
+
+    t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+	hid_err(hdev, "could not get device\n");
+	return;
+    }
+
+    send_buffer = t300rs->send_buffer;
 
     
     send_buffer[0] = 0x08;
@@ -1194,15 +1196,22 @@ static void t300rs_set_autocenter(struct input_dev *dev, u16 value){
         hid_err(hdev, "failed setting autocenter");
     }
 
-    kfree(send_buffer);
+    
 }
 
 static void t300rs_set_gain(struct input_dev *dev, u16 gain){
     struct hid_device *hdev = input_get_drvdata(dev);
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    struct t300rs_device_entry *t300rs;
+    u8 *send_buffer;
     int ret, trans;
 
-    
+    t300rs = t300rs_get_device(hdev);
+    if(!t300rs){
+	hid_err(hdev, "could not get device\n");
+	return;
+    }
+
+    send_buffer = t300rs->send_buffer;
     send_buffer[0] = 0x02;
     send_buffer[1] = SCALE_VALUE_U16(gain, 8);
     
@@ -1211,7 +1220,7 @@ static void t300rs_set_gain(struct input_dev *dev, u16 gain){
         hid_err(hdev, "failed setting gain: %i\n", ret);
     }
 
-    kfree(send_buffer);
+    
 }
 
 static void t300rs_destroy(struct ff_device *ff){
@@ -1222,7 +1231,7 @@ static void t300rs_destroy(struct ff_device *ff){
 static int t300rs_open(struct input_dev *dev){
     struct t300rs_device_entry *t300rs;
     struct hid_device *hdev = input_get_drvdata(dev);
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer;
     int ret, trans;
     
     t300rs = t300rs_get_device(hdev);
@@ -1230,6 +1239,8 @@ static int t300rs_open(struct input_dev *dev){
         hid_err(hdev, "could not get device\n");
         return -1;
     }
+
+    send_buffer = t300rs->send_buffer;
 
     send_buffer[0] = 0x01;
     send_buffer[1] = 0x05;
@@ -1242,7 +1253,7 @@ static int t300rs_open(struct input_dev *dev){
     
 err:
 
-    kfree(send_buffer);
+    
     return t300rs->open(dev);
 }
 
@@ -1250,13 +1261,15 @@ static void t300rs_close(struct input_dev *dev){
     int ret, trans;
     struct hid_device *hdev = input_get_drvdata(dev);
     struct t300rs_device_entry *t300rs;
-    u8 *send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+    u8 *send_buffer;
     
     t300rs = t300rs_get_device(hdev);
     if(!t300rs){
         hid_err(hdev, "could not get device\n");
         return;
     }
+
+    send_buffer = t300rs->send_buffer;
 
     send_buffer[0] = 0x01;
 
@@ -1266,7 +1279,7 @@ static void t300rs_close(struct input_dev *dev){
         goto err;
     }
 err:
-    kfree(send_buffer);
+    
     t300rs->close(dev);
     return;
 }
@@ -1312,6 +1325,14 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
         hid_err(hdev, "effect states could not be created\n");
         ret = -ENOMEM;
         goto states_err;
+    }
+
+    t300rs->send_buffer = kmalloc(T300RS_BUFFER_LENGTH, GFP_ATOMIC);
+
+    if(!t300rs->send_buffer){
+	hid_err(hdev, "send_buffer could not be created\n");
+	ret = -ENOMEM;
+	goto send_err;
     }
 
     spin_lock_init(&t300rs->lock);
@@ -1428,6 +1449,8 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
     return 0;
 
 out:
+    kfree(t300rs->send_buffer);
+send_err:
     kfree(t300rs->states);
 states_err:
     kfree(t300rs);
@@ -1498,6 +1521,7 @@ static void t300rs_remove(struct hid_device *hdev){
 
     hid_hw_stop(hdev);
     kfree(t300rs->states);
+    kfree(t300rs->send_buffer);
     kfree(drv_data);
     kfree(t300rs);
 

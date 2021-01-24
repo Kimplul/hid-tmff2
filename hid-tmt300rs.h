@@ -75,7 +75,7 @@ struct t300rs_device_entry {
     spinlock_t lock;
     unsigned long lock_flags;
 
-    int open_count;
+    u8 *send_buffer;
     
     int max_id;
     u16 range;
