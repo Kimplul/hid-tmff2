@@ -18,7 +18,7 @@ With that in mind,
 ## Installation
 
 + Unplug wheel from computer
-+ `git clone https://github.com/Kimplul/hid-tmff2.git`
++ `git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git`
 + `make`
 + `sudo make install`
 + Plug wheel back in
