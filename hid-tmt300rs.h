@@ -59,6 +59,23 @@ struct t300rs_effect_state {
     unsigned long count;
 };
 
+    struct __packed t300rs_firmware_response {
+    	uint8_t unknown0;
+	uint8_t unknown1;
+	uint8_t firmware_version;
+	uint8_t	unknown2;
+    };
+
+
+    struct usb_ctrlrequest t300rs_firmware_request = {
+    	.bRequestType = 0xc1,
+	.bRequest = 86,
+	.wValue = 0,
+	.wIndex = 0,
+	.wLength = 8
+    };
+
+
 struct t300rs_device_entry {
     struct hid_device *hdev;
     struct input_dev *input_dev;
@@ -67,6 +84,7 @@ struct t300rs_device_entry {
     struct usb_device *usbdev;
     struct usb_interface *usbif;
     struct t300rs_effect_state *states;
+    struct t300rs_firmware_response *firmware_response;
     struct hrtimer hrtimer;
 
     int (*open)(struct input_dev *dev);
