@@ -1284,7 +1284,48 @@ err:
 	return;
 }
 
-int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
+static int t300rs_create_files(struct hid_device *hdev){
+	int ret;
+
+	ret = device_create_file(&hdev->dev, &dev_attr_range);
+	if(ret){
+		hid_warn(hdev, "unable to create sysfs interface for range\n");
+		goto attr_range_err;
+	}
+
+	ret = device_create_file(&hdev->dev, &dev_attr_spring_level);
+	if(ret){
+		hid_warn(hdev, "unable to create sysfs interface for spring_level\n");
+		goto attr_spring_err;
+	}
+
+	ret = device_create_file(&hdev->dev, &dev_attr_damper_level);
+	if(ret){
+		hid_warn(hdev, "unable to create sysfs interface for damper_level\n");
+		goto attr_damper_err;
+	}
+
+	ret = device_create_file(&hdev->dev, &dev_attr_friction_level);
+	if(ret){
+		hid_warn(hdev, "unable to create sysfs interface for friction_level\n");
+		goto attr_friction_err;
+	}
+
+	return ret;
+
+	// if the creation of dev_attr_friction fails, we don't need to remove it
+	// device_remove_file(&hdev->dev, &dev_attr_friction_level);
+attr_friction_err:
+	device_remove_file(&hdev->dev, &dev_attr_damper_level);
+attr_damper_err:
+	device_remove_file(&hdev->dev, &dev_attr_spring_level);
+attr_spring_err:
+	device_remove_file(&hdev->dev, &dev_attr_range);
+attr_range_err:
+	return ret;
+}
+
+static int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 	struct t300rs_device_entry *t300rs;
 	struct t300rs_data *drv_data;
 	struct list_head *report_list;
@@ -1357,7 +1398,7 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 		hid_err(t300rs->hdev, 
 			"firmware version %i is too old, please update the firmware "      
 			"using the official Thrustmaster tools. This will have to "
-			"be done outside of Linux.",
+			"be done outside of Linux.\n",
 			t300rs->firmware_response->firmware_version
 			);
 
@@ -1443,29 +1484,14 @@ int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 	input_dev->open = t300rs_open;
 	input_dev->close = t300rs_close;
 
-	ret = device_create_file(&hdev->dev, &dev_attr_range);
+	ret = t300rs_create_files(hdev);
 	if(ret){
-		hid_warn(hdev, "unable to create sysfs interface for range\n");
+		// this might not be a catastrophic issue, but it could affect
+		// programs such as oversteer, best play it safe
+		hid_err(hdev, "could not create sysfs files\n");
 		goto out;
 	}
 
-	ret = device_create_file(&hdev->dev, &dev_attr_spring_level);
-	if(ret){
-		hid_warn(hdev, "unable to create sysfs interface for spring_level\n");
-		goto out;
-	}
-
-	ret = device_create_file(&hdev->dev, &dev_attr_damper_level);
-	if(ret){
-		hid_warn(hdev, "unable to create sysfs interface for damper_level\n");
-		goto out;
-	}
-
-	ret = device_create_file(&hdev->dev, &dev_attr_friction_level);
-	if(ret){
-		hid_warn(hdev, "unable to create sysfs interface for friction_level\n");
-		goto out;
-	}
 
 	hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	t300rs->hrtimer.function = t300rs_timer;
