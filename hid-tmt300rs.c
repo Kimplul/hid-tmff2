@@ -1335,7 +1335,6 @@ static int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 	struct device *dev = &hdev->dev;
 	struct usb_interface *usbif = to_usb_interface(dev->parent);
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
-	struct hid_report *report;
 	struct ff_device *ff;
 	char range[10] = "900"; // max
 	int i, ret;
@@ -1411,58 +1410,14 @@ static int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 	drv_data->device_props = t300rs;
 
 	report_list = &hdev->report_enum[HID_OUTPUT_REPORT].report_list;
-	list_for_each_entry(report, report_list, list){
-		int fieldnum;
 
-		for(fieldnum = 0; fieldnum < report->maxfield; ++fieldnum){
-			struct hid_field *field = report->field[fieldnum];
+	// because we set the rdesc, we know exactly which report and field to use
+	t300rs->report = list_entry(report_list->next, struct hid_report, list);
+	t300rs->ff_field = t300rs->report->field[0];
 
-			if(field->maxusage <= 0){
-				continue;
-			}
-
-			switch(field->usage[0].hid){
-				case 0xff000060:
-					if(field->report_count < 2){
-						hid_warn(hdev, "ignoring FF field with report_count < 2\n");
-						continue;
-					}
-
-					if(field->logical_maximum == field->logical_minimum){
-						hid_warn(hdev, "ignoring FF field with l_max == l_min");
-						continue;
-					}
-
-					if(t300rs->report && t300rs->report != report){
-						hid_warn(hdev, "ignoring FF field in other report\n");
-						continue;
-					}
-
-					if(t300rs->ff_field && t300rs->ff_field != field){
-						hid_warn(hdev, "ignoring duplicate FF field\n");
-						continue;
-					}
-
-					t300rs->report = report;
-					t300rs->ff_field = field;
-
-					for(i = 0; ff_bits[i] >= 0; ++i){
-						set_bit(ff_bits[i], input_dev->ffbit);
-					}
-
-					break;
-
-				default:
-					hid_warn(hdev, "ignoring unknown output usage: %i\n", field->usage[0].hid);
-					continue;
-			}
-		}
-	}
-
-	if(!t300rs->report){
-		hid_err(hdev, "can't find FF field in output reports\n");
-		ret = -ENODEV;
-		goto out;
+	// set ff capabilities
+	for(i = 0; ff_bits[i] >= 0; ++i){
+		__set_bit(ff_bits[i], input_dev->ffbit);
 	}
 
 	ret = input_ff_create(input_dev, T300RS_MAX_EFFECTS);
