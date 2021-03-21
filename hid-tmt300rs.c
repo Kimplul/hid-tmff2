@@ -1360,21 +1360,21 @@ static int t300rs_init(struct hid_device *hdev, const signed short *ff_bits){
 	t300rs->usbif = usbif;
 	t300rs->max_id = 0;
 
-	t300rs->states = kmalloc(sizeof(struct t300rs_effect_state) * 0x60, GFP_KERNEL);
+	t300rs->states = kzalloc(sizeof(struct t300rs_effect_state) * 0x60, GFP_KERNEL);
 	if(!t300rs->states){
 		hid_err(hdev, "effect states could not be created\n");
 		ret = -ENOMEM;
 		goto states_err;
 	}
 
-	t300rs->send_buffer = kmalloc(T300RS_BUFFER_LENGTH, GFP_KERNEL);
+	t300rs->send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_KERNEL);
 	if(!t300rs->send_buffer){
 		hid_err(hdev, "send_buffer could not be created\n");
 		ret = -ENOMEM;
 		goto send_err;
 	}
 
-	t300rs->firmware_response = kmalloc(sizeof(struct t300rs_firmware_response), GFP_KERNEL);
+	t300rs->firmware_response = kzalloc(sizeof(struct t300rs_firmware_response), GFP_KERNEL);
 	if(!t300rs->firmware_response){
 		hid_err(hdev, "firmware_response could not be created\n");
 		ret = -ENOMEM;
