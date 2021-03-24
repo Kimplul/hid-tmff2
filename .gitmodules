@@ -1,0 +1,3 @@
+[submodule "hid-tminit"]
+	path = hid-tminit
+	url = https://github.com/scarburato/hid-tminit.git
