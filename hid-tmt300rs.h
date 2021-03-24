@@ -8,6 +8,8 @@
 #include <linux/ktime.h>
 #include <linux/fixp-arith.h>
 
+//#include "hid-ids.h"
+
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
 #define T300RS_MAX_EFFECTS 16

@@ -1058,9 +1058,15 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value)
 static ssize_t spring_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct hid_device *hdev = to_hid_device(dev);
 	unsigned int value;
+    int ret;
 
-	kstrtouint(buf, 10, &value);
+	ret = kstrtouint(buf, 0, &value);
+    if (ret) {
+        hid_err(hdev, "kstrtouint failed at spring_level_store: %i", ret);
+        return ret;
+    }
 
 	if (value > 100)
 		value = 100;
@@ -1084,9 +1090,15 @@ static DEVICE_ATTR_RW(spring_level);
 static ssize_t damper_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct hid_device *hdev = to_hid_device(dev);
 	unsigned int value;
+    int ret;
 
-	kstrtouint(buf, 10, &value);
+	ret = kstrtouint(buf, 0, &value);
+    if (ret) {
+        hid_err(hdev, "kstrtouint failed at damper_level_store: %i", ret);
+        return ret;
+    }
 
 	if (value > 100)
 		value = 100;
@@ -1111,9 +1123,15 @@ static DEVICE_ATTR_RW(damper_level);
 static ssize_t friction_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct hid_device *hdev = to_hid_device(dev);
 	unsigned int value;
+    int ret;
 
-	kstrtouint(buf, 10, &value);
+	ret = kstrtouint(buf, 0, &value);
+    if (ret) {
+        hid_err(hdev, "kstrtouint failed at friction_level_store: %i", ret);
+        return ret;
+    }
 
 	if (value > 100)
 		value = 100;
@@ -1143,7 +1161,11 @@ static ssize_t range_store(struct device *dev,
 	unsigned int range;
 	int ret, trans;
 
-	kstrtouint(buf, 10, &range);
+	ret = kstrtouint(buf, 0, &range);
+    if (ret) {
+        hid_err(hdev, "kstrtouint failed at range_store: %i", ret);
+        return ret;
+    }
 
 	t300rs = t300rs_get_device(hdev);
 	if (!t300rs) {
