@@ -53,4 +53,4 @@ wheel.
 
 + Change timer period:
 
-There have been reports that some games work better with a different timer period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and [#10](https://github.com/Kimplul/hid-tmff2/issues/10)). To change the timer period, add `options hid-tmt300rs timer_msecs=NUMBER` in `/etc/modprobe.d/hid-tmt300rs.conf`. The default timer period is 8, but numbers as low as 2 should work alright.
+There have been reports that some games work better with a different timer period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and [#10](https://github.com/Kimplul/hid-tmff2/issues/10)). To change the timer period, create `/etc/modprobe.d/hid-tmt300rs.conf` and add `options hid-tmt300rs timer_msecs=NUMBER` into it. The default timer period is 8, but numbers as low as 2 should work alright.
