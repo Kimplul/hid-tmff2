@@ -78,7 +78,10 @@ Done!
     | T300 RS, PS3 advanced mode | b66f |
     | T300 RS, PS4 normal mode   | b66d |
     | T248                       | b696 |
+    | T500 RS                    | b65e |
 
     This should make sure that the wheel behaves like you'd want from a wheel.
 
 + There have been reports that some games work better with a different timer period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and [#10](https://github.com/Kimplul/hid-tmff2/issues/10)). To change the timer period, create `/etc/modprobe.d/hid-tmff-new.conf` and add `options hid-tmff-new timer_msecs=NUMBER` into it. The default timer period is 8, but numbers as low as 2 should work alright.
+
+There have been reports that some games work better with a different timer period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and [#10](https://github.com/Kimplul/hid-tmff2/issues/10)). To change the timer period, create `/etc/modprobe.d/hid-tmt300rs.conf` and add `options hid-tmt300rs timer_msecs=NUMBER` into it. The default timer period is 8, but numbers as low as 2 should work alright.
