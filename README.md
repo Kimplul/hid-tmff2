@@ -17,6 +17,8 @@ With that in mind,
 
 ## Installation
 
+### Manual
+
 + Unplug wheel from computer
 + `git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git`
 + `make`
@@ -26,6 +28,14 @@ With that in mind,
     
 Done!
 
+### DKMS
+
++ Unplug wheel from computer
++ `sudo ./dkms-install.sh`
++ Plug wheel back in
++ reboot (not strictly necessary, but definitely recommended)
+
+Done!
 > :warning: Warning: There have been reports that this driver does not work if the wheel's firmware version is any other than v. 31. To update the firmware, you will have to fire up a Windows installation and update the firmware using the official Thrustmaster tools.
 
 ## Additional tidbits
