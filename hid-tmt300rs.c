@@ -17,8 +17,6 @@ static int friction_level = 30;
 module_param(friction_level, int, 0);
 MODULE_PARM_DESC(friction_level, "Level of friction force (0-100), as per Oversteer standards");
 
-#define FIT16_ARR(x, i, v) { (x)[(i)] = (v) & 0xff; (x)[(i) + 1] = ((v) >> 8) & 0xff; }
-
 static struct t300rs_device_entry *t300rs_get_device(struct hid_device *hdev)
 {
 	struct t300rs_data *drv_data;
@@ -40,40 +38,41 @@ static struct t300rs_device_entry *t300rs_get_device(struct hid_device *hdev)
 	return t300rs;
 }
 
-static int t300rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans)
+static int t300rs_send_int(struct t300rs_device_entry *t300rs)
 {
-	struct hid_device *hdev = input_get_drvdata(dev);
-	struct t300rs_device_entry *t300rs;
 	int i;
-
-	t300rs = t300rs_get_device(hdev);
-	if (!t300rs) {
-		hid_err(hdev, "could not get device\n");
-		return -1;
-	}
-
 	for (i = 0; i < T300RS_BUFFER_LENGTH; ++i)
-		t300rs->ff_field->value[i] = send_buffer[i];
+		t300rs->ff_field->value[i] = t300rs->send_buffer[i];
 
 	hid_hw_request(t300rs->hdev, t300rs->report, HID_REQ_SET_REPORT);
 
-	memset(send_buffer, 0, T300RS_BUFFER_LENGTH);
+	memset(t300rs->send_buffer, 0, T300RS_BUFFER_LENGTH);
 
 	return 0;
+}
+
+static void t300rs_fill_header(struct t300rs_packet_header *packet_header,
+		uint8_t id, uint8_t code)
+{
+	packet_header->id = id + 1;
+	packet_header->code = code;
 }
 
 static int t300rs_play_effect(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
-	u8 *send_buffer = t300rs->send_buffer;
-	int ret, trans;
+	struct __packed t300rs_packet_play {
+		struct t300rs_packet_header header;
+		uint8_t value;
+	} *play_packet = (struct t300rs_packet_play *)t300rs->send_buffer;
+
+	int ret;
 
 
-	send_buffer[1] = state->effect.id + 1;
-	send_buffer[2] = 0x89;
-	send_buffer[3] = 0x01;
+	t300rs_fill_header(&play_packet->header, state->effect.id, 0x89);
+	play_packet->value = 0x01;
 
-	ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(t300rs->hdev, "failed starting effect play\n");
 
@@ -83,75 +82,78 @@ static int t300rs_play_effect(struct t300rs_device_entry *t300rs,
 static int t300rs_stop_effect(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
-	u8 *send_buffer = t300rs->send_buffer;
-	int ret, trans;
+	struct __packed t300rs_packet_stop {
+		struct t300rs_packet_header header;
+		uint8_t value;
+	} *stop_packet = (struct t300rs_packet_stop *)t300rs->send_buffer;
+
+	int ret;
 
 
-	send_buffer[1] = state->effect.id + 1;
-	send_buffer[2] = 0x89;
+	t300rs_fill_header(&stop_packet->header, state->effect.id, 0x89);
 
-	ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(t300rs->hdev, "failed stopping effect play\n");
 
 	return ret;
 }
 
-static void t300rs_fill_envelope(u8 *send_buffer, int i, s16 level,
-		u16 duration, struct ff_envelope *envelope)
+static void t300rs_fill_envelope(struct t300rs_packet_envelope *packet_envelope,
+		int16_t level, uint16_t duration, struct ff_envelope *envelope)
 {
-	u16 attack_length = (duration * envelope->attack_length) / 0x7fff;
-	u16 attack_level = (level * envelope->attack_level) / 0x7fff;
-	u16 fade_length = (duration * envelope->fade_length) / 0x7fff;
-	u16 fade_level = (level * envelope->fade_level) / 0x7fff;
+	uint16_t attack_length = (duration * envelope->attack_length) / 0x7fff;
+	uint16_t attack_level = (level * envelope->attack_level) / 0x7fff;
+	uint16_t fade_length = (duration * envelope->fade_length) / 0x7fff;
+	uint16_t fade_level = (level * envelope->fade_level) / 0x7fff;
 
-	FIT16_ARR(send_buffer, i + 0, attack_length);
-	FIT16_ARR(send_buffer, i + 2, attack_level);
-	FIT16_ARR(send_buffer, i + 4, fade_length);
-	FIT16_ARR(send_buffer, i + 6, fade_level);
+	packet_envelope->attack_length = cpu_to_le16(attack_length);
+	packet_envelope->attack_level = cpu_to_le16(attack_level);
+	packet_envelope->fade_length = cpu_to_le16(fade_length);
+	packet_envelope->fade_level = cpu_to_le16(fade_level);
 }
 
-static void t300rs_fill_timing(u8 *send_buffer, int i, u16 duration, u16 offset){
-	send_buffer[i] = 0x4f;
+static void t300rs_fill_timing(struct t300rs_packet_timing *packet_timing,
+		uint16_t duration, uint16_t offset){
+	packet_timing->start_marker = 0x47;
 
-	FIT16_ARR(send_buffer, i + 1, duration);
-	FIT16_ARR(send_buffer, i + 5, offset);
+	packet_timing->duration = cpu_to_le16(duration);
+	packet_timing->offset = cpu_to_le16(offset);
 
-	send_buffer[i + 8] = 0xff;
-	send_buffer[i + 9] = 0xff;
+	packet_timing->end_marker = 0xffff;
 }
 
 static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state,
-		u8 *send_buffer,
-		s16 level,
-		u16 duration,
-		u8 id,
+		int16_t level,
+		uint16_t duration,
+		uint8_t id,
 		struct ff_envelope envelope,
 		struct ff_envelope envelope_old
 		)
 {
-	u16 attack_length, attack_level, fade_length, fade_level;
-	int ret = 0, trans;
+	struct __packed t300rs_packet_mod_envelope {
+		struct t300rs_packet_header header;
+		uint8_t attribute;
+		uint16_t value;
+	} *packet_mod_envelope = (struct t300rs_packet_mod_envelope *)t300rs->send_buffer;
 
-	if (duration == 0)
-		duration = 0xffff;
+	uint16_t attack_length, attack_level, fade_length, fade_level;
+	int ret = 0;
+
+	duration = duration - 1;
 
 	attack_length = (duration * envelope.attack_length) / 0x7fff;
 	attack_level = (level * envelope.attack_level) / 0x7fff;
 	fade_length = (duration * envelope.fade_length) / 0x7fff;
 	fade_level = (level * envelope.fade_level) / 0x7fff;
 
-
-	send_buffer[1] = id + 1;
-	send_buffer[2] = 0x31;
-
 	if (envelope.attack_length != envelope_old.attack_length) {
-		send_buffer[3] = 0x81;
+		t300rs_fill_header(&packet_mod_envelope->header, id, 0x31);
+		packet_mod_envelope->attribute = 0x81;
+		packet_mod_envelope->value = cpu_to_le16(attack_length);
 
-		FIT16_ARR(send_buffer, 4, attack_length);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying effect envelope\n");
 			goto error;
@@ -159,11 +161,11 @@ static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
 	}
 
 	if (envelope.attack_level != envelope_old.attack_level) {
-		send_buffer[3] = 0x82;
+		t300rs_fill_header(&packet_mod_envelope->header, id, 0x31);
+		packet_mod_envelope->attribute = 0x82;
+		packet_mod_envelope->value = cpu_to_le16(attack_level);
 
-		FIT16_ARR(send_buffer, 4, attack_level);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying effect envelope\n");
 			goto error;
@@ -171,11 +173,11 @@ static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
 	}
 
 	if (envelope.fade_length != envelope_old.fade_length) {
-		send_buffer[3] = 0x84;
+		t300rs_fill_header(&packet_mod_envelope->header, id, 0x31);
+		packet_mod_envelope->attribute = 0x84;
+		packet_mod_envelope->value = cpu_to_le16(fade_length);
 
-		FIT16_ARR(send_buffer, 4, fade_length);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying effect envelope\n");
 			goto error;
@@ -183,11 +185,11 @@ static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
 	}
 
 	if (envelope.fade_level != envelope_old.fade_level) {
-		send_buffer[3] = 0x88;
+		t300rs_fill_header(&packet_mod_envelope->header, id, 0x31);
+		packet_mod_envelope->attribute = 0x88;
+		packet_mod_envelope->value = cpu_to_le16(fade_level);
 
-		FIT16_ARR(send_buffer, 4, fade_level);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying effect envelope\n");
 			goto error;
@@ -199,27 +201,29 @@ error:
 }
 
 static int t300rs_modify_duration(struct t300rs_device_entry *t300rs,
-		struct t300rs_effect_state *state, u8 *send_buffer)
+		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
-	u16 duration;
-	int ret = 0, trans;
+	struct t300rs_packet_mod_duration {
+		struct t300rs_packet_header header;
+		padding: 8;
+	 	uint8_t marker;
+		uint16_t duration;
+	} *packet_mod_duration = (struct t300rs_packet_mod_duration *)t300rs->send_buffer;
 
-	if (effect.replay.length == 0)
-		duration = 0xffff;
-	else
-		duration = effect.replay.length;
+	uint16_t duration;
+	int ret = 0;
+
+	duration = effect.replay.length - 1;
 
 	if (effect.replay.length != old.replay.length) {
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x49;
-		send_buffer[4] = 0x41;
+		t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x49);
+		packet_mod_duration->marker = 0x41;
+		packet_mod_duration->duration = cpu_to_le16(duration);
 
-		FIT16_ARR(send_buffer, 5, duration);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying duration\n");
 			goto error;
@@ -231,25 +235,27 @@ error:
 }
 
 static int t300rs_modify_constant(struct t300rs_device_entry *t300rs,
-		struct t300rs_effect_state *state, u8 *send_buffer)
+		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
 	struct ff_constant_effect constant = effect.u.constant;
 	struct ff_constant_effect constant_old = old.u.constant;
-	int ret, trans;
-	s16 level;
+	struct __packed t300rs_packet_mod_constant {
+		struct t300rs_packet_header header;
+		uint8_t level;
+	} *packet_mod_constant = (struct t300rs_packet_mod_constant *)t300rs->send_buffer;
+	int ret;
+	int16_t level;
 
 	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
 	if (constant.level != constant_old.level) {
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0a;
+		t300rs_fill_header(&packet_mod_constant->header, effect.id, 0x0a);
+		packet_mod_constant->level = level;
 
-		FIT16_ARR(send_buffer, 3, level);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying constant effect\n");
 			goto error;
@@ -259,7 +265,6 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs,
 
 	ret = t300rs_modify_envelope(t300rs,
 			state,
-			send_buffer,
 			level,
 			effect.replay.length,
 			effect.id,
@@ -272,7 +277,7 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_modify_duration(t300rs, state, send_buffer);
+	ret = t300rs_modify_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying constant duration\n");
 		goto error;
@@ -283,16 +288,23 @@ error:
 }
 
 static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs,
-		struct t300rs_effect_state *state, u8 *send_buffer)
+		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
 	struct ff_ramp_effect ramp = effect.u.ramp;
 	struct ff_ramp_effect ramp_old = old.u.ramp;
-	int ret, trans;
+	struct __packed t300rs_packet_mod_ramp {
+		struct t300rs_packet_header header;
+		uint8_t attribute;
+		uint16_t difference;
+		uint16_t level;
+	} *packet_mod_ramp = (struct t300rs_packet_mod_ramp *)t300rs->send_buffer;
 
-	u16 difference, top, bottom;
-	s16 level;
+	int ret;
+
+	uint16_t difference, top, bottom;
+	int16_t level;
 
 	top = ramp.end_level > ramp.start_level ? ramp.end_level : ramp.start_level;
 	bottom = ramp.end_level > ramp.start_level ? ramp.start_level : ramp.end_level;
@@ -305,14 +317,12 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs,
 
 	if (ramp.start_level != ramp_old.start_level || ramp.end_level != ramp_old.end_level) {
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0e;
-		send_buffer[3] = 0x03;
+		t300rs_fill_header(&packet_mod_ramp->header, effect.id, 0x0e);
+		packet_mod_ramp->attribute = 0x03;
+		packet_mod_ramp->difference = cpu_to_le16(difference);
+		packet_mod_ramp->level = cpu_to_le16(level);
 
-		FIT16_ARR(send_buffer, 4, difference);
-		FIT16_ARR(send_buffer, 6, level);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying ramp effect\n");
 			goto error;
@@ -322,7 +332,6 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs,
 
 	ret = t300rs_modify_envelope(t300rs,
 			state,
-			send_buffer,
 			level,
 			effect.replay.length,
 			effect.id,
@@ -336,7 +345,7 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_modify_duration(t300rs, state, send_buffer);
+	ret = t300rs_modify_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying ramp duration\n");
 		goto error;
@@ -346,13 +355,20 @@ error:
 	return ret;
 }
 static int t300rs_modify_damper(struct t300rs_device_entry *t300rs,
-		struct t300rs_effect_state *state, u8 *send_buffer)
+		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
 	struct ff_condition_effect damper = effect.u.condition[0];
 	struct ff_condition_effect damper_old = old.u.condition[0];
-	int ret, trans, input_level;
+	struct __packed t300rs_packet_mod_damper {
+		struct t300rs_packet_header header;
+		uint8_t attribute;
+		uint16_t value0;
+		uint16_t value1;
+	} *packet_mod_damper = (struct t300rs_packet_mod_damper *)t300rs->send_buffer;
+
+	int ret, input_level;
 
 	input_level = damper_level;
 	if (state->effect.type == FF_FRICTION)
@@ -362,16 +378,13 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs,
 		input_level = spring_level;
 
 	if (damper.right_coeff != damper_old.right_coeff) {
-		s16 coeff = damper.right_coeff * input_level / 100;
+		int16_t coeff = damper.right_coeff * input_level / 100;
 
+		t300rs_fill_header(&packet_mod_damper->header, effect.id, 0x0e);
+		packet_mod_damper->attribute = 0x41;
+		packet_mod_damper->value0 = cpu_to_le16(coeff);
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0e;
-		send_buffer[3] = 0x41;
-
-		FIT16_ARR(send_buffer, 4, coeff);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying damper rc\n");
 			goto error;
@@ -380,16 +393,13 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs,
 	}
 
 	if (damper.left_coeff != damper_old.left_coeff) {
-		s16 coeff = damper.left_coeff * input_level / 100;
+		int16_t coeff = damper.left_coeff * input_level / 100;
 
+		t300rs_fill_header(&packet_mod_damper->header, effect.id, 0x0e);
+		packet_mod_damper->attribute = 0x42;
+		packet_mod_damper->value0 = cpu_to_le16(coeff);
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0e;
-		send_buffer[3] = 0x42;
-
-		FIT16_ARR(send_buffer, 4, coeff);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying damper lc\n");
 			goto error;
@@ -397,20 +407,18 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs,
 
 	}
 
-	if ((damper.deadband != damper_old.deadband)  ||
-			(damper.center	 != damper_old.center)) {
-		u16 deadband_right = 0xfffe - damper.deadband - damper.center;
-		u16 deadband_left = 0xfffe - damper.deadband + damper.center;
+	if ((damper.deadband != damper_old.deadband)
+			|| (damper.center != damper_old.center)) {
 
+		uint16_t right_deadband = 0xfffe - damper.deadband - damper.center;
+		uint16_t left_deadband = 0xfffe - damper.deadband + damper.center;
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0e;
-		send_buffer[3] = 0x4c;
+		t300rs_fill_header(&packet_mod_damper->header, effect.id, 0x0e);
+		packet_mod_damper->attribute = 0x4c;
+		packet_mod_damper->value0 = cpu_to_le16(right_deadband);
+		packet_mod_damper->value1 = cpu_to_le16(left_deadband);
 
-		FIT16_ARR(send_buffer, 4, deadband_right);
-		FIT16_ARR(send_buffer, 6, deadband_left);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying damper deadband\n");
 			goto error;
@@ -418,7 +426,7 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs,
 
 	}
 
-	ret = t300rs_modify_duration(t300rs, state, send_buffer);
+	ret = t300rs_modify_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying damper duration\n");
 		goto error;
@@ -430,26 +438,30 @@ error:
 
 
 static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
-		struct t300rs_effect_state *state, u8 *send_buffer)
+		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
 	struct ff_periodic_effect periodic = effect.u.periodic;
 	struct ff_periodic_effect periodic_old = old.u.periodic;
-	int ret, trans;
-	s16 level;
+	struct __packed t300rs_packet_mod_periodic {
+		struct t300rs_packet_header header;
+		uint8_t attribute;
+		uint16_t value;
+	} *packet_mod_periodic = (struct t300rs_packet_mod_periodic *)t300rs->send_buffer;
+
+	int ret;
+	int16_t level;
 
 	level = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
 	if (periodic.magnitude != periodic_old.magnitude) {
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0e;
-		send_buffer[3] = 0x01;
+		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
+		packet_mod_periodic->attribute = 0x01;
+		packet_mod_periodic->value = cpu_to_le16(level);
 
-		FIT16_ARR(send_buffer, 4, level);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying periodic magnitude\n");
 			goto error;
@@ -458,15 +470,13 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 	}
 
 	if (periodic.offset != periodic_old.offset) {
-		s16 offset = periodic.offset;
+		int16_t offset = periodic.offset;
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0e;
-		send_buffer[3] = 0x02;
+		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
+		packet_mod_periodic->attribute = 0x02;
+		packet_mod_periodic->value = cpu_to_le16(offset);
 
-		FIT16_ARR(send_buffer, 4, offset);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying periodic offset\n");
 			goto error;
@@ -475,15 +485,13 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 	}
 
 	if (periodic.phase != periodic_old.phase) {
-		s16 phase = periodic.phase;
+		int16_t phase = periodic.phase;
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0e;
-		send_buffer[3] = 0x04;
+		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
+		packet_mod_periodic->attribute = 0x04;
+		packet_mod_periodic->value = phase;
 
-		FIT16_ARR(send_buffer, 4, phase);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying periodic phase\n");
 			goto error;
@@ -492,15 +500,13 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 	}
 
 	if (periodic.period != periodic_old.period) {
-		s16 period = periodic.period;
+		int16_t period = periodic.period;
 
-		send_buffer[1] = effect.id + 1;
-		send_buffer[2] = 0x0e;
-		send_buffer[3] = 0x08;
+		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
+		packet_mod_periodic->attribute = 0x08;
+		packet_mod_periodic->value = period;
 
-		FIT16_ARR(send_buffer, 4, period);
-
-		ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+		ret = t300rs_send_int(t300rs);
 		if (ret) {
 			hid_err(t300rs->hdev, "failed modifying periodic period\n");
 			goto error;
@@ -510,7 +516,6 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 
 	ret = t300rs_modify_envelope(t300rs,
 			state,
-			send_buffer,
 			level,
 			effect.replay.length,
 			effect.id,
@@ -523,7 +528,7 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_modify_duration(t300rs, state, send_buffer);
+	ret = t300rs_modify_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying periodic duration\n");
 		goto error;
@@ -533,17 +538,22 @@ error:
 	return ret;
 }
 
-
 static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
-	u8 *send_buffer = t300rs->send_buffer;
 	struct ff_effect effect = state->effect;
 	struct ff_constant_effect constant = state->effect.u.constant;
-	s16 level;
-	u16 duration, offset;
+	struct __packed t300rs_packet_constant {
+		struct t300rs_packet_header header;
+		uint16_t level;
+		struct t300rs_packet_envelope envelope;
+		struct t300rs_packet_timing timing;
+	} *packet_constant = (struct t300rs_packet_constant *)t300rs->send_buffer;
 
-	int ret, trans;
+	int16_t level;
+	uint16_t duration, offset;
+
+	int ret;
 
 	/* some games, such as DiRT Rally 2 have a weird feeling to them, sort of
 	 * like the wheel pulls just a bit to the right or left and then it just
@@ -556,27 +566,23 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 
 		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
-		return t300rs_modify_constant(t300rs, state, send_buffer);
+		return t300rs_modify_constant(t300rs, state);
 	}
 
 	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
-	if (effect.replay.length == 0)
-		duration = 0xffff;
-	else
-		duration = effect.replay.length;
+	duration = effect.replay.length - 1;
 
 	offset = effect.replay.delay;
 
+	t300rs_fill_header(&packet_constant->header, effect.id, 0x6a);
 
-	send_buffer[1] = effect.id + 1;
-	send_buffer[2] = 0x6a;
+	packet_constant->level = cpu_to_le16(level);
 
-	FIT16_ARR(send_buffer, 3, level);
+	t300rs_fill_envelope(&packet_constant->envelope, level, duration,
+			&constant.envelope);
+	t300rs_fill_timing(&packet_constant->timing, duration, offset);
 
-	t300rs_fill_envelope(send_buffer, 5, level, duration, &constant.envelope);
-	t300rs_fill_timing(send_buffer, 14, duration, offset);
-
-	ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(t300rs->hdev, "failed uploading constant effect\n");
 
@@ -586,25 +592,32 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
-	u8 *send_buffer = t300rs->send_buffer;
 	struct ff_effect effect = state->effect;
 	struct ff_ramp_effect ramp = state->effect.u.ramp;
-	int ret, trans;
-	u16 difference, offset, top, bottom, duration;
-	s16 level;
+	struct __packed t300rs_packet_ramp {
+		struct t300rs_packet_header header;
+		uint16_t difference;
+		uint16_t level;
+		uint16_t duration;
+		uint8_t marker;
+		uint8_t direction;
+		struct t300rs_packet_envelope envelope;
+		struct t300rs_packet_timing timing;
+	} *packet_ramp = (struct t300rs_packet_ramp *)t300rs->send_buffer;
+
+	int ret;
+	uint16_t difference, offset, top, bottom, duration;
+	int16_t level;
 
 	if (test_bit(FF_EFFECT_PLAYING, &state->flags)
 		&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 
 		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
-		return t300rs_modify_ramp(t300rs, state, send_buffer);
+		return t300rs_modify_ramp(t300rs, state);
 	}
 
-	if (effect.replay.length == 0)
-		duration = 0xffff;
-	else
-		duration = effect.replay.length;
+	duration = effect.replay.length - 1;
 
 	top = ramp.end_level > ramp.start_level ? ramp.end_level : ramp.start_level;
 	bottom = ramp.end_level > ramp.start_level ? ramp.start_level : ramp.end_level;
@@ -615,22 +628,21 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 	offset = effect.replay.delay;
 
 
-	send_buffer[1] = effect.id + 1;
-	send_buffer[2] = 0x6b;
+	t300rs_fill_header(&packet_ramp->header, effect.id, 0x6b);
 
-	FIT16_ARR(send_buffer, 3, difference);
-	FIT16_ARR(send_buffer, 5, level);
-	FIT16_ARR(send_buffer, 9, duration);
+	packet_ramp->difference = cpu_to_le16(difference);
+	packet_ramp->level = cpu_to_le16(level);
+	packet_ramp->duration = cpu_to_le16(duration);
 
-	send_buffer[12] = 0x80;
+	packet_ramp->marker = 0x80;
 
-	t300rs_fill_envelope(send_buffer, 13, level,
-			effect.replay.length, &ramp.envelope);
+	t300rs_fill_envelope(&packet_ramp->envelope, level, duration,
+			&ramp.envelope);
 
-	send_buffer[22] = ramp.end_level > ramp.start_level ? 0x04 : 0x05;
-	t300rs_fill_timing(send_buffer, 23, duration, offset);
+	packet_ramp->direction = ramp.end_level > ramp.start_level ? 0x04 : 0x05;
+	t300rs_fill_timing(&packet_ramp->timing, duration, offset);
 
-	ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(t300rs->hdev, "failed uploading ramp");
 
@@ -640,46 +652,52 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 static int t300rs_upload_spring(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
-	u8 *send_buffer = t300rs->send_buffer;
 	struct ff_effect effect = state->effect;
 	/* we only care about the first axis */
 	struct ff_condition_effect spring = state->effect.u.condition[0];
-	int ret, trans;
-	u16 duration, right_coeff, left_coeff, deadband_right, deadband_left, offset;
+	struct __packed t300rs_packet_spring {
+		struct t300rs_packet_header header;
+		uint16_t right_coeff;
+		uint16_t left_coeff;
+		uint16_t right_deadband;
+		uint16_t left_deadband;
+		uint8_t spring_start[17];
+		struct t300rs_packet_envelope envelope;
+		struct t300rs_packet_timing timing;
+	} *packet_spring = (struct t300rs_packet_spring *)t300rs->send_buffer;
+
+	int ret;
+	uint16_t duration, right_coeff, left_coeff, right_deadband, left_deadband, offset;
 
 	if (test_bit(FF_EFFECT_PLAYING, &state->flags)
 		&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 
 		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
-		return t300rs_modify_damper(t300rs, state, send_buffer);
+		return t300rs_modify_damper(t300rs, state);
 	}
 
-	if (effect.replay.length == 0)
-		duration = 0xffff;
-	else
-		duration = effect.replay.length;
+	duration = effect.replay.length - 1;
 
 	right_coeff = spring.right_coeff * spring_level / 100;
 	left_coeff = spring.left_coeff * spring_level / 100;
 
-	deadband_right = 0xfffe - spring.deadband - spring.center;
-	deadband_left = 0xfffe - spring.deadband + spring.center;
+	right_deadband = 0xfffe - spring.deadband - spring.center;
+	left_deadband = 0xfffe - spring.deadband + spring.center;
 
 	offset = effect.replay.delay;
 
-	send_buffer[1] = effect.id + 1;
-	send_buffer[2] = 0x64;
+	t300rs_fill_header(&packet_spring->header, effect.id, 0x64);
 
-	FIT16_ARR(send_buffer, 3, right_coeff);
-	FIT16_ARR(send_buffer, 5, left_coeff);
-	FIT16_ARR(send_buffer, 7, deadband_right);
-	FIT16_ARR(send_buffer, 9, deadband_left);
+	packet_spring->right_coeff = right_coeff;
+	packet_spring->left_coeff = left_coeff;
+	packet_spring->right_deadband = right_deadband;
+	packet_spring->left_deadband = left_deadband;
 
-	memcpy(&send_buffer[11], spring_values, ARRAY_SIZE(spring_values));
-	t300rs_fill_timing(send_buffer, 28, duration, offset);
+	memcpy(&packet_spring->spring_start, spring_values, ARRAY_SIZE(spring_values));
+	t300rs_fill_timing(&packet_spring->timing, duration, offset);
 
-	ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(t300rs->hdev, "failed uploading spring\n");
 
@@ -689,25 +707,34 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs,
 static int t300rs_upload_damper(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
-	u8 *send_buffer = t300rs->send_buffer;
+
 	struct ff_effect effect = state->effect;
 	/* we only care about the first axis */
 	struct ff_condition_effect spring = state->effect.u.condition[0];
-	int ret, trans, input_level;
-	u16 duration, right_coeff, left_coeff, deadband_right, deadband_left, offset;
+	struct __packed t300rs_packet_damper {
+		struct t300rs_packet_header header;
+		uint16_t right_coeff;
+		uint16_t left_coeff;
+		uint16_t right_deadband;
+		uint16_t left_deadband;
+		/* space for spring const */
+		uint8_t damper_start[17];
+		struct t300rs_packet_envelope envelope;
+		struct t300rs_packet_timing timing;
+	} *packet_damper = (struct t300rs_packet_damper *)t300rs->send_buffer;
+
+	int ret, input_level;
+	uint16_t duration, right_coeff, left_coeff, right_deadband, left_deadband, offset;
 
 	if (test_bit(FF_EFFECT_PLAYING, &state->flags)	&&
 			test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 
 		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
-		return t300rs_modify_damper(t300rs, state, send_buffer);
+		return t300rs_modify_damper(t300rs, state);
 	}
 
-	if (effect.replay.length == 0)
-		duration = 0xffff;
-	else
-		duration = effect.replay.length;
+	duration = effect.replay.length - 1;
 
 	input_level = damper_level;
 	if (state->effect.type == FF_FRICTION)
@@ -716,23 +743,22 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs,
 	right_coeff = spring.right_coeff * input_level / 100;
 	left_coeff = spring.left_coeff * input_level / 100;
 
-	deadband_right = 0xfffe - spring.deadband - spring.center;
-	deadband_left = 0xfffe - spring.deadband + spring.center;
+	right_deadband = 0xfffe - spring.deadband - spring.center;
+	left_deadband = 0xfffe - spring.deadband + spring.center;
 
 	offset = effect.replay.delay;
 
-	send_buffer[1] = effect.id + 1;
-	send_buffer[2] = 0x64;
+	t300rs_fill_header(&packet_damper->header, effect.id, 0x64);
 
-	FIT16_ARR(send_buffer, 3, right_coeff);
-	FIT16_ARR(send_buffer, 5, left_coeff);
-	FIT16_ARR(send_buffer, 7, deadband_right);
-	FIT16_ARR(send_buffer, 9, deadband_left);
+	packet_damper->right_coeff = right_coeff;
+	packet_damper->left_coeff = left_coeff;
+	packet_damper->right_deadband = right_deadband;
+	packet_damper->left_deadband = left_deadband;
 
-	memcpy(&send_buffer[11], damper_values, ARRAY_SIZE(damper_values));
-	t300rs_fill_timing(send_buffer, 28, duration, offset);
+	memcpy(&packet_damper->damper_start, damper_values, ARRAY_SIZE(damper_values));
+	t300rs_fill_timing(&packet_damper->timing, duration, offset);
 
-	ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(t300rs->hdev, "failed uploading spring\n");
 
@@ -742,25 +768,34 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs,
 static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
-	u8 *send_buffer = t300rs->send_buffer;
 	struct ff_effect effect = state->effect;
 	struct ff_periodic_effect periodic = state->effect.u.periodic;
-	int ret, trans;
-	u16 duration, magnitude, phase, period, offset;
-	s16 periodic_offset;
+	struct __packed t300rs_packet_periodic {
+		struct t300rs_packet_header header;
+		uint16_t magnitude;
+		uint16_t periodic_offset;
+		uint16_t phase;
+		uint16_t period;
+padding : 8;
+	  	uint8_t marker;
+		struct t300rs_packet_envelope envelope;
+		uint8_t waveform;
+		struct t300rs_packet_timing timing;
+	} *packet_periodic = (struct t300rs_packet_periodic *)t300rs->send_buffer;
+
+	int ret;
+	uint16_t duration, magnitude, phase, period, offset;
+	int16_t periodic_offset;
 
 	if (test_bit(FF_EFFECT_PLAYING, &state->flags)	&&
 			test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 
 		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
-		return t300rs_modify_periodic(t300rs, state, send_buffer);
+		return t300rs_modify_periodic(t300rs, state);
 	}
 
-	if (effect.replay.length == 0)
-		duration = 0xffff;
-	else
-		duration = effect.replay.length;
+	duration = effect.replay.length - 1;
 
 	magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
@@ -769,23 +804,23 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 	period = periodic.period;
 	offset = effect.replay.delay;
 
-	send_buffer[1] = effect.id + 1;
-	send_buffer[2] = 0x6b;
+	t300rs_fill_header(&packet_periodic->header, effect.id, 0x6b);
 
-	FIT16_ARR(send_buffer, 3, magnitude);
-	FIT16_ARR(send_buffer, 5, periodic_offset);
-	FIT16_ARR(send_buffer, 7, phase);
-	FIT16_ARR(send_buffer, 9, period);
+	packet_periodic->magnitude = magnitude;
+	packet_periodic->periodic_offset = periodic_offset;
+	packet_periodic->phase = phase;
+	packet_periodic->period = period;
 
-	send_buffer[12] = 0x80;
+	packet_periodic->marker = 0x80;
 
-	t300rs_fill_envelope(send_buffer, 13, magnitude,
-			effect.replay.length, &periodic.envelope);
+	t300rs_fill_envelope(&packet_periodic->envelope, magnitude, duration,
+			&periodic.envelope);
 
-	send_buffer[21] = periodic.waveform - 0x57;
-	t300rs_fill_timing(send_buffer, 22, duration, offset);
+	packet_periodic->waveform = periodic.waveform - 0x57;
 
-	ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+	t300rs_fill_timing(&packet_periodic->timing, duration, offset);
+
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(t300rs->hdev, "failed uploading periodic effect");
 
@@ -1069,9 +1104,13 @@ static ssize_t range_store(struct device *dev,
 {
 	struct hid_device *hdev = to_hid_device(dev);
 	struct t300rs_device_entry *t300rs;
-	u8 *send_buffer;
+	struct __packed t300rs_packet_range {
+		struct t300rs_setup_header header;
+		uint16_t range;
+	} *packet_range;
+
 	unsigned int range;
-	int ret, trans;
+	int ret;
 
 	ret = kstrtouint(buf, 0, &range);
 	if (ret) {
@@ -1085,7 +1124,7 @@ static ssize_t range_store(struct device *dev,
 		return -1;
 	}
 
-	send_buffer = t300rs->send_buffer;
+	packet_range = (struct t300rs_packet_range *)t300rs->send_buffer;
 
 	if (range < 40)
 		range = 40;
@@ -1096,12 +1135,12 @@ static ssize_t range_store(struct device *dev,
 	range *= 0x3c;
 
 
-	send_buffer[0] = 0x08;
-	send_buffer[1] = 0x11;
+	packet_range->header.cmd = 0x08;
+	packet_range->header.code = 0x11;
 
-	FIT16_ARR(send_buffer, 2, range);
+	packet_range->range = cpu_to_le16(range);
 
-	ret = t300rs_send_int(t300rs->input_dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret) {
 		hid_err(hdev, "failed sending interrupts\n");
 		return -1;
@@ -1131,12 +1170,16 @@ static ssize_t range_show(struct device *dev,
 
 static DEVICE_ATTR_RW(range);
 
-static void t300rs_set_autocenter(struct input_dev *dev, u16 value)
+static void t300rs_set_autocenter(struct input_dev *dev, uint16_t value)
 {
 	struct hid_device *hdev = input_get_drvdata(dev);
 	struct t300rs_device_entry *t300rs;
-	u8 *send_buffer;
-	int ret, trans;
+	struct __packed t300rs_packet_autocenter {
+		struct t300rs_setup_header header;
+		uint16_t value;
+	} *autocenter_packet;
+
+	int ret;
 
 	t300rs = t300rs_get_device(hdev);
 	if (!t300rs) {
@@ -1144,34 +1187,37 @@ static void t300rs_set_autocenter(struct input_dev *dev, u16 value)
 		return;
 	}
 
-	send_buffer = t300rs->send_buffer;
+	autocenter_packet = (struct t300rs_packet_autocenter *)t300rs->send_buffer;
 
-	send_buffer[0] = 0x08;
-	send_buffer[1] = 0x04;
-	send_buffer[2] = 0x01;
+	autocenter_packet->header.cmd = 0x08;
+	autocenter_packet->header.code = 0x04;
+	autocenter_packet->value = cpu_to_le16(0x01);
 
-	ret = t300rs_send_int(dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret) {
 		hid_err(hdev, "failed setting autocenter");
 		return;
 	}
 
-	send_buffer[0] = 0x08;
-	send_buffer[1] = 0x03;
+	autocenter_packet->header.cmd = 0x08;
+	autocenter_packet->header.code = 0x03;
 
-	FIT16_ARR(send_buffer, 2, value);
+	autocenter_packet->value = cpu_to_le16(value);
 
-	ret = t300rs_send_int(dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(hdev, "failed setting autocenter");
 }
 
-static void t300rs_set_gain(struct input_dev *dev, u16 gain)
+static void t300rs_set_gain(struct input_dev *dev, uint16_t gain)
 {
 	struct hid_device *hdev = input_get_drvdata(dev);
 	struct t300rs_device_entry *t300rs;
-	u8 *send_buffer;
-	int ret, trans;
+	struct __packed t300rs_packet_gain {
+		struct t300rs_setup_header header;
+	} *gain_packet;
+
+	int ret;
 
 	t300rs = t300rs_get_device(hdev);
 	if (!t300rs) {
@@ -1179,11 +1225,12 @@ static void t300rs_set_gain(struct input_dev *dev, u16 gain)
 		return;
 	}
 
-	send_buffer = t300rs->send_buffer;
-	send_buffer[0] = 0x02;
-	send_buffer[1] = (gain >> 8) & 0xff;
+	gain_packet = (struct t300rs_packet_gain *)t300rs->send_buffer;
 
-	ret = t300rs_send_int(dev, send_buffer, &trans);
+	gain_packet->header.cmd = 0x02;
+	gain_packet->header.code = (gain >> 8) & 0xff;
+
+	ret = t300rs_send_int(t300rs);
 	if (ret)
 		hid_err(hdev, "failed setting gain: %i\n", ret);
 }
@@ -1197,8 +1244,11 @@ static int t300rs_open(struct input_dev *dev)
 {
 	struct t300rs_device_entry *t300rs;
 	struct hid_device *hdev = input_get_drvdata(dev);
-	u8 *send_buffer;
-	int ret, trans;
+	struct __packed t300rs_packet_open {
+		struct t300rs_setup_header header;
+	} *open_packet;
+
+	int ret;
 
 	t300rs = t300rs_get_device(hdev);
 	if (!t300rs) {
@@ -1206,12 +1256,12 @@ static int t300rs_open(struct input_dev *dev)
 		return -1;
 	}
 
-	send_buffer = t300rs->send_buffer;
+	open_packet = (struct t300rs_packet_open *)t300rs->send_buffer;
 
-	send_buffer[0] = 0x01;
-	send_buffer[1] = 0x05;
+	open_packet->header.cmd = 0x01;
+	open_packet->header.code = 0x05;
 
-	ret = t300rs_send_int(dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret) {
 		hid_err(hdev, "failed sending interrupts\n");
 		goto err;
@@ -1223,10 +1273,13 @@ err:
 
 static void t300rs_close(struct input_dev *dev)
 {
-	int ret, trans;
-	struct hid_device *hdev = input_get_drvdata(dev);
 	struct t300rs_device_entry *t300rs;
-	u8 *send_buffer;
+	struct hid_device *hdev = input_get_drvdata(dev);
+	struct t300rs_packet_close {
+		struct t300rs_setup_header header;
+	} *close_packet;
+
+	int ret;
 
 	t300rs = t300rs_get_device(hdev);
 	if (!t300rs) {
@@ -1234,11 +1287,11 @@ static void t300rs_close(struct input_dev *dev)
 		return;
 	}
 
-	send_buffer = t300rs->send_buffer;
+	close_packet = (struct t300rs_packet_close *)t300rs->send_buffer;
 
-	send_buffer[0] = 0x01;
+	close_packet->header.cmd = 0x01;
 
-	ret = t300rs_send_int(dev, send_buffer, &trans);
+	ret = t300rs_send_int(t300rs);
 	if (ret) {
 		hid_err(hdev, "failed sending interrupts\n");
 		goto err;
@@ -1529,7 +1582,5 @@ static struct hid_driver t300rs_driver = {
 	.report_fixup = t300rs_report_fixup,
 };
 module_hid_driver(t300rs_driver);
-
-#undef FIT16_ARR
 
 MODULE_LICENSE("GPL");

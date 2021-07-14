@@ -73,6 +73,33 @@ struct __packed t300rs_firmware_response {
 		uint8_t	unknown2;
 };
 
+#define padding unsigned
+
+struct __packed t300rs_packet_header {
+padding : 8;
+	   uint8_t id;
+	   uint8_t code;
+};
+
+struct __packed t300rs_setup_header {
+	uint8_t cmd;
+	uint8_t code;
+};
+
+struct __packed t300rs_packet_envelope {
+	uint16_t attack_length;
+	uint16_t attack_level;
+	uint16_t fade_length;
+	uint16_t fade_level;
+};
+
+struct __packed t300rs_packet_timing {
+	uint8_t start_marker;
+	uint16_t duration;
+	uint16_t offset;
+padding : 16;
+	uint16_t end_marker;
+};
 
 struct usb_ctrlrequest t300rs_firmware_request = {
 		.bRequestType = 0xc1,
