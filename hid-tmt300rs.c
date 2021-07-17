@@ -115,7 +115,7 @@ static void t300rs_fill_envelope(struct t300rs_packet_envelope *packet_envelope,
 
 static void t300rs_fill_timing(struct t300rs_packet_timing *packet_timing,
 		uint16_t duration, uint16_t offset){
-	packet_timing->start_marker = 0x47;
+	packet_timing->start_marker = 0x4f;
 
 	packet_timing->duration = cpu_to_le16(duration);
 	packet_timing->offset = cpu_to_le16(offset);
@@ -207,8 +207,7 @@ static int t300rs_modify_duration(struct t300rs_device_entry *t300rs,
 	struct ff_effect old = state->old;
 	struct t300rs_packet_mod_duration {
 		struct t300rs_packet_header header;
-		padding: 8;
-	 	uint8_t marker;
+		uint16_t marker;
 		uint16_t duration;
 	} *packet_mod_duration = (struct t300rs_packet_mod_duration *)t300rs->send_buffer;
 
@@ -220,7 +219,7 @@ static int t300rs_modify_duration(struct t300rs_device_entry *t300rs,
 	if (effect.replay.length != old.replay.length) {
 
 		t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x49);
-		packet_mod_duration->marker = 0x41;
+		packet_mod_duration->marker = cpu_to_le16(0x4100);
 		packet_mod_duration->duration = cpu_to_le16(duration);
 
 		ret = t300rs_send_int(t300rs);
@@ -547,6 +546,7 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 		struct t300rs_packet_header header;
 		uint16_t level;
 		struct t300rs_packet_envelope envelope;
+		uint8_t zero;
 		struct t300rs_packet_timing timing;
 	} *packet_constant = (struct t300rs_packet_constant *)t300rs->send_buffer;
 
@@ -562,7 +562,7 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 	 */
 
 	if (test_bit(FF_EFFECT_PLAYING, &state->flags)
-		&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
+			&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 
 		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
@@ -598,10 +598,11 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 		struct t300rs_packet_header header;
 		uint16_t difference;
 		uint16_t level;
+		uint8_t zero1[2];
 		uint16_t duration;
-		uint8_t marker;
-		uint8_t direction;
+		uint16_t marker;
 		struct t300rs_packet_envelope envelope;
+		uint8_t direction;
 		struct t300rs_packet_timing timing;
 	} *packet_ramp = (struct t300rs_packet_ramp *)t300rs->send_buffer;
 
@@ -610,7 +611,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 	int16_t level;
 
 	if (test_bit(FF_EFFECT_PLAYING, &state->flags)
-		&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
+			&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 
 		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
@@ -634,7 +635,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 	packet_ramp->level = cpu_to_le16(level);
 	packet_ramp->duration = cpu_to_le16(duration);
 
-	packet_ramp->marker = 0x80;
+	packet_ramp->marker = cpu_to_le16(0x8000);
 
 	t300rs_fill_envelope(&packet_ramp->envelope, level, duration,
 			&ramp.envelope);
@@ -662,7 +663,6 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs,
 		uint16_t right_deadband;
 		uint16_t left_deadband;
 		uint8_t spring_start[17];
-		struct t300rs_packet_envelope envelope;
 		struct t300rs_packet_timing timing;
 	} *packet_spring = (struct t300rs_packet_spring *)t300rs->send_buffer;
 
@@ -670,7 +670,7 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs,
 	uint16_t duration, right_coeff, left_coeff, right_deadband, left_deadband, offset;
 
 	if (test_bit(FF_EFFECT_PLAYING, &state->flags)
-		&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
+			&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 
 		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
@@ -717,9 +717,7 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs,
 		uint16_t left_coeff;
 		uint16_t right_deadband;
 		uint16_t left_deadband;
-		/* space for spring const */
 		uint8_t damper_start[17];
-		struct t300rs_packet_envelope envelope;
 		struct t300rs_packet_timing timing;
 	} *packet_damper = (struct t300rs_packet_damper *)t300rs->send_buffer;
 
@@ -776,8 +774,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 		uint16_t periodic_offset;
 		uint16_t phase;
 		uint16_t period;
-padding : 8;
-	  	uint8_t marker;
+		uint16_t marker;
 		struct t300rs_packet_envelope envelope;
 		uint8_t waveform;
 		struct t300rs_packet_timing timing;
@@ -811,7 +808,7 @@ padding : 8;
 	packet_periodic->phase = phase;
 	packet_periodic->period = period;
 
-	packet_periodic->marker = 0x80;
+	packet_periodic->marker = cpu_to_le16(0x8000);
 
 	t300rs_fill_envelope(&packet_periodic->envelope, magnitude, duration,
 			&periodic.envelope);
