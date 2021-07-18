@@ -242,7 +242,7 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs,
 	struct ff_constant_effect constant_old = old.u.constant;
 	struct __packed t300rs_packet_mod_constant {
 		struct t300rs_packet_header header;
-		uint8_t level;
+		uint16_t level;
 	} *packet_mod_constant = (struct t300rs_packet_mod_constant *)t300rs->send_buffer;
 	int ret;
 	int16_t level;
@@ -252,7 +252,7 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs,
 	if (constant.level != constant_old.level) {
 
 		t300rs_fill_header(&packet_mod_constant->header, effect.id, 0x0a);
-		packet_mod_constant->level = level;
+		packet_mod_constant->level = cpu_to_le16(level);
 
 		ret = t300rs_send_int(t300rs);
 		if (ret) {
