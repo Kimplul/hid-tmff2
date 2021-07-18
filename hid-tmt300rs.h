@@ -29,8 +29,8 @@
 #define FF_EFFECT_PLAYING 3
 #define FF_EFFECT_QUEUE_UPDATE 4
 
-#define CLAMP_VALUE_U16(x) ((unsigned short)((x) > 0xffff ? 0xffff : (x)))
-#define SCALE_VALUE_U16(x, bits) (CLAMP_VALUE_U16(x) >> (16 - bits))
+#undef fixp_sin16
+#define fixp_sin16(v) (((v % 360) > 180)? -(fixp_sin32((v % 360) - 180) >> 16) : fixp_sin32(v) >> 16)
 #define JIFFIES2MS(jiffies) ((jiffies) * 1000 / HZ)
 
 spinlock_t lock;

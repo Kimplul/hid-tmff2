@@ -450,15 +450,25 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 	} *packet_mod_periodic = (struct t300rs_packet_mod_periodic *)t300rs->send_buffer;
 
 	int ret;
-	int16_t level;
+	int16_t magnitude;
+	uint16_t phase;
+	bool update_phase = false;
 
-	level = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+	magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+	phase = periodic.phase;
+	if(magnitude < 0){
+		phase += 0x4000;
+		phase = phase < 0 ? -phase : phase;
+		update_phase = true;
+	}
+
+	magnitude = magnitude < 0 ? -magnitude : magnitude;
 
 	if (periodic.magnitude != periodic_old.magnitude) {
 
 		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
 		packet_mod_periodic->attribute = 0x01;
-		packet_mod_periodic->value = cpu_to_le16(level);
+		packet_mod_periodic->value = cpu_to_le16(magnitude);
 
 		ret = t300rs_send_int(t300rs);
 		if (ret) {
@@ -483,12 +493,11 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 
 	}
 
-	if (periodic.phase != periodic_old.phase) {
-		int16_t phase = periodic.phase;
+	if (periodic.phase != periodic_old.phase || update_phase) {
 
 		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
 		packet_mod_periodic->attribute = 0x04;
-		packet_mod_periodic->value = phase;
+		packet_mod_periodic->value = cpu_to_le16(phase);
 
 		ret = t300rs_send_int(t300rs);
 		if (ret) {
@@ -503,7 +512,7 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 
 		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
 		packet_mod_periodic->attribute = 0x08;
-		packet_mod_periodic->value = period;
+		packet_mod_periodic->value = cpu_to_le16(period);
 
 		ret = t300rs_send_int(t300rs);
 		if (ret) {
@@ -515,7 +524,7 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 
 	ret = t300rs_modify_envelope(t300rs,
 			state,
-			level,
+			magnitude,
 			effect.replay.length,
 			effect.id,
 			periodic.envelope,
@@ -689,10 +698,10 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs,
 
 	t300rs_fill_header(&packet_spring->header, effect.id, 0x64);
 
-	packet_spring->right_coeff = right_coeff;
-	packet_spring->left_coeff = left_coeff;
-	packet_spring->right_deadband = right_deadband;
-	packet_spring->left_deadband = left_deadband;
+	packet_spring->right_coeff = cpu_to_le16(right_coeff);
+	packet_spring->left_coeff = cpu_to_le16(left_coeff);
+	packet_spring->right_deadband = cpu_to_le16(right_deadband);
+	packet_spring->left_deadband = cpu_to_le16(left_deadband);
 
 	memcpy(&packet_spring->spring_start, spring_values, ARRAY_SIZE(spring_values));
 	t300rs_fill_timing(&packet_spring->timing, duration, offset);
@@ -748,10 +757,10 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs,
 
 	t300rs_fill_header(&packet_damper->header, effect.id, 0x64);
 
-	packet_damper->right_coeff = right_coeff;
-	packet_damper->left_coeff = left_coeff;
-	packet_damper->right_deadband = right_deadband;
-	packet_damper->left_deadband = left_deadband;
+	packet_damper->right_coeff = cpu_to_le16(right_coeff);
+	packet_damper->left_coeff = cpu_to_le16(left_coeff);
+	packet_damper->right_deadband = cpu_to_le16(right_deadband);
+	packet_damper->left_deadband = cpu_to_le16(left_deadband);
 
 	memcpy(&packet_damper->damper_start, damper_values, ARRAY_SIZE(damper_values));
 	t300rs_fill_timing(&packet_damper->timing, duration, offset);
@@ -781,8 +790,8 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 	} *packet_periodic = (struct t300rs_packet_periodic *)t300rs->send_buffer;
 
 	int ret;
-	uint16_t duration, magnitude, phase, period, offset;
-	int16_t periodic_offset;
+	uint16_t duration, magnitude, period, offset;
+	int16_t periodic_offset, phase;
 
 	if (test_bit(FF_EFFECT_PLAYING, &state->flags)	&&
 			test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
@@ -797,16 +806,22 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 	magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
 	phase = periodic.phase;
+	if(magnitude < 0){
+		phase += 0x4000;
+		phase = phase < 0 ? -phase : phase;
+	}
+	
+	magnitude = magnitude < 0 ? -magnitude : magnitude;
 	periodic_offset = periodic.offset;
 	period = periodic.period;
 	offset = effect.replay.delay;
 
 	t300rs_fill_header(&packet_periodic->header, effect.id, 0x6b);
 
-	packet_periodic->magnitude = magnitude;
-	packet_periodic->periodic_offset = periodic_offset;
-	packet_periodic->phase = phase;
-	packet_periodic->period = period;
+	packet_periodic->magnitude = cpu_to_le16(magnitude);
+	packet_periodic->periodic_offset = cpu_to_le16(periodic_offset);
+	packet_periodic->phase = cpu_to_le16(phase);
+	packet_periodic->period = cpu_to_le16(period);
 
 	packet_periodic->marker = cpu_to_le16(0x8000);
 
