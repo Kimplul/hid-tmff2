@@ -44,6 +44,32 @@ Constant force (10)
     stop
         1b 00 10 40 11 88 03 ce ff ff 00 00 00 00 09 00 00 01 00 02 00 01 01 04 00 00 00 41 00 00 01
 
+Damper
+    start effect 1
+    
+    start effect 2
+    start effect 3
+    start effect 4
+    positive coef right
+    positive coef left
+    negative coef right
+    negative coef left
+    positive saturation right
+    positive saturation left
+    negative saturation right
+    negative saturation left
+    offset right
+    offset left
+    deadband right
+
+    deadband left
+        0000   1b 00 e0 65 11 88 03 ce ff ff 00 00 00 00 09 00
+        0010   00 01 00 02 00 01 01 0b 00 00 00 05 0e 00 00 00
+        0020   00 00 53 00 64 64
+
+
+
+
 Rampup (e0)
     start effect 1
         1b 00 e0 65 11 88 03 ce ff ff 00 00 00 00 09 00 00 01 00 02 00 01 01 09 00 00 00 02 1c 00 00 00 00 00 00 00

@@ -1,0 +1,175 @@
+START EFFECT
+41 00 41 01
+
+STOP EFFECT
+41 00 00 01
+
+----------------------------------------------------------
+UPLOAD CONSTANT
+   02 1c 00 00 00 00 00 00 00
+   03 0e 00 00
+   01 00 00 40 69 23 00 ff ff 0e 00 1c 00 00 00
+
+
+MODIFY 1 PARAM CONSTANT LEVEL
+03 0e 00 0c
+---mid max
+03 0e 00 1c
+---max
+03 0e 00 40
+---mid low
+03 0e 00 db
+---lowest
+03 0e 00 ed
+---middle
+03 0e 00 ff
+
+UPLOAD RAMP
+   02 1c 00 00 00 00 00 00 00
+   04 0e 00 00 00 00 69 23
+   01 00 24 40 69 23 00 ff ff 0e 00 1c 00 00 00
+
+
+
+UPLOAD SPRING
+   05 0e 00 64 64 00 00 00 00 54 54
+   05 1c 00 00 00 00 00 00 00 46 54
+   01 00 40 40 17 25 00 ff ff 0e 00 1c 00 00 00
+
+UPLOAD FRICTION
+   05 0e 00 64 64 00 00 00 00 64 64
+   05 1c 00 00 00 00 00 00 00 64 64
+   01 00 41 40 17 25 00 ff ff 0e 00 1c 00 00 00
+
+UPLOAD DAMPER
+   05 0e 00 64 64 00 00 00 00 64 64
+   05 1c 00 00 00 00 00 00 00 64 64
+   01 00 41 40 17 25 00 ff ff 0e 00 1c 00 00 00
+
+UPLOAD INERTIA
+   05 0e 00 64 64 00 00 00 00 64 64
+   05 1c 00 00 00 00 00 00 00 64 64
+   01 00 41 40 17 25 00 ff ff 0e 00 1c 00 00 00
+
+
+
+
+----------------------------------------------------------
+UPLOAD SQUARE
+   02 1c 00 00 00 00 00 00 00
+   04 0e 00 00 00 00 e8 03
+   01 00 20 40 17 25 00 ff ff 0e 00 1c 00 00 00
+UPLOAD SINE
+   02 1c 00 00 00 00 00 00 00
+   04 0e 00 00 00 00 e8 03
+   01 00 22 40 17 25 00 ff ff 0e 00 1c 00 00 00
+UPLOAD TRIANGLE
+   02 1c 00 00 00 00 00 00 00
+   04 0e 00 00 00 00 e8 03
+   01 00 21 40 17 25 00 ff ff 0e 00 1c 00 00 00
+UPLOAD SAWTOOTH UP
+   02 1c 00 00 00 00 00 00 00
+   04 0e 00 00 00 00 e8 03
+   01 00 23 40 17 25 00 ff ff 0e 00 1c 00 00 00
+UPLOAD SAWTOOTH DOWN
+   02 1c 00 00 00 00 00 00 00
+   04 0e 00 00 00 00 e8 03
+   01 00 24 40 17 25 00 ff ff 0e 00 1c 00 00 00
+
+CONSTANT FORCE
+MODIFY LEVEL
+            XX
+--- lowest
+   04 0e 00 00 00 00 e8 03
+--- higher
+   04 0e 00 09 00 00 e8 03
+--- highest
+   04 0e 00 7f 00 00 e8 03
+
+MODIFY MAGNITUDE
+               XX
+--- lowest
+   04 0e 00 11 92 00 06 01
+--- higher
+   04 0e 00 11 f2 00 06 01
+--- highest
+   04 0e 00 11 6e 00 06 01
+
+MODIFY OFFSET
+                  XX
+--- lowest
+   04 0e 00 00 00 00 85 03
+--- higher
+   04 0e 00 00 00 34 85 03
+--- highest
+   04 0e 00 00 00 ff 85 03
+
+MODIFY FREQ
+                     XX XX
+--- lowest
+   04 0e 00 00 00 ff 00 00
+--- higher
+   04 0e 00 00 00 ff c2 01
+--- highest
+   04 0e 00 00 00 ff d0 07
+
+MODIFY ENVELOPPE FADE IN LENGTH
+            XX XX XX
+CAPTURE 1
+--- lowest
+   02 1c 00 00 00 0b 00 00 0b
+--- higher
+   02 1c 00 cb 0a 7f 00 00 0b
+--- highest
+   02 1c 00 17 25 7f 00 00 0b
+CAPTURE 2
+   02 1c 00 00 00 0b 00 00 0b
+   02 1c 00 0f 0d 7f 00 00 0b
+   02 1c 00 17 25 7f 00 00 0b
+
+MODIFY ENVELOPPE FADE OUT LENGTH
+                     XX XX XX
+CATPURE 1
+--- lowest
+   02 1c 00 00 00 0b 00 00 0b
+--- higher
+   02 1c 00 00 00 0b 75 12 57
+--- highest
+   02 1c 00 00 00 0b 17 25 57
+CAPTURE 2
+   02 1c 00 00 00 0b 00 00 0b
+   02 1c 00 00 00 0b c2 11 57
+   02 1c 00 00 00 0b 17 25 57
+
+MODIFY ENVELOPPE FADE IN LEVEL (this value is absolute and shared for in and out)
+                  XX
+CAPTURE 1
+--- lowest
+   02 1c 00 88 08 00 71 06 7f
+--- higher
+   02 1c 00 88 08 27 71 06 7f
+--- highest
+   02 1c 00 88 08 7f 71 06 7f
+CAPTURE 2
+   02 1c 00 0e 09 00 02 08 7f
+   02 1c 00 0e 09 2c 02 08 7f
+   02 1c 00 0e 09 7f 02 08 7f
+
+MODIFY ENVELOPPE FADE OUT LEVEL
+                           XX
+CAPTURE 1
+--- lowest
+   02 1c 00 00 00 0b 71 06 00
+--- higher
+   02 1c 00 00 00 0b 71 06 26
+--- highest
+   02 1c 00 00 00 0b 71 06 7f
+CAPTURE 2
+   02 1c 00 0e 09 7f 02 08 00
+   02 1c 00 0e 09 7f 02 08 2e
+   02 1c 00 0e 09 7f 02 08 7f
+
+
+
+
+

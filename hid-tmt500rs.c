@@ -60,6 +60,45 @@ static int t500rs_send_int(struct input_dev *dev, u8 *send_buffer, int *trans)
 	return 0;
 }
 
+static void t500rs_int_callback(struct urb *urb){
+    if(urb->status){
+        hid_warn(urb->dev, "urb status %i received\n", urb->status);
+    }
+
+    usb_free_urb(urb);
+}
+
+static int t500rs_send_custom_int(struct input_dev *dev, u8 *send_buffer, int *trans){
+    struct hid_device *hdev = input_get_drvdata(dev);
+    struct t500rs_device_entry *t500rs;
+    struct usb_device *usbdev;
+    struct usb_interface *usbif;
+    struct usb_host_endpoint *ep;
+    struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+    
+    t500rs = t500rs_get_device(hdev);
+    if(!t500rs){
+        hid_err(hdev, "could not get device\n");
+    }
+
+    usbdev = t500rs->usbdev;
+    usbif = t500rs->usbif;
+    ep = &usbif->cur_altsetting->endpoint[1];
+
+    usb_fill_int_urb(
+            urb,
+            usbdev,
+            usb_sndintpipe(usbdev, 1),
+            send_buffer,
+            T500RS_BUFFER_LENGTH,
+            t500rs_int_callback,
+            hdev,
+            ep->desc.bInterval
+            );
+
+    return usb_submit_urb(urb, GFP_ATOMIC);
+}
+
 static int t500rs_play_effect(struct t500rs_device_entry *t500rs,
 		struct t500rs_effect_state *state)
 {
@@ -71,7 +110,7 @@ static int t500rs_play_effect(struct t500rs_device_entry *t500rs,
 	send_buffer[2] = 0x89;
 	send_buffer[3] = 0x01;
 
-	ret = t500rs_send_int(t500rs->input_dev, send_buffer, &trans);
+	ret = t500rs_send_custom_int(t500rs->input_dev, send_buffer, &trans);
 	if (ret)
 		hid_err(t500rs->hdev, "failed starting effect play\n");
 
@@ -1196,6 +1235,8 @@ static ssize_t range_store(struct device *dev,
 
 	t500rs->range = range / 0x3c;
 
+    hid_info(hdev, "Current range is [%i] \n", t500rs->range);
+
 	return count;
 }
 
@@ -1225,6 +1266,8 @@ static void t500rs_set_autocenter(struct input_dev *dev, u16 value)
 	u8 *send_buffer;
 	int ret, trans;
 
+    hid_info(hdev, "Begin autocenter \n");
+
 	t500rs = t500rs_get_device(hdev);
 	if (!t500rs) {
 		hid_err(hdev, "could not get device\n");
@@ -1252,6 +1295,8 @@ static void t500rs_set_autocenter(struct input_dev *dev, u16 value)
 	ret = t500rs_send_int(dev, send_buffer, &trans);
 	if (ret)
 		hid_err(hdev, "failed setting autocenter");
+
+    hid_info(hdev, "set autocenter \n");
 }
 
 static void t500rs_set_gain(struct input_dev *dev, u16 gain)
@@ -1260,6 +1305,8 @@ static void t500rs_set_gain(struct input_dev *dev, u16 gain)
 	struct t500rs_device_entry *t500rs;
 	u8 *send_buffer;
 	int ret, trans;
+
+    hid_info(hdev, "Starting set gain phase\n");
 
 	t500rs = t500rs_get_device(hdev);
 	if (!t500rs) {
@@ -1274,6 +1321,8 @@ static void t500rs_set_gain(struct input_dev *dev, u16 gain)
 	ret = t500rs_send_int(dev, send_buffer, &trans);
 	if (ret)
 		hid_err(hdev, "failed setting gain: %i\n", ret);
+
+    hid_info(hdev, "Ending set gain phase\n");
 }
 
 static void t500rs_destroy(struct ff_device *ff)
@@ -1287,6 +1336,8 @@ static int t500rs_open(struct input_dev *dev)
 	struct hid_device *hdev = input_get_drvdata(dev);
 	u8 *send_buffer;
 	int ret, trans;
+
+    hid_info(hdev, "Starting open phase\n");
 
 	t500rs = t500rs_get_device(hdev);
 	if (!t500rs) {
@@ -1304,6 +1355,7 @@ static int t500rs_open(struct input_dev *dev)
 		hid_err(hdev, "failed sending interrupts\n");
 		goto err;
 	}
+    hid_info(hdev, "Ending open phase\n");
 
 err:
 	return t500rs->open(dev);
@@ -1315,6 +1367,8 @@ static void t500rs_close(struct input_dev *dev)
 	struct hid_device *hdev = input_get_drvdata(dev);
 	struct t500rs_device_entry *t500rs;
 	u8 *send_buffer;
+
+    hid_info(hdev, "Starting close phase\n");
 
 	t500rs = t500rs_get_device(hdev);
 	if (!t500rs) {
@@ -1331,39 +1385,46 @@ static void t500rs_close(struct input_dev *dev)
 		hid_err(hdev, "failed sending interrupts\n");
 		goto err;
 	}
+    hid_info(hdev, "Ending close phase... ok\n");
 err:
 	t500rs->close(dev);
 }
 
 static int t500rs_create_files(struct hid_device *hdev)
 {
-	int ret;
+	int ret, ret2, ret3, ret4;
+
+    hid_info(hdev, "Before creation of files\n");
 
 	ret = device_create_file(&hdev->dev, &dev_attr_range);
+    hid_info(hdev, "Creation of range file [%i]\n", ret);
 	if (ret) {
 		hid_warn(hdev, "unable to create sysfs interface for range\n");
 		goto attr_range_err;
 	}
 
-	ret = device_create_file(&hdev->dev, &dev_attr_spring_level);
-	if (ret) {
+	ret2 = device_create_file(&hdev->dev, &dev_attr_spring_level);
+    hid_info(hdev, "Creation of spring file [%i]\n", ret2);
+	if (ret2) {
 		hid_warn(hdev, "unable to create sysfs interface for spring_level\n");
 		goto attr_spring_err;
 	}
 
-	ret = device_create_file(&hdev->dev, &dev_attr_damper_level);
-	if (ret) {
+	ret3 = device_create_file(&hdev->dev, &dev_attr_damper_level);
+    hid_info(hdev, "Creation of damper file [%i]\n", ret3);
+	if (ret3) {
 		hid_warn(hdev, "unable to create sysfs interface for damper_level\n");
 		goto attr_damper_err;
 	}
 
-	ret = device_create_file(&hdev->dev, &dev_attr_friction_level);
-	if (ret) {
+	ret4 = device_create_file(&hdev->dev, &dev_attr_friction_level);
+    hid_info(hdev, "Creation of friction file [%i]\n", ret4);
+	if (ret4) {
 		hid_warn(hdev, "unable to create sysfs interface for friction_level\n");
 		goto attr_friction_err;
 	}
 
-	return ret;
+	return ret && ret2 && ret3 && ret4;
 
 	// if the creation of dev_attr_friction fails, we don't need to remove it
 	// device_remove_file(&hdev->dev, &dev_attr_friction_level);
@@ -1443,6 +1504,7 @@ static int t500rs_init(struct hid_device *hdev, const signed short *ff_bits)
 			   );
 
 	// Educated guess
+    hid_info(hdev, "Current firmware version: %i", t500rs->firmware_response->firmware_version);
 	if (t500rs->firmware_response->firmware_version < 31 && ret >= 0) {
 		hid_err(t500rs->hdev,
 			"firmware version %i is too old, please update.",
@@ -1488,6 +1550,7 @@ static int t500rs_init(struct hid_device *hdev, const signed short *ff_bits)
 	input_dev->open = t500rs_open;
 	input_dev->close = t500rs_close;
 
+    hid_info(hdev, "Before create files\n");
 	ret = t500rs_create_files(hdev);
 	if (ret) {
 		// this might not be a catastrophic issue, but it could affect
@@ -1495,11 +1558,13 @@ static int t500rs_init(struct hid_device *hdev, const signed short *ff_bits)
 		hid_err(hdev, "could not create sysfs files\n");
 		goto out;
 	}
+    hid_info(hdev, "After create files\n");
 
-
+    hid_info(hdev, "Before timer init\n");
 	hrtimer_init(&t500rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	t500rs->hrtimer.function = t500rs_timer;
 
+    hid_info(hdev, "Before range store\n");
 	range_store(dev, &dev_attr_range, range, 10);
 	t500rs_set_gain(input_dev, 0xffff);
 
