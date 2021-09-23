@@ -14,4 +14,4 @@ clean: hid-tminit
 
 .PHONY: hid-tminit
 hid-tminit:
-	$(MAKE) -C hid-tminit $(MAKECMDGOALS)
+	$(MAKE) -C hid-tminit KDIR="$(KDIR)" $(MAKECMDGOALS)
