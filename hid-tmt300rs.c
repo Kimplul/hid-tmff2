@@ -1182,6 +1182,50 @@ static ssize_t range_show(struct device *dev,
 
 static DEVICE_ATTR_RW(range);
 
+static ssize_t adv_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct t300rs_device_entry *t300rs;
+
+	t300rs = t300rs_get_device(hdev);
+	if (!t300rs) {
+		hid_err(hdev, "could not get device\n");
+		return -1;
+	}
+
+	if(t300rs->adv_mode)
+		usb_control_msg(t300rs->usbdev,
+				usb_sndctrlpipe(t300rs->usbdev, 0),
+				83, 0x41, 5, 0, 0, 0,
+				USB_CTRL_SET_TIMEOUT
+				);
+	else
+		usb_control_msg(t300rs->usbdev,
+				usb_sndctrlpipe(t300rs->usbdev, 0),
+				83, 0x41, 3, 0, 0, 0,
+				USB_CTRL_SET_TIMEOUT
+				);
+
+	return count;
+}
+
+static ssize_t adv_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct t300rs_device_entry *t300rs;
+
+	t300rs = t300rs_get_device(hdev);
+	if (!t300rs) {
+		hid_err(hdev, "could not get device\n");
+		return -1;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", t300rs->adv_mode ? "Yes" : "No");
+}
+static DEVICE_ATTR_RW(adv_mode);
+
 static void t300rs_set_autocenter(struct input_dev *dev, uint16_t value)
 {
 	struct hid_device *hdev = input_get_drvdata(dev);
@@ -1316,6 +1360,12 @@ static int t300rs_create_files(struct hid_device *hdev)
 {
 	int ret;
 
+	ret = device_create_file(&hdev->dev, &dev_attr_adv_mode);
+	if (ret) {
+		hid_warn(hdev, "unable to create sysfs interface for adv_mode\n");
+		goto attr_adv_err;
+	}
+
 	ret = device_create_file(&hdev->dev, &dev_attr_range);
 	if (ret) {
 		hid_warn(hdev, "unable to create sysfs interface for range\n");
@@ -1351,6 +1401,8 @@ attr_damper_err:
 attr_spring_err:
 	device_remove_file(&hdev->dev, &dev_attr_range);
 attr_range_err:
+	device_remove_file(&hdev->dev, &dev_attr_adv_mode);
+attr_adv_err:
 	return ret;
 }
 
@@ -1480,6 +1532,8 @@ static int t300rs_init(struct hid_device *hdev, const signed short *ff_bits)
 	range_store(dev, &dev_attr_range, range, 10);
 	t300rs_set_gain(input_dev, 0xffff);
 
+	t300rs->adv_mode = (hdev->product == 0xb66f);
+
 	hid_info(hdev, "force feedback for T300RS\n");
 	return 0;
 
@@ -1560,6 +1614,7 @@ static void t300rs_remove(struct hid_device *hdev)
 	hrtimer_cancel(&t300rs->hrtimer);
 
 	device_remove_file(&hdev->dev, &dev_attr_range);
+	device_remove_file(&hdev->dev, &dev_attr_adv_mode);
 	device_remove_file(&hdev->dev, &dev_attr_spring_level);
 	device_remove_file(&hdev->dev, &dev_attr_damper_level);
 	device_remove_file(&hdev->dev, &dev_attr_friction_level);
@@ -1582,6 +1637,8 @@ static __u8 *t300rs_report_fixup(struct hid_device *hdev, __u8 *rdesc, unsigned 
 static const struct hid_device_id t300rs_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66e),
 		.driver_data = (unsigned long)t300rs_ff_effects},
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66f),
+	.driver_data = (unsigned long)t300rs_ff_effects},
 	{}
 };
 MODULE_DEVICE_TABLE(hid, t300rs_devices);

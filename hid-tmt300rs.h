@@ -130,6 +130,8 @@ struct t300rs_device_entry {
 
 	u16 range;
 	u8 effects_used;
+
+	u8 adv_mode;
 };
 
 
