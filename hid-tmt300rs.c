@@ -1629,8 +1629,14 @@ static void t300rs_remove(struct hid_device *hdev)
 
 static __u8 *t300rs_report_fixup(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize)
 {
-	rdesc = t300rs_rdesc_fixed;
-	*rsize = sizeof(t300rs_rdesc_fixed);
+	if(hdev->product == 0xb66e) {
+		rdesc = t300rs_rdesc_nrm_fixed;
+		*rsize = sizeof(t300rs_rdesc_nrm_fixed);
+	} else {
+		rdesc = t300rs_rdesc_adv_fixed;
+		*rsize = sizeof(t300rs_rdesc_adv_fixed);
+	}
+
 	return rdesc;
 }
 
@@ -1638,7 +1644,7 @@ static const struct hid_device_id t300rs_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66e),
 		.driver_data = (unsigned long)t300rs_ff_effects},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66f),
-	.driver_data = (unsigned long)t300rs_ff_effects},
+		.driver_data = (unsigned long)t300rs_ff_effects},
 	{}
 };
 MODULE_DEVICE_TABLE(hid, t300rs_devices);
