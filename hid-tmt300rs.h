@@ -13,7 +13,8 @@
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
 #define T300RS_MAX_EFFECTS 16
-#define T300RS_BUFFER_LENGTH 63
+#define T300RS_NORM_BUFFER_LENGTH 63
+#define T300RS_PS4_BUFFER_LENGTH 31
 
 /* the wheel seems to only be capable of processing a certain number of
  * interrupts per second, and if this value is too low the kernel urb buffer(or
@@ -126,6 +127,7 @@ struct t300rs_device_entry {
 	spinlock_t lock;
 	unsigned long lock_flags;
 
+	u8 buffer_length;
 	u8 *send_buffer;
 
 	u16 range;
@@ -140,7 +142,7 @@ struct t300rs_data {
 	void *device_props;
 };
 
-static __u8 t300rs_rdesc_nrm_fixed[] = {
+static u8 t300rs_rdesc_nrm_fixed[] = {
 	0x05, 0x01, /* Usage page (Generic Desktop) */
 	0x09, 0x04, /* Usage (Joystick) */
 	0xa1, 0x01, /* Collection (Application) */
@@ -205,7 +207,7 @@ static __u8 t300rs_rdesc_nrm_fixed[] = {
 	0xc0, /* End collection */
 };
 
-static __u8 t300rs_rdesc_adv_fixed[] = {
+static u8 t300rs_rdesc_adv_fixed[] = {
 	0x05, 0x01, /* Usage page (Generic Desktop) */
 	0x09, 0x04, /* Usage (Joystick) */
 	0xa1, 0x01, /* Collection (Application) */
@@ -243,7 +245,7 @@ static __u8 t300rs_rdesc_adv_fixed[] = {
 	0x05, 0x01, /* Usage page (Generic Desktop) */
 	0x09, 0x39, /* Usage (Hat Switch) */
 	0x25, 0x07, /* Logical maximum (7) */
-	0x46, 0x3b, 0x01, /* Physical maximum (315) */ 
+	0x46, 0x3b, 0x01, /* Physical maximum (315) */
 	0x55, 0x00, /* Unit exponent (0) */
 	0x65, 0x14, /* Unit (Eng Rot, Angular Pos) */
 	0x75, 0x04, /* Report size (4) */
@@ -265,6 +267,89 @@ static __u8 t300rs_rdesc_adv_fixed[] = {
 	0x81, 0x02, /* Input (Variable, Absolute) */
 	0xc0, /* End collection */
 	0xc0, /* End collection */
+};
+
+static u8 t300rs_rdesc_ps4_fixed[] = {
+	0x05, 0x01, /* Usage page (Generic Desktop) */
+	0x09, 0x05, /* Usage (GamePad) */
+	0xa1, 0x01, /* Collection (Application) */
+	0x85, 0x01, /* Report ID (1) */
+	0x09, 0x30, /* Usage (X) */
+	0x09, 0x31, /* Usage (Y) */
+	0x09, 0x32, /* Usage (Z) */
+	0x09, 0x35, /* Usage (Rz) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x26, 0xff, 0x00, /* Logical maximum (255) */
+	0x75, 0x08, /* Report size (8) */
+	0x95, 0x04, /* Report count (4) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x09, 0x39, /* Usage (Hat Switch) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x25, 0x07, /* Logical maximum (7)*/
+	0x35, 0x00, /* Physical minimum (0) */
+	0x46, 0x3b, 0x01, /* Physical maximum (315) */
+	0x65, 0x14, /* Unit (Eng Rot, Angular Pos) */
+	0x75, 0x04, /* Report size (4) */
+	0x95, 0x01, /* Report count (1) */
+	0x81, 0x42, /* Input (Variable, Absolute, NullState) */
+	0x65, 0x00, /* Input (None) */
+	0x05, 0x09, /* Usage page (Button) */
+	0x19, 0x01, /* Usage minimum (1) */
+	0x29, 0x0e, /* Usage maximum (14) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x25, 0x01, /* Logical maximum (1) */
+	0x75, 0x01, /* Report size (1) */
+	0x95, 0x0e, /* Report size (14) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x06, 0x00, 0xff, /* Usage page (Vendor 1) */
+	0x09, 0x20, /* Usage (32) */
+	0x75, 0x06, /* Report size (6) */
+	0x95, 0x01, /* Report count (1) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x05, 0x01, /* Usage page (Generic Desktop) */
+	0x09, 0x33, /* Usage (Rx) */
+	0x09, 0x34, /* Usage (Ry) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x26, 0xff, 0x00, /* Logical maximum (255) */
+	0x75, 0x08, /* Report size (8) */
+	0x95, 0x02, /* Report count (2) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x06, 0x00, 0xff, /* Usage page (Vendor 1) */
+	0x09, 0x21, /* Usage (33) */
+	0x95, 0x36, /* Report count (54) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x85, 0x60, /* Report ID (5) (change to 0x60?) */
+	0x09, 0x60, /* Usage (34) (change to 0x60?) */
+	0x95, 0x1f, /* Report count (31) () */
+	0x91, 0x02, /* Output (Variable, Absolute) */
+	0x85, 0x03, /* Report ID (3) */
+	0x0a, 0x21, 0x27, /* ??? */
+	0x95, 0x2f, /* Report count (47) */
+	0xb1, 0x02, /* Feature (Data, Var, Abs) */
+	0xc0, /* End collection */
+
+	/* From here on out no clue */
+	0x06, 0xf0,
+	0xff, 0x09,
+	0x40, 0xa1,
+	0x01, 0x85,
+	0xf0, 0x09,
+	0x47, 0x95,
+	0x3f, 0xb1,
+	0x02, 0x85,
+	0xf1, 0x09,
+	0x48, 0x95,
+	0x3f, 0xb1,
+	0x02, 0x85,
+	0xf2, 0x09,
+	0x49, 0x95,
+	0x0f, 0xb1,
+	0x02, 0x85,
+	0xf3, 0x0a,
+	0x01, 0x47,
+	0x95, 0x07,
+	0xb1, 0x02,
+	0xc0,
 };
 
 static u8 spring_values[] = {

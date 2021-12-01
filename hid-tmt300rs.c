@@ -3,19 +3,23 @@
 
 static int timer_msecs = DEFAULT_TIMER_PERIOD;
 module_param(timer_msecs, int, 0660);
-MODULE_PARM_DESC(timer_msecs, "Timer resolution in msecs");
+MODULE_PARM_DESC(timer_msecs,
+		"Timer resolution in msecs");
 
 static int spring_level = 30;
 module_param(spring_level, int, 0);
-MODULE_PARM_DESC(spring_level, "Level of spring force (0-100), as per Oversteer standards");
+MODULE_PARM_DESC(spring_level,
+		"Level of spring force (0-100), as per Oversteer standards");
 
 static int damper_level = 30;
 module_param(damper_level, int, 0);
-MODULE_PARM_DESC(damper_level, "Level of damper force (0-100), as per Oversteer standards");
+MODULE_PARM_DESC(damper_level,
+		"Level of damper force (0-100), as per Oversteer standards");
 
 static int friction_level = 30;
 module_param(friction_level, int, 0);
-MODULE_PARM_DESC(friction_level, "Level of friction force (0-100), as per Oversteer standards");
+MODULE_PARM_DESC(friction_level,
+		"Level of friction force (0-100), as per Oversteer standards");
 
 static struct t300rs_device_entry *t300rs_get_device(struct hid_device *hdev)
 {
@@ -41,12 +45,12 @@ static struct t300rs_device_entry *t300rs_get_device(struct hid_device *hdev)
 static int t300rs_send_int(struct t300rs_device_entry *t300rs)
 {
 	int i;
-	for (i = 0; i < T300RS_BUFFER_LENGTH; ++i)
+	for (i = 0; i < t300rs->buffer_length; ++i)
 		t300rs->ff_field->value[i] = t300rs->send_buffer[i];
 
 	hid_hw_request(t300rs->hdev, t300rs->report, HID_REQ_SET_REPORT);
 
-	memset(t300rs->send_buffer, 0, T300RS_BUFFER_LENGTH);
+	memset(t300rs->send_buffer, 0, t300rs->buffer_length);
 
 	return 0;
 }
@@ -1447,7 +1451,12 @@ static int t300rs_init(struct hid_device *hdev, const signed short *ff_bits)
 		goto states_err;
 	}
 
-	t300rs->send_buffer = kzalloc(T300RS_BUFFER_LENGTH, GFP_KERNEL);
+	if(hdev->product == 0xb66d)
+		t300rs->buffer_length = T300RS_PS4_BUFFER_LENGTH;
+	else
+		t300rs->buffer_length = T300RS_NORM_BUFFER_LENGTH;
+
+	t300rs->send_buffer = kzalloc(t300rs->buffer_length, GFP_KERNEL);
 	if (!t300rs->send_buffer) {
 		ret = -ENOMEM;
 		goto send_err;
@@ -1627,12 +1636,19 @@ static void t300rs_remove(struct hid_device *hdev)
 	kfree(drv_data);
 }
 
-static __u8 *t300rs_report_fixup(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize)
+static __u8 *t300rs_report_fixup(struct hid_device *hdev, __u8 *rdesc,
+		unsigned int *rsize)
 {
 	if(hdev->product == 0xb66e) {
+		/* PS3 normal mode */
 		rdesc = t300rs_rdesc_nrm_fixed;
 		*rsize = sizeof(t300rs_rdesc_nrm_fixed);
-	} else {
+	} else if (hdev->product == 0xb66d){
+		/* PS4 normal mode */
+		rdesc = t300rs_rdesc_ps4_fixed;
+		*rsize = sizeof(t300rs_rdesc_ps4_fixed);
+	} else if (hdev->product == 0xb66f){
+		/* PS3 advanced mode */
 		rdesc = t300rs_rdesc_adv_fixed;
 		*rsize = sizeof(t300rs_rdesc_adv_fixed);
 	}
@@ -1644,6 +1660,8 @@ static const struct hid_device_id t300rs_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66e),
 		.driver_data = (unsigned long)t300rs_ff_effects},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66f),
+		.driver_data = (unsigned long)t300rs_ff_effects},
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66d),
 		.driver_data = (unsigned long)t300rs_ff_effects},
 	{}
 };
