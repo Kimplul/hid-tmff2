@@ -274,10 +274,10 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0x09, 0x05, /* Usage (GamePad) */
 	0xa1, 0x01, /* Collection (Application) */
 	0x85, 0x01, /* Report ID (1) */
-	0x09, 0x30, /* Usage (X) */
-	0x09, 0x31, /* Usage (Y) */
-	0x09, 0x32, /* Usage (Z) */
-	0x09, 0x35, /* Usage (Rz) */
+	0x09, 0x00, /* Usage (U) (was X) */
+	0x09, 0x00, /* Usage (U) (was Y) */
+	0x09, 0x00, /* Usage (U) (was Z) */
+	0x09, 0x00, /* Usage (U) (was Rz)*/
 	0x15, 0x00, /* Logical minimum (0) */
 	0x26, 0xff, 0x00, /* Logical maximum (255) */
 	0x75, 0x08, /* Report size (8) */
@@ -307,17 +307,43 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0x95, 0x01, /* Report count (1) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
 	0x05, 0x01, /* Usage page (Generic Desktop) */
-	0x09, 0x33, /* Usage (Rx) */
-	0x09, 0x34, /* Usage (Ry) */
+	0x09, 0x00, /* Usage (U) (was Rx)*/
+	0x09, 0x00, /* Usage (U) (was Ry) */
 	0x15, 0x00, /* Logical minimum (0) */
 	0x26, 0xff, 0x00, /* Logical maximum (255) */
 	0x75, 0x08, /* Report size (8) */
 	0x95, 0x02, /* Report count (2) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
-	0x06, 0x00, 0xff, /* Usage page (Vendor 1) */
-	0x09, 0x21, /* Usage (33) */
-	0x95, 0x36, /* Report count (54) */
+	0x05, 0x01, /* Usage page (Vendor 1) */
+	/* constant zero? */
+	0x09, 0x00, /* Usage (33) */
+	0x95, 0x21, /* Report count (54) */
+	0x81, 0x03, /* Input (Variable, Absolute, Constant) */
+	/* wheel */
+	0x09, 0x30, /* Usage (X) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x27, 0xff, 0xff, 0x00, 0x00, /* Logical maximum (65535) */
+	0x35, 0x00, /* Physical minimum (0) */
+	0x47, 0xff, 0xff, 0x00, 0x00, /* Physical maximum (65535) */
+	0x75, 0x10, /* Report size (16) */
+	0x95, 0x01, /* Report count (1) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
+	/* gas */
+	0x09, 0x31, /* Usage (Y) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	/* brake */
+	0x09, 0x32, /* Usage (Z) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	/* clutch */
+	0x09, 0x35, /* Usage (Rz) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	/* no clue */
+	0x09, 0x00, /* Usage (U) */
+	0x75, 0x08, /* Report size (8) */
+	0x95, 0x0d, /* Report count (13) */
+	0x81, 0x03, /* Input (Variable, Absolute, Constant) */
+	/* continue unmodified */
+	0x06, 0x00, 0xff, /* Usage page (Vendor defined 1) */
 	0x85, 0x60, /* Report ID (5) (change to 0x60?) */
 	0x09, 0x60, /* Usage (34) (change to 0x60?) */
 	0x95, 0x1f, /* Report count (31) () */
