@@ -17,7 +17,16 @@ With that in mind,
 
 ## Installation
 
-### Manual
+### Dependencies
+
+Kernel modules require kernel headers to be installed.
+
++ Debian-based: `apt install linux-headers-$(uname -m)` (typically `linux-headers-x86_64`
++ Arch-based: `pacman -S linux-headers`
++ Fedora-based: `yum install kernel-devel kernel-headers`
+
+
+### Manual installation
 
 + Unplug wheel from computer
 + `git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git`
