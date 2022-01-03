@@ -37,6 +37,8 @@ Kernel modules require kernel headers to be installed.
     
 Done!
 
+> Note: On some systems, you will get an error/warning about SSL. This is normal for unsigned modules. For info on signing modules yourself (completely optional), see [here](https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html?highlight=module%20signing).
+
 ### DKMS
 
 + Unplug wheel from computer
