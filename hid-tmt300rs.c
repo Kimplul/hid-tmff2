@@ -1621,6 +1621,7 @@ static void t300rs_remove(struct hid_device *hdev)
 	}
 
 	hrtimer_cancel(&t300rs->hrtimer);
+	drv_data->device_props = NULL;
 
 	device_remove_file(&hdev->dev, &dev_attr_range);
 	device_remove_file(&hdev->dev, &dev_attr_adv_mode);

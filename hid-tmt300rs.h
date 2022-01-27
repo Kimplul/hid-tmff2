@@ -337,10 +337,19 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	/* clutch */
 	0x09, 0x35, /* Usage (Rz) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
+	/* stick shifter (check model no) */
+	0x05, 0x09, /* Usage page (Button) */
+	0x19, 0x0f, /* Usage minimum (15) */
+	0x29, 0x17, /* Usage maximum (23) */
+	0x15, 0x00, /* Logical minimum (1) */
+	0x25, 0x01, /* Logical maximum (1) */
+	0x75, 0x01, /* Report size (1) */
+	0x95, 0x08, /* Report count (8) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
 	/* no clue */
 	0x09, 0x00, /* Usage (U) */
 	0x75, 0x08, /* Report size (8) */
-	0x95, 0x0d, /* Report count (13) */
+	0x95, 0x0c, /* Report count (12) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
 	/* continue unmodified */
 	0x06, 0x00, 0xff, /* Usage page (Vendor defined 1) */
