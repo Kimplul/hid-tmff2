@@ -347,6 +347,7 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0x95, 0x08, /* Report count (8) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
 	/* no clue */
+	0x05, 0x01, /* Usage page (Generic Desktop) */
 	0x09, 0x00, /* Usage (U) */
 	0x75, 0x08, /* Report size (8) */
 	0x95, 0x0c, /* Report count (12) */
