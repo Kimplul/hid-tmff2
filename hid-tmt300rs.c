@@ -127,7 +127,7 @@ static void t300rs_fill_timing(struct t300rs_packet_timing *packet_timing,
 	packet_timing->end_marker = 0xffff;
 }
 
-static int t300rs_modify_envelope(struct t300rs_device_entry *t300rs,
+static int t300rs_update_envelope(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state,
 		int16_t level,
 		uint16_t duration,
@@ -204,7 +204,7 @@ error:
 	return ret;
 }
 
-static int t300rs_modify_duration(struct t300rs_device_entry *t300rs,
+static int t300rs_update_duration(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
@@ -237,7 +237,7 @@ error:
 	return ret;
 }
 
-static int t300rs_modify_constant(struct t300rs_device_entry *t300rs,
+static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
@@ -266,7 +266,7 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs,
 
 	}
 
-	ret = t300rs_modify_envelope(t300rs,
+	ret = t300rs_update_envelope(t300rs,
 			state,
 			level,
 			effect.replay.length,
@@ -280,7 +280,7 @@ static int t300rs_modify_constant(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_modify_duration(t300rs, state);
+	ret = t300rs_update_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying constant duration\n");
 		goto error;
@@ -290,7 +290,7 @@ error:
 	return ret;
 }
 
-static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs,
+static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
@@ -333,7 +333,7 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs,
 
 	}
 
-	ret = t300rs_modify_envelope(t300rs,
+	ret = t300rs_update_envelope(t300rs,
 			state,
 			level,
 			effect.replay.length,
@@ -348,7 +348,7 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_modify_duration(t300rs, state);
+	ret = t300rs_update_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying ramp duration\n");
 		goto error;
@@ -357,7 +357,8 @@ static int t300rs_modify_ramp(struct t300rs_device_entry *t300rs,
 error:
 	return ret;
 }
-static int t300rs_modify_damper(struct t300rs_device_entry *t300rs,
+
+static int t300rs_update_damper(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
@@ -429,7 +430,7 @@ static int t300rs_modify_damper(struct t300rs_device_entry *t300rs,
 
 	}
 
-	ret = t300rs_modify_duration(t300rs, state);
+	ret = t300rs_update_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying damper duration\n");
 		goto error;
@@ -439,8 +440,14 @@ error:
 	return ret;
 }
 
+static int t300rs_update_spring(struct t300rs_device_entry *t300rs,
+		struct t300rs_effect_state *state)
+{
+	return t300rs_update_damper(t300rs, state);
+}
 
-static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
+
+static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 		struct t300rs_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
@@ -526,7 +533,7 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 
 	}
 
-	ret = t300rs_modify_envelope(t300rs,
+	ret = t300rs_update_envelope(t300rs,
 			state,
 			magnitude,
 			effect.replay.length,
@@ -540,7 +547,7 @@ static int t300rs_modify_periodic(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_modify_duration(t300rs, state);
+	ret = t300rs_update_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying periodic duration\n");
 		goto error;
@@ -567,20 +574,6 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 	uint16_t duration, offset;
 
 	int ret;
-
-	/* some games, such as DiRT Rally 2 have a weird feeling to them, sort of
-	 * like the wheel pulls just a bit to the right or left and then it just
-	 * stops. I wouldn't be surprised if it's got something to do with the
-	 * constant envelope, but right now I don't know.
-	 */
-
-	if (test_bit(FF_EFFECT_PLAYING, &state->flags)
-			&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
-
-		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
-
-		return t300rs_modify_constant(t300rs, state);
-	}
 
 	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 	duration = effect.replay.length - 1;
@@ -622,14 +615,6 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 	int ret;
 	uint16_t difference, offset, top, bottom, duration;
 	int16_t level;
-
-	if (test_bit(FF_EFFECT_PLAYING, &state->flags)
-			&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
-
-		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
-
-		return t300rs_modify_ramp(t300rs, state);
-	}
 
 	duration = effect.replay.length - 1;
 
@@ -682,14 +667,6 @@ static int t300rs_upload_spring(struct t300rs_device_entry *t300rs,
 	int ret;
 	uint16_t duration, right_coeff, left_coeff, right_deadband, left_deadband, offset;
 
-	if (test_bit(FF_EFFECT_PLAYING, &state->flags)
-			&& test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
-
-		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
-
-		return t300rs_modify_damper(t300rs, state);
-	}
-
 	duration = effect.replay.length - 1;
 
 	right_coeff = spring.right_coeff * spring_level / 100;
@@ -736,14 +713,6 @@ static int t300rs_upload_damper(struct t300rs_device_entry *t300rs,
 
 	int ret, input_level;
 	uint16_t duration, right_coeff, left_coeff, right_deadband, left_deadband, offset;
-
-	if (test_bit(FF_EFFECT_PLAYING, &state->flags)	&&
-			test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
-
-		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
-
-		return t300rs_modify_damper(t300rs, state);
-	}
 
 	duration = effect.replay.length - 1;
 
@@ -797,14 +766,6 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 	uint16_t duration, magnitude, period, offset;
 	int16_t periodic_offset, phase;
 
-	if (test_bit(FF_EFFECT_PLAYING, &state->flags)	&&
-			test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
-
-		__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
-
-		return t300rs_modify_periodic(t300rs, state);
-	}
-
 	duration = effect.replay.length - 1;
 
 	magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
@@ -814,7 +775,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 		phase += 0x4000;
 		phase = phase < 0 ? -phase : phase;
 	}
-	
+
 	magnitude = magnitude < 0 ? -magnitude : magnitude;
 	periodic_offset = periodic.offset;
 	period = periodic.period;
@@ -841,6 +802,28 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 		hid_err(t300rs->hdev, "failed uploading periodic effect");
 
 	return ret;
+}
+
+static int t300rs_update_effect(struct t300rs_device_entry *t300rs,
+		struct t300rs_effect_state *state)
+{
+	switch (state->effect.type) {
+		case FF_CONSTANT:
+			return t300rs_update_constant(t300rs, state);
+		case FF_RAMP:
+			return t300rs_update_ramp(t300rs, state);
+		case FF_SPRING:
+			return t300rs_update_spring(t300rs, state);
+		case FF_DAMPER:
+		case FF_FRICTION:
+		case FF_INERTIA:
+			return t300rs_update_damper(t300rs, state);
+		case FF_PERIODIC:
+			return t300rs_update_periodic(t300rs, state);
+		default:
+			hid_err(t300rs->hdev, "invalid effect type: %x", state->effect.type);
+			return -1;
+	}
 }
 
 static int t300rs_upload_effect(struct t300rs_device_entry *t300rs,
@@ -892,35 +875,51 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs)
 
 		if (test_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags)) {
 			__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
+			/* if we're uploading an effect, it's bound to be the
+			 * most up to date available */
+			__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 
 			ret = t300rs_upload_effect(t300rs, state);
 			if (ret) {
-				hid_err(t300rs->hdev, "failed uploading effects");
+				hid_err(t300rs->hdev, "failed uploading effect");
 				return ret;
 			}
 		}
 
+		if (test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
+			__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
+
+			ret = t300rs_update_effect(t300rs, state);
+			if (ret) {
+				hid_err(t300rs->hdev, "failed updating effect");
+				return ret;
+			}
+		}
+
+		/* TODO TODO: add in effect data dump, macro or something? */
+
 		if (test_bit(FF_EFFECT_QUEUE_START, &state->flags)) {
 			__clear_bit(FF_EFFECT_QUEUE_START, &state->flags);
-			__set_bit(FF_EFFECT_PLAYING, &state->flags);
 
 			ret = t300rs_play_effect(t300rs, state);
 			if (ret) {
-				hid_err(t300rs->hdev, "failed starting effects\n");
+				hid_err(t300rs->hdev, "failed starting effect\n");
 				return ret;
 			}
 
+			__set_bit(FF_EFFECT_PLAYING, &state->flags);
 		}
 
 		if (test_bit(FF_EFFECT_QUEUE_STOP, &state->flags)) {
 			__clear_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
-			__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 
 			ret = t300rs_stop_effect(t300rs, state);
 			if (ret) {
 				hid_err(t300rs->hdev, "failed stopping effect\n");
 				return ret;
 			}
+
+			__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 		}
 
 		if (state->count > max_count)
@@ -932,10 +931,14 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs)
 
 static enum hrtimer_restart t300rs_timer(struct hrtimer *t)
 {
+	/* TODO: use workqueues to be sure nothing is accidentally done in
+	 * atomic context */
 	struct t300rs_device_entry *t300rs = container_of(t, struct t300rs_device_entry, hrtimer);
 	int max_count;
 
+	spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
 	max_count = t300rs_timer_helper(t300rs);
+	spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
 
 	if (max_count > 0) {
 		hrtimer_forward_now(&t300rs->hrtimer, ms_to_ktime(timer_msecs));
@@ -968,12 +971,13 @@ static int t300rs_upload(struct input_dev *dev,
 	state->effect = *effect;
 
 	if (old) {
-		state->old = *old;
+		if (test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags))
+			state->old = *old;
+
 		__set_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 	} else {
-		__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
+		__set_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 	}
-	__set_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 
 	spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
 

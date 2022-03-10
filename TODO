@@ -1,0 +1,4 @@
++ Make code more general to allow for stuff like T150/T248/T500 to be relatively
+easily included.
+
++ Use workqueues instead of doing everything in t300rs_timer
