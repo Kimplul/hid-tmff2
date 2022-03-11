@@ -3,7 +3,6 @@
 #include <linux/usb.h>
 #include <linux/input.h>
 #include <linux/module.h>
-#include <linux/hrtimer.h>
 #include <linux/slab.h>
 #include <linux/ktime.h>
 #include <linux/fixp-arith.h>
@@ -119,7 +118,8 @@ struct t300rs_device_entry {
 	struct usb_interface *usbif;
 	struct t300rs_effect_state *states;
 	struct t300rs_firmware_response *firmware_response;
-	struct hrtimer hrtimer;
+
+	struct delayed_work work;
 
 	int (*open)(struct input_dev *dev);
 	void (*close)(struct input_dev *dev);

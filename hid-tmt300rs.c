@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/workqueue.h>
 #include "hid-tmt300rs.h"
 
 static int timer_msecs = DEFAULT_TIMER_PERIOD;
@@ -848,13 +849,15 @@ static int t300rs_upload_effect(struct t300rs_device_entry *t300rs,
 	}
 }
 
-static int t300rs_timer_helper(struct t300rs_device_entry *t300rs)
+static void t300rs_work_handler(struct work_struct *w)
 {
+	struct delayed_work *dw = container_of(w, struct delayed_work, work);
+	struct t300rs_device_entry *t300rs = container_of(dw, struct t300rs_device_entry, work);
 	struct t300rs_effect_state *state;
-	unsigned long jiffies_now = JIFFIES2MS(jiffies);
 	int max_count = 0, effect_id, ret;
 
 	for (effect_id = 0; effect_id < T300RS_MAX_EFFECTS; ++effect_id) {
+		unsigned long jiffies_now = JIFFIES2MS(jiffies);
 
 		state = &t300rs->states[effect_id];
 
@@ -882,7 +885,7 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs)
 			ret = t300rs_upload_effect(t300rs, state);
 			if (ret) {
 				hid_err(t300rs->hdev, "failed uploading effect");
-				return ret;
+				return;
 			}
 		}
 
@@ -892,7 +895,7 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs)
 			ret = t300rs_update_effect(t300rs, state);
 			if (ret) {
 				hid_err(t300rs->hdev, "failed updating effect");
-				return ret;
+				return;
 			}
 		}
 
@@ -904,7 +907,7 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs)
 			ret = t300rs_play_effect(t300rs, state);
 			if (ret) {
 				hid_err(t300rs->hdev, "failed starting effect\n");
-				return ret;
+				return;
 			}
 
 			__set_bit(FF_EFFECT_PLAYING, &state->flags);
@@ -916,7 +919,7 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs)
 			ret = t300rs_stop_effect(t300rs, state);
 			if (ret) {
 				hid_err(t300rs->hdev, "failed stopping effect\n");
-				return ret;
+				return;
 			}
 
 			__clear_bit(FF_EFFECT_PLAYING, &state->flags);
@@ -926,26 +929,8 @@ static int t300rs_timer_helper(struct t300rs_device_entry *t300rs)
 			max_count = state->count;
 	}
 
-	return max_count;
-}
-
-static enum hrtimer_restart t300rs_timer(struct hrtimer *t)
-{
-	/* TODO: use workqueues to be sure nothing is accidentally done in
-	 * atomic context */
-	struct t300rs_device_entry *t300rs = container_of(t, struct t300rs_device_entry, hrtimer);
-	int max_count;
-
-	spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
-	max_count = t300rs_timer_helper(t300rs);
-	spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
-
-	if (max_count > 0) {
-		hrtimer_forward_now(&t300rs->hrtimer, ms_to_ktime(timer_msecs));
-		return HRTIMER_RESTART;
-	} else {
-		return HRTIMER_NORESTART;
-	}
+	if (max_count)
+		schedule_delayed_work(&t300rs->work, msecs_to_jiffies(timer_msecs));
 }
 
 static int t300rs_upload(struct input_dev *dev,
@@ -1015,10 +1000,11 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value)
 		__set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
 	}
 
-	if (!hrtimer_active(&t300rs->hrtimer))
-		hrtimer_start(&t300rs->hrtimer, ms_to_ktime(timer_msecs), HRTIMER_MODE_REL);
-
 	spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
+
+	if (!delayed_work_pending(&t300rs->work))
+		schedule_delayed_work(&t300rs->work, 0);
+
 	return 0;
 }
 
@@ -1497,6 +1483,8 @@ static int t300rs_init(struct hid_device *hdev, const signed short *ff_bits)
 		goto version_err;
 	}
 
+	INIT_DELAYED_WORK(&t300rs->work, t300rs_work_handler);
+
 	spin_lock_init(&t300rs->lock);
 
 	drv_data->device_props = t300rs;
@@ -1538,9 +1526,6 @@ static int t300rs_init(struct hid_device *hdev, const signed short *ff_bits)
 		goto sysfs_err;
 	}
 
-
-	hrtimer_init(&t300rs->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	t300rs->hrtimer.function = t300rs_timer;
 
 	range_store(dev, &dev_attr_range, range, 10);
 	t300rs_set_gain(input_dev, 0xffff);
@@ -1624,8 +1609,7 @@ static void t300rs_remove(struct hid_device *hdev)
 		return;
 	}
 
-	hrtimer_cancel(&t300rs->hrtimer);
-	drv_data->device_props = NULL;
+	cancel_delayed_work_sync(&t300rs->work);
 
 	device_remove_file(&hdev->dev, &dev_attr_range);
 	device_remove_file(&hdev->dev, &dev_attr_adv_mode);
@@ -1634,6 +1618,8 @@ static void t300rs_remove(struct hid_device *hdev)
 	device_remove_file(&hdev->dev, &dev_attr_friction_level);
 
 	hid_hw_stop(hdev);
+
+	drv_data->device_props = NULL;
 	kfree(t300rs->states);
 	kfree(t300rs->send_buffer);
 	kfree(t300rs->firmware_response);
