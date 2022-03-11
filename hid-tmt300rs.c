@@ -855,10 +855,12 @@ static void t300rs_work_handler(struct work_struct *w)
 	struct t300rs_device_entry *t300rs = container_of(dw, struct t300rs_device_entry, work);
 	struct t300rs_effect_state *state;
 	int max_count = 0, effect_id, ret;
+	unsigned long jiffies_now;
 
 	for (effect_id = 0; effect_id < T300RS_MAX_EFFECTS; ++effect_id) {
-		unsigned long jiffies_now = JIFFIES2MS(jiffies);
+		spin_lock(&t300rs->lock);
 
+		jiffies_now = JIFFIES2MS(jiffies);
 		state = &t300rs->states[effect_id];
 
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && state->effect.replay.length) {
@@ -927,6 +929,8 @@ static void t300rs_work_handler(struct work_struct *w)
 
 		if (state->count > max_count)
 			max_count = state->count;
+
+		spin_unlock(&t300rs->lock);
 	}
 
 	if (max_count)
@@ -951,7 +955,7 @@ static int t300rs_upload(struct input_dev *dev,
 
 	state = &t300rs->states[effect->id];
 
-	spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
+	spin_lock(&t300rs->lock);
 
 	state->effect = *effect;
 
@@ -964,7 +968,7 @@ static int t300rs_upload(struct input_dev *dev,
 		__set_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 	}
 
-	spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
+	spin_unlock(&t300rs->lock);
 
 	return 0;
 }
@@ -986,7 +990,7 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value)
 	if (&state->effect == 0)
 		return 0;
 
-	spin_lock_irqsave(&t300rs->lock, t300rs->lock_flags);
+	spin_lock(&t300rs->lock);
 
 	if (value > 0) {
 		state->count = value;
@@ -1000,7 +1004,7 @@ static int t300rs_play(struct input_dev *dev, int effect_id, int value)
 		__set_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
 	}
 
-	spin_unlock_irqrestore(&t300rs->lock, t300rs->lock_flags);
+	spin_unlock(&t300rs->lock);
 
 	if (!delayed_work_pending(&t300rs->work))
 		schedule_delayed_work(&t300rs->work, 0);
