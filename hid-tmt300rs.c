@@ -855,16 +855,16 @@ static void t300rs_work_handler(struct work_struct *w)
 	struct t300rs_device_entry *t300rs = container_of(dw, struct t300rs_device_entry, work);
 	struct t300rs_effect_state *state;
 	int max_count = 0, effect_id;
-	unsigned long jiffies_now;
+	unsigned long time_now;
 
 	for (effect_id = 0; effect_id < T300RS_MAX_EFFECTS; ++effect_id) {
 		spin_lock(&t300rs->lock);
 
-		jiffies_now = JIFFIES2MS(jiffies);
+		time_now = JIFFIES2MS(jiffies);
 		state = &t300rs->states[effect_id];
 
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && state->effect.replay.length) {
-			if ((jiffies_now - state->start_time) >= state->effect.replay.length) {
+			if ((time_now - state->start_time) >= state->effect.replay.length) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 
 				/* lazy bum fix? */
