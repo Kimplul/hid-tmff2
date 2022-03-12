@@ -854,7 +854,7 @@ static void t300rs_work_handler(struct work_struct *w)
 	struct delayed_work *dw = container_of(w, struct delayed_work, work);
 	struct t300rs_device_entry *t300rs = container_of(dw, struct t300rs_device_entry, work);
 	struct t300rs_effect_state *state;
-	int max_count = 0, effect_id, ret;
+	int max_count = 0, effect_id;
 	unsigned long jiffies_now;
 
 	for (effect_id = 0; effect_id < T300RS_MAX_EFFECTS; ++effect_id) {
@@ -884,21 +884,15 @@ static void t300rs_work_handler(struct work_struct *w)
 			 * most up to date available */
 			__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 
-			ret = t300rs_upload_effect(t300rs, state);
-			if (ret) {
-				hid_err(t300rs->hdev, "failed uploading effect");
-				return;
-			}
+			if (t300rs_upload_effect(t300rs, state))
+				hid_warn(t300rs->hdev, "failed uploading effect");
 		}
 
 		if (test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 			__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 
-			ret = t300rs_update_effect(t300rs, state);
-			if (ret) {
-				hid_err(t300rs->hdev, "failed updating effect");
-				return;
-			}
+			if (t300rs_update_effect(t300rs, state))
+				hid_warn(t300rs->hdev, "failed updating effect");
 		}
 
 		/* TODO TODO: add in effect data dump, macro or something? */
@@ -906,11 +900,8 @@ static void t300rs_work_handler(struct work_struct *w)
 		if (test_bit(FF_EFFECT_QUEUE_START, &state->flags)) {
 			__clear_bit(FF_EFFECT_QUEUE_START, &state->flags);
 
-			ret = t300rs_play_effect(t300rs, state);
-			if (ret) {
-				hid_err(t300rs->hdev, "failed starting effect\n");
-				return;
-			}
+			if (t300rs_play_effect(t300rs, state))
+				hid_warn(t300rs->hdev, "failed starting effect\n");
 
 			__set_bit(FF_EFFECT_PLAYING, &state->flags);
 		}
@@ -918,11 +909,8 @@ static void t300rs_work_handler(struct work_struct *w)
 		if (test_bit(FF_EFFECT_QUEUE_STOP, &state->flags)) {
 			__clear_bit(FF_EFFECT_QUEUE_STOP, &state->flags);
 
-			ret = t300rs_stop_effect(t300rs, state);
-			if (ret) {
-				hid_err(t300rs->hdev, "failed stopping effect\n");
-				return;
-			}
+			if (t300rs_stop_effect(t300rs, state))
+				hid_warn(t300rs->hdev, "failed stopping effect\n");
 
 			__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 		}
