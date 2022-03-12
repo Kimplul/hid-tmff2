@@ -1329,31 +1329,31 @@ static int t300rs_close(void *data)
 	return ret;
 }
 
-static int t300rs_create_files(struct hid_device *hdev)
+static int t300rs_create_files(struct t300rs_device_entry *t300rs)
 {
 	int ret;
-	if ((ret = device_create_file(&hdev->dev, &dev_attr_alt_mode))) {
-		hid_err(hdev, "unable to create sysfs interface for alt_mode\n");
+	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_alt_mode))) {
+		hid_err(t300rs->hdev, "unable to create sysfs interface for alt_mode\n");
 		goto alt_err;
 	}
 
-	if ((ret = device_create_file(&hdev->dev, &dev_attr_range))) {
-		hid_warn(hdev, "unable to create sysfs interface for range\n");
+	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_range))) {
+		hid_warn(t300rs->hdev, "unable to create sysfs interface for range\n");
 		goto range_err;
 	}
 
-	if ((ret = device_create_file(&hdev->dev, &dev_attr_spring_level))) {
-		hid_warn(hdev, "unable to create sysfs interface for spring_level\n");
+	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_spring_level))) {
+		hid_warn(t300rs->hdev, "unable to create sysfs interface for spring_level\n");
 		goto spring_err;
 	}
 
-	if ((ret = device_create_file(&hdev->dev, &dev_attr_damper_level))) {
-		hid_warn(hdev, "unable to create sysfs interface for damper_level\n");
+	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_damper_level))) {
+		hid_warn(t300rs->hdev, "unable to create sysfs interface for damper_level\n");
 		goto damper_err;
 	}
 
-	if ((ret = device_create_file(&hdev->dev, &dev_attr_friction_level))) {
-		hid_warn(hdev, "unable to create sysfs interface for friction_level\n");
+	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_friction_level))) {
+		hid_warn(t300rs->hdev, "unable to create sysfs interface for friction_level\n");
 		goto friction_err;
 	}
 
@@ -1362,13 +1362,13 @@ static int t300rs_create_files(struct hid_device *hdev)
 	/* if the creation of dev_attr_friction fails, we don't need to remove it */
 	/* device_remove_file(&hdev->dev, &dev_attr_friction_level); */
 friction_err:
-	device_remove_file(&hdev->dev, &dev_attr_damper_level);
+	device_remove_file(&t300rs->hdev->dev, &dev_attr_damper_level);
 damper_err:
-	device_remove_file(&hdev->dev, &dev_attr_spring_level);
+	device_remove_file(&t300rs->hdev->dev, &dev_attr_spring_level);
 spring_err:
-	device_remove_file(&hdev->dev, &dev_attr_range);
+	device_remove_file(&t300rs->hdev->dev, &dev_attr_range);
 range_err:
-	device_remove_file(&hdev->dev, &dev_attr_alt_mode);
+	device_remove_file(&t300rs->hdev->dev, &dev_attr_alt_mode);
 alt_err:
 	return ret;
 }
@@ -1397,7 +1397,7 @@ static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
 			);
 
 	if (ret < 0) {
-		hid_err(t300rs->hdev, "could not fetch firmware version\n");
+		hid_err(t300rs->hdev, "could not fetch firmware version: %i\n", ret);
 		goto out;
 	}
 
@@ -1422,11 +1422,20 @@ out:
 	return ret;
 }
 
-static int t300rs_wheel_init(void *data)
+static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 {
-	struct t300rs_device_entry *t300rs = data;
+	struct t300rs_device_entry *t300rs = kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
 	struct list_head *report_list;
 	int ret;
+
+	if (!t300rs) {
+		ret = -ENOMEM;
+		goto t300rs_err;
+	}
+
+	t300rs->hdev = tmff2->hdev;
+	t300rs->input_dev = tmff2->input_dev;
+	t300rs->usbdev = to_usb_device(tmff2->hdev->dev.parent->parent);
 
 	if(t300rs->hdev->product == 0xb66d)
 		t300rs->buffer_length = T300RS_PS4_BUFFER_LENGTH;
@@ -1451,18 +1460,20 @@ static int t300rs_wheel_init(void *data)
 	t300rs->open = t300rs->input_dev->open;
 	t300rs->close = t300rs->input_dev->close;
 
-	if ((ret = t300rs_create_files(t300rs->hdev))) {
+	if ((ret = t300rs_create_files(t300rs))) {
 		/* probably not a massive issue, but could affect programs like
 		 * Oversteer, best play it safe */
 		hid_err(t300rs->hdev, "could not create sysfs files\n");
 		goto sysfs_err;
 	}
 
-	t300rs_set_range(t300rs, range);
-	t300rs_set_gain(t300rs, 0xffff);
-
 	/* TODO: PS4 advanced mode? */
 	alt_mode = (t300rs->hdev->product == 0xb66f);
+
+	/* everythin went OK */
+	tmff2->data = t300rs;
+	tmff2->max_effects = T300RS_MAX_EFFECTS;
+	memcpy(tmff2->supported_effects, t300rs_effects, sizeof(t300rs_effects));
 
 	hid_info(t300rs->hdev, "force feedback for T300RS\n");
 	return 0;
@@ -1471,8 +1482,10 @@ sysfs_err:
 firmware_err:
 	kfree(t300rs->send_buffer);
 
+t300rs_err:
+	kfree(t300rs);
 send_err:
-	hid_err(t300rs->hdev, "failed creating force feedback device\n");
+	hid_err(tmff2->hdev, "failed creating force feedback device\n");
 	return ret;
 }
 
@@ -1523,17 +1536,6 @@ static __u8 *t300rs_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,
 
 static int t300rs_populate_api(struct tmff2_device_entry *tmff2)
 {
-	struct t300rs_device_entry *t300rs =
-		kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
-
-	/* we must populate wheel_destroy at the least, even if t300rs didn't
-	 * get allocated */
-	tmff2->data = t300rs;
-	tmff2->max_effects = T300RS_MAX_EFFECTS;
-
-	/* copy over supported effects */
-	memcpy(tmff2->supported_effects, t300rs_effects, ARRAY_SIZE(t300rs_effects));
-
 	/* set callbacks */
 	tmff2->play_effect = t300rs_play_effect;
 	tmff2->upload_effect = t300rs_upload_effect;
@@ -1550,14 +1552,6 @@ static int t300rs_populate_api(struct tmff2_device_entry *tmff2)
 	tmff2->switch_mode = t300rs_switch_mode;
 	tmff2->set_autocenter = t300rs_set_autocenter;
 	tmff2->wheel_fixup = t300rs_wheel_fixup;
-
-	if (!t300rs)
-		return -ENOMEM;
-
-	/* copy over stuff we need */
-	t300rs->hdev = tmff2->hdev;
-	t300rs->input_dev = tmff2->input_dev;
-	t300rs->usbdev = to_usb_device(&tmff2->hdev->dev);
 
 	return 0;
 }

@@ -60,7 +60,7 @@ struct tmff2_device_entry {
 	int (*update_effect)(void *data, struct tmff2_effect_state *state);
 	int (*stop_effect)(void *data, struct tmff2_effect_state *state);
 
-	int (*wheel_init)(void *data);
+	int (*wheel_init)(struct tmff2_device_entry *tmff2);
 	int (*wheel_destroy)(void *data);
 
 	/* optional callbacks */
@@ -71,6 +71,8 @@ struct tmff2_device_entry {
 	int (*switch_mode)(void *data, uint16_t mode);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
+
+	/* void pointers are dangerous, I know, but in this case likely the best option... */
 };
 
 #endif /* _HID_TMFF2 */

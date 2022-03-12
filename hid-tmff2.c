@@ -52,15 +52,15 @@ static struct tmff2_device_entry *tmff2_from_hdev(struct hid_device *hdev)
 
 static struct tmff2_device_entry *tmff2_from_input(struct input_dev *input_dev)
 {
-	struct tmff2_device_entry *tmff2;
+	struct hid_device *hdev;
 	spin_lock_irqsave(&lock, lock_flags);
-	if (!(tmff2 = input_get_drvdata(input_dev))) {
+	if (!(hdev = input_get_drvdata(input_dev))) {
 		dev_err(&input_dev->dev, "input_dev private data not found\n");
 		return NULL;
 	}
 	spin_unlock_irqrestore(&lock, lock_flags);
 
-	return tmff2;
+	return tmff2_from_hdev(hdev);
 }
 
 static ssize_t spring_level_store(struct device *dev,
@@ -301,7 +301,7 @@ static void tmff2_work_handler(struct work_struct *w)
 		}
 
 		if (test_bit(FF_EFFECT_QUEUE_START, &state->flags)) {
-			if (tmff2->play_effect(tmff2, state)) {
+			if (tmff2->play_effect(tmff2->data, state)) {
 				hid_warn(tmff2->hdev, "failed starting effect\n");
 			} else {
 				__clear_bit(FF_EFFECT_QUEUE_START, &state->flags);
@@ -311,7 +311,7 @@ static void tmff2_work_handler(struct work_struct *w)
 		}
 
 		if (test_bit(FF_EFFECT_QUEUE_STOP, &state->flags)) {
-			if (tmff2->stop_effect(tmff2, state)) {
+			if (tmff2->stop_effect(tmff2->data, state)) {
 				hid_warn(tmff2->hdev, "failed stopping effect\n");
 			} else {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
@@ -420,8 +420,14 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 {
 	int ret, i;
 	struct ff_device *ff;
+	spin_lock_init(&lock);
 	spin_lock_init(&tmff2->lock);
 	INIT_DELAYED_WORK(&tmff2->work, tmff2_work_handler);
+
+	/* get parameters etc from backend */
+	if ((ret = tmff2->wheel_init(tmff2)))
+		goto err;
+
 
 	tmff2->states = kzalloc(sizeof(struct tmff2_effect_state) * tmff2->max_effects,
 			GFP_KERNEL);
@@ -430,10 +436,6 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 		ret = -ENOMEM;
 		goto err;
 	}
-
-	/* is this required or should it be done in t300rs_populate_api? */
-	if ((ret = tmff2->wheel_init(tmff2->data)))
-		goto err;
 
 	/* set supported effects into input_dev->ffbit */
 	for (i = 0; tmff2->supported_effects[i] >= 0; ++i)
@@ -482,8 +484,6 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	tmff2->hdev = hdev;
 	hid_set_drvdata(tmff2->hdev, tmff2);
-	tmff2->input_dev = list_entry(hdev->inputs.next, struct hid_input, list)->input;
-	input_set_drvdata(tmff2->input_dev, tmff2);
 
 	switch (tmff2->hdev->product) {
 		/* t300rs */
@@ -507,6 +507,8 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		hid_err(hdev, "hw start failed\n");
 		goto hid_err;
 	}
+
+	tmff2->input_dev = list_entry(hdev->inputs.next, struct hid_input, list)->input;
 
 	if ((ret = tmff2_wheel_init(tmff2))) {
 		hid_err(hdev, "init failed\n");
