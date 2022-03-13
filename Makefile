@@ -1,4 +1,3 @@
-obj-m += hid-tmff2.o
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 all: hid-tminit

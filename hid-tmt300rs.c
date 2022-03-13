@@ -1,9 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/usb.h>
+#include <linux/hid.h>
+#include "hid-tmff2.h"
+#include "hid-tmt300rs.h"
 
 #define T300RS_MAX_EFFECTS 16
 #define T300RS_NORM_BUFFER_LENGTH 63
 #define T300RS_PS4_BUFFER_LENGTH 31
+
+static const unsigned long t300rs_params =
+	HAS_SPRING_LEVEL
+	| HAS_DAMPER_LEVEL
+	| HAS_FRICTION_LEVEL
+	| HAS_RANGE
+	| HAS_ALT_MODE;
 
 static const signed short t300rs_effects[] = {
 	FF_CONSTANT,
@@ -1329,50 +1339,6 @@ static int t300rs_close(void *data)
 	return ret;
 }
 
-static int t300rs_create_files(struct t300rs_device_entry *t300rs)
-{
-	int ret;
-	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_alt_mode))) {
-		hid_err(t300rs->hdev, "unable to create sysfs interface for alt_mode\n");
-		goto alt_err;
-	}
-
-	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_range))) {
-		hid_warn(t300rs->hdev, "unable to create sysfs interface for range\n");
-		goto range_err;
-	}
-
-	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_spring_level))) {
-		hid_warn(t300rs->hdev, "unable to create sysfs interface for spring_level\n");
-		goto spring_err;
-	}
-
-	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_damper_level))) {
-		hid_warn(t300rs->hdev, "unable to create sysfs interface for damper_level\n");
-		goto damper_err;
-	}
-
-	if ((ret = device_create_file(&t300rs->hdev->dev, &dev_attr_friction_level))) {
-		hid_warn(t300rs->hdev, "unable to create sysfs interface for friction_level\n");
-		goto friction_err;
-	}
-
-	return ret;
-
-	/* if the creation of dev_attr_friction fails, we don't need to remove it */
-	/* device_remove_file(&hdev->dev, &dev_attr_friction_level); */
-friction_err:
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_damper_level);
-damper_err:
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_spring_level);
-spring_err:
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_range);
-range_err:
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_alt_mode);
-alt_err:
-	return ret;
-}
-
 static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
 {
 	int ret;
@@ -1460,28 +1426,20 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 	t300rs->open = t300rs->input_dev->open;
 	t300rs->close = t300rs->input_dev->close;
 
-	if ((ret = t300rs_create_files(t300rs))) {
-		/* probably not a massive issue, but could affect programs like
-		 * Oversteer, best play it safe */
-		hid_err(t300rs->hdev, "could not create sysfs files\n");
-		goto sysfs_err;
-	}
-
 	/* TODO: PS4 advanced mode? */
 	alt_mode = (t300rs->hdev->product == 0xb66f);
 
 	/* everythin went OK */
 	tmff2->data = t300rs;
+	tmff2->params = t300rs_params;
 	tmff2->max_effects = T300RS_MAX_EFFECTS;
 	memcpy(tmff2->supported_effects, t300rs_effects, sizeof(t300rs_effects));
 
 	hid_info(t300rs->hdev, "force feedback for T300RS\n");
 	return 0;
 
-sysfs_err:
 firmware_err:
 	kfree(t300rs->send_buffer);
-
 t300rs_err:
 	kfree(t300rs);
 send_err:
@@ -1494,14 +1452,6 @@ static int t300rs_wheel_destroy(void *data)
 	struct t300rs_device_entry *t300rs = data;
 	if (!t300rs)
 		return -ENODEV;
-
-	/* apparently should be safe to call these even without the files
-	 * existing */
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_range);
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_alt_mode);
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_spring_level);
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_damper_level);
-	device_remove_file(&t300rs->hdev->dev, &dev_attr_friction_level);
 
 	kfree(t300rs->send_buffer);
 	kfree(t300rs);
@@ -1534,7 +1484,7 @@ static __u8 *t300rs_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,
 	return rdesc;
 }
 
-static int t300rs_populate_api(struct tmff2_device_entry *tmff2)
+int t300rs_populate_api(struct tmff2_device_entry *tmff2)
 {
 	/* set callbacks */
 	tmff2->play_effect = t300rs_play_effect;

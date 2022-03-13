@@ -1,38 +1,40 @@
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <linux/hid.h>
+#define TMFF2_MAIN
 #include "hid-tmff2.h"
+#include "hid-tmt300rs.h"
 
-static int timer_msecs = DEFAULT_TIMER_PERIOD;
+int timer_msecs = DEFAULT_TIMER_PERIOD;
 module_param(timer_msecs, int, 0660);
 MODULE_PARM_DESC(timer_msecs,
 		"Timer resolution in msecs");
 
 /* should these be removed and just rely on /sys? */
-static int spring_level = 30;
+int spring_level = 30;
 module_param(spring_level, int, 0);
 MODULE_PARM_DESC(spring_level,
 		"Level of spring force (0-100), as per Oversteer standards");
 
-static int damper_level = 30;
+int damper_level = 30;
 module_param(damper_level, int, 0);
 MODULE_PARM_DESC(damper_level,
 		"Level of damper force (0-100), as per Oversteer standards");
 
-static int friction_level = 30;
+int friction_level = 30;
 module_param(friction_level, int, 0);
 MODULE_PARM_DESC(friction_level,
 		"Level of friction force (0-100), as per Oversteer standards");
 
-static int range = 900;
+int range = 900;
 module_param(range, int, 0);
 MODULE_PARM_DESC(range,
 		"Range of wheel, depends on the wheel. Invalid values are ignored.");
 
-static int alt_mode = 0;
+int alt_mode = 0;
 module_param(alt_mode, int, 0);
 MODULE_PARM_DESC(alt_mode,
-		"Alternate mode, eg. T300RS F1 mode.");
+		"Alternate mode, eg. F1 mode.");
 
 static spinlock_t lock;
 static unsigned long lock_flags;
@@ -216,9 +218,6 @@ static ssize_t alt_mode_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%i\n", alt_mode);
 }
 static DEVICE_ATTR_RW(alt_mode);
-
-/* include each wheel */
-#include "hid-tmt300rs.c"
 
 static void tmff2_set_gain(struct input_dev *dev, uint16_t gain)
 {
@@ -416,6 +415,61 @@ static void tmff2_close(struct input_dev *dev)
 	hid_err(tmff2->hdev, "no close callback set\n");
 }
 
+static int tmff2_create_files(struct tmff2_device_entry *tmff2)
+{
+	struct device *dev = &tmff2->hdev->dev;
+	int ret;
+
+	/* could use short circuiting but this is more explicit */
+	if (tmff2->params & HAS_ALT_MODE) {
+		if ((ret = device_create_file(dev, &dev_attr_alt_mode))) {
+			hid_err(tmff2->hdev, "unable to create sysfs for alt_mode\n");
+			goto alt_err;
+		}
+	}
+
+	if (tmff2->params & HAS_RANGE) {
+		if ((ret = device_create_file(dev, &dev_attr_range))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for range\n");
+			goto range_err;
+		}
+	}
+
+	if (tmff2->params & HAS_SPRING_LEVEL) {
+		if ((ret = device_create_file(dev, &dev_attr_spring_level))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for spring_level\n");
+			goto spring_err;
+		}
+	}
+
+	if (tmff2->params & HAS_DAMPER_LEVEL) {
+		if ((ret = device_create_file(dev, &dev_attr_damper_level))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for damper_level\n");
+			goto damper_err;
+		}
+	}
+
+	if (tmff2->params & HAS_FRICTION_LEVEL) {
+		if ((ret = device_create_file(dev, &dev_attr_friction_level))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for friction_level\n");
+			goto friction_err;
+		}
+	}
+
+	return 0;
+
+friction_err:
+	device_remove_file(dev, &dev_attr_damper_level);
+damper_err:
+	device_remove_file(dev, &dev_attr_spring_level);
+spring_err:
+	device_remove_file(dev, &dev_attr_range);
+range_err:
+	device_remove_file(dev, &dev_attr_alt_mode);
+alt_err:
+	return ret;
+}
+
 static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 {
 	int ret, i;
@@ -463,6 +517,10 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 
 	if (tmff2->set_autocenter)
 		ff->set_autocenter = tmff2_set_autocenter;
+
+	/* create files */
+	if ((ret = tmff2_create_files(tmff2)))
+		goto err;
 
 	return 0;
 
@@ -519,13 +577,10 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 init_err:
 	hid_hw_stop(hdev);
-
 hid_err:
 	tmff2->wheel_destroy(tmff2->data);
-
 wheel_err:
 	kfree(tmff2);
-
 oom_err:
 	return ret;
 }
@@ -546,12 +601,27 @@ static __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 static void tmff2_remove(struct hid_device *hdev)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(hdev);
+	struct device *dev;
 	if (!tmff2)
 		return;
 
-	cancel_delayed_work_sync(&tmff2->work);
-	tmff2->wheel_destroy(tmff2->data);
 
+	cancel_delayed_work_sync(&tmff2->work);
+
+	dev = &tmff2->hdev->dev;
+	if (tmff2->params & HAS_DAMPER_LEVEL)
+		device_remove_file(dev, &dev_attr_damper_level);
+
+	if (tmff2->params & HAS_SPRING_LEVEL)
+		device_remove_file(dev, &dev_attr_spring_level);
+
+	if (tmff2->params & HAS_RANGE)
+		device_remove_file(dev, &dev_attr_range);
+
+	if (tmff2->params & HAS_ALT_MODE)
+		device_remove_file(dev, &dev_attr_alt_mode);
+
+	tmff2->wheel_destroy(tmff2->data);
 	hid_hw_stop(hdev);
 
 	kfree(tmff2->states);
