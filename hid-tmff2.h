@@ -6,14 +6,12 @@
 #include <linux/ktime.h>
 #include <linux/input.h>
 
-#ifndef TMFF2_MAIN
 extern int timer_msecs;
 extern int spring_level;
 extern int damper_level;
 extern int friction_level;
 extern int range;
 extern int alt_mode;
-#endif
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
@@ -23,7 +21,7 @@ extern int alt_mode;
  * space out the interrupts so that they all leave at regular intervals, but
  * for now this is good enough, go slow enough that everything works.
  */
-#define DEFAULT_TIMER_PERIOD 8
+#define DEFAULT_TIMER_PERIOD	8
 
 #define FF_EFFECT_QUEUE_UPLOAD	0
 #define FF_EFFECT_QUEUE_START	1
@@ -31,11 +29,11 @@ extern int alt_mode;
 #define FF_EFFECT_QUEUE_UPDATE	3
 #define FF_EFFECT_PLAYING	4
 
-#define HAS_SPRING_LEVEL	(1 << 0)
-#define HAS_DAMPER_LEVEL	(1 << 1)
-#define HAS_FRICTION_LEVEL	(1 << 2)
-#define HAS_RANGE		(1 << 3)
-#define HAS_ALT_MODE		(1 << 4)
+#define PARAM_SPRING_LEVEL	(1 << 0)
+#define PARAM_DAMPER_LEVEL	(1 << 1)
+#define PARAM_FRICTION_LEVEL	(1 << 2)
+#define PARAM_RANGE		(1 << 3)
+#define PARAM_ALT_MODE		(1 << 4)
 
 #undef fixp_sin16
 #define fixp_sin16(v) (((v % 360) > 180) ?\
@@ -90,5 +88,12 @@ struct tmff2_device_entry {
 
 	/* void pointers are dangerous, I know, but in this case likely the best option... */
 };
+
+/* external */
+int t300rs_populate_api(struct tmff2_device_entry *tmff2);
+
+#define TMT300RS_PS3_NORM_ID 0xb66e
+#define TMT300RS_PS3_ADV_ID 0xb66f
+#define TMT300RS_PS4_NORM_ID 0xb66d
 
 #endif /* __HID_TMFF2_H */

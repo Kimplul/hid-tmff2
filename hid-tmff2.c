@@ -1,9 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <linux/hid.h>
-#define TMFF2_MAIN
 #include "hid-tmff2.h"
-#include "hid-tmt300rs.h"
+
 
 int timer_msecs = DEFAULT_TIMER_PERIOD;
 module_param(timer_msecs, int, 0660);
@@ -421,35 +421,35 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 	int ret;
 
 	/* could use short circuiting but this is more explicit */
-	if (tmff2->params & HAS_ALT_MODE) {
+	if (tmff2->params & PARAM_ALT_MODE) {
 		if ((ret = device_create_file(dev, &dev_attr_alt_mode))) {
 			hid_err(tmff2->hdev, "unable to create sysfs for alt_mode\n");
 			goto alt_err;
 		}
 	}
 
-	if (tmff2->params & HAS_RANGE) {
+	if (tmff2->params & PARAM_RANGE) {
 		if ((ret = device_create_file(dev, &dev_attr_range))) {
 			hid_warn(tmff2->hdev, "unable to create sysfs for range\n");
 			goto range_err;
 		}
 	}
 
-	if (tmff2->params & HAS_SPRING_LEVEL) {
+	if (tmff2->params & PARAM_SPRING_LEVEL) {
 		if ((ret = device_create_file(dev, &dev_attr_spring_level))) {
 			hid_warn(tmff2->hdev, "unable to create sysfs for spring_level\n");
 			goto spring_err;
 		}
 	}
 
-	if (tmff2->params & HAS_DAMPER_LEVEL) {
+	if (tmff2->params & PARAM_DAMPER_LEVEL) {
 		if ((ret = device_create_file(dev, &dev_attr_damper_level))) {
 			hid_warn(tmff2->hdev, "unable to create sysfs for damper_level\n");
 			goto damper_err;
 		}
 	}
 
-	if (tmff2->params & HAS_FRICTION_LEVEL) {
+	if (tmff2->params & PARAM_FRICTION_LEVEL) {
 		if ((ret = device_create_file(dev, &dev_attr_friction_level))) {
 			hid_warn(tmff2->hdev, "unable to create sysfs for friction_level\n");
 			goto friction_err;
@@ -545,12 +545,13 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	switch (tmff2->hdev->product) {
 		/* t300rs */
-		case 0xb66e:
-		case 0xb66f:
-		case 0xb66d:
+		case TMT300RS_PS3_NORM_ID:
+		case TMT300RS_PS3_ADV_ID:
+		case TMT300RS_PS4_NORM_ID:
 			if ((ret = t300rs_populate_api(tmff2)))
 				goto wheel_err;
 			break;
+
 		default:
 			ret = -ENODEV;
 			goto wheel_err;
@@ -609,16 +610,16 @@ static void tmff2_remove(struct hid_device *hdev)
 	cancel_delayed_work_sync(&tmff2->work);
 
 	dev = &tmff2->hdev->dev;
-	if (tmff2->params & HAS_DAMPER_LEVEL)
+	if (tmff2->params & PARAM_DAMPER_LEVEL)
 		device_remove_file(dev, &dev_attr_damper_level);
 
-	if (tmff2->params & HAS_SPRING_LEVEL)
+	if (tmff2->params & PARAM_SPRING_LEVEL)
 		device_remove_file(dev, &dev_attr_spring_level);
 
-	if (tmff2->params & HAS_RANGE)
+	if (tmff2->params & PARAM_RANGE)
 		device_remove_file(dev, &dev_attr_range);
 
-	if (tmff2->params & HAS_ALT_MODE)
+	if (tmff2->params & PARAM_ALT_MODE)
 		device_remove_file(dev, &dev_attr_alt_mode);
 
 	tmff2->wheel_destroy(tmff2->data);
@@ -630,9 +631,9 @@ static void tmff2_remove(struct hid_device *hdev)
 
 static const struct hid_device_id tmff2_devices[] = {
 	/* t300rs and variations */
-	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66e)},
-	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66f)},
-	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, 0xb66d)},
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
 	{}
 };
 MODULE_DEVICE_TABLE(hid, tmff2_devices);

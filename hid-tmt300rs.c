@@ -2,18 +2,18 @@
 #include <linux/usb.h>
 #include <linux/hid.h>
 #include "hid-tmff2.h"
-#include "hid-tmt300rs.h"
 
 #define T300RS_MAX_EFFECTS 16
 #define T300RS_NORM_BUFFER_LENGTH 63
 #define T300RS_PS4_BUFFER_LENGTH 31
 
 static const unsigned long t300rs_params =
-	HAS_SPRING_LEVEL
-	| HAS_DAMPER_LEVEL
-	| HAS_FRICTION_LEVEL
-	| HAS_RANGE
-	| HAS_ALT_MODE;
+	PARAM_SPRING_LEVEL
+	| PARAM_DAMPER_LEVEL
+	| PARAM_FRICTION_LEVEL
+	| PARAM_RANGE
+	| PARAM_ALT_MODE
+	;
 
 static const signed short t300rs_effects[] = {
 	FF_CONSTANT,
@@ -356,7 +356,7 @@ static u8 damper_values[] = {
 	0x7f, 0x07
 };
 
-static int t300rs_send_buf(struct t300rs_device_entry *t300rs, size_t len, u8 *send_buffer)
+static int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
 {
 	int i;
 	/* check that send_buffer fits into our report */
@@ -377,7 +377,7 @@ static int t300rs_send_buf(struct t300rs_device_entry *t300rs, size_t len, u8 *s
 
 static int t300rs_send_int(struct t300rs_device_entry *t300rs)
 {
-	t300rs_send_buf(t300rs, t300rs->buffer_length, t300rs->send_buffer);
+	t300rs_send_buf(t300rs, t300rs->send_buffer, t300rs->buffer_length);
 	memset(t300rs->send_buffer, 0, t300rs->buffer_length);
 
 	return 0;
@@ -1213,6 +1213,7 @@ static int t300rs_set_autocenter(void *data, uint16_t value)
 	if (!t300rs)
 		return -ENODEV;
 
+	/* TODO: this should probably also use a separately allocated buffer? */
 	autocenter_packet = (struct t300rs_packet_autocenter *)t300rs->send_buffer;
 
 	autocenter_packet->header.cmd = 0x08;
@@ -1288,7 +1289,7 @@ static int t300rs_set_range(void *data, uint16_t value)
 	send_buffer[2] = scaled_value & 0xff;
 	send_buffer[3] = scaled_value >> 8;
 
-	if ((ret = t300rs_send_buf(t300rs, t300rs->buffer_length, send_buffer)))
+	if ((ret = t300rs_send_buf(t300rs, send_buffer, t300rs->buffer_length)))
 		hid_warn(t300rs->hdev, "failed setting range\n");
 
 	/* since everythin went OK, update the current range */
@@ -1403,7 +1404,7 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 	t300rs->input_dev = tmff2->input_dev;
 	t300rs->usbdev = to_usb_device(tmff2->hdev->dev.parent->parent);
 
-	if(t300rs->hdev->product == 0xb66d)
+	if(t300rs->hdev->product == TMT300RS_PS4_NORM_ID)
 		t300rs->buffer_length = T300RS_PS4_BUFFER_LENGTH;
 	else
 		t300rs->buffer_length = T300RS_NORM_BUFFER_LENGTH;
@@ -1427,7 +1428,7 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 	t300rs->close = t300rs->input_dev->close;
 
 	/* TODO: PS4 advanced mode? */
-	alt_mode = (t300rs->hdev->product == 0xb66f);
+	alt_mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID);
 
 	/* everythin went OK */
 	tmff2->data = t300rs;
@@ -1440,10 +1441,10 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 
 firmware_err:
 	kfree(t300rs->send_buffer);
-t300rs_err:
-	kfree(t300rs);
 send_err:
-	hid_err(tmff2->hdev, "failed creating force feedback device\n");
+	kfree(t300rs);
+t300rs_err:
+	hid_err(tmff2->hdev, "failed initializing T300RS\n");
 	return ret;
 }
 
@@ -1462,19 +1463,19 @@ static __u8 *t300rs_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,
 		unsigned int *rsize)
 {
 	switch (hdev->product) {
-		case 0xb66e:
+		case TMT300RS_PS3_NORM_ID:
 		/* normal PS3 mode */
 		rdesc = t300rs_rdesc_nrm_fixed;
 		*rsize = sizeof(t300rs_rdesc_nrm_fixed);
 		break;
 
-		case 0xb66d:
+		case TMT300RS_PS4_NORM_ID:
 		/* PS4 normal mode */
 		rdesc = t300rs_rdesc_ps4_fixed;
 		*rsize = sizeof(t300rs_rdesc_ps4_fixed);
 		break;
 
-		case 0xb66f:
+		case TMT300RS_PS3_ADV_ID:
 		/* PS3 advanced mode */
 		rdesc = t300rs_rdesc_adv_fixed;
 		*rsize = sizeof(t300rs_rdesc_adv_fixed);
