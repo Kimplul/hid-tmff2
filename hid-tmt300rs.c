@@ -75,22 +75,6 @@ struct usb_ctrlrequest t300rs_fw_request = {
 	.wLength = 8
 };
 
-
-struct t300rs_device_entry {
-	struct hid_device *hdev;
-	struct input_dev *input_dev;
-	struct hid_report *report;
-	struct hid_field *ff_field;
-	struct usb_device *usbdev;
-
-	int (*open)(struct input_dev *dev);
-	void (*close)(struct input_dev *dev);
-
-	u8 buffer_length;
-	u8 *send_buffer;
-};
-
-
 struct t300rs_data {
 	unsigned long quirks;
 	void *device_props;
@@ -390,7 +374,7 @@ static void t300rs_fill_header(struct t300rs_packet_header *packet_header,
 	packet_header->code = code;
 }
 
-static int t300rs_play_effect(void *data, struct tmff2_effect_state *state)
+int t300rs_play_effect(void *data, struct tmff2_effect_state *state)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_play {
@@ -411,7 +395,7 @@ static int t300rs_play_effect(void *data, struct tmff2_effect_state *state)
 	return ret;
 }
 
-static int t300rs_stop_effect(void *data, struct tmff2_effect_state *state)
+int t300rs_stop_effect(void *data, struct tmff2_effect_state *state)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_stop {
@@ -1132,7 +1116,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 	return ret;
 }
 
-static int t300rs_update_effect(void *data, struct tmff2_effect_state *state)
+int t300rs_update_effect(void *data, struct tmff2_effect_state *state)
 {
 	struct t300rs_device_entry *t300rs = data;
 	switch (state->effect.type) {
@@ -1154,7 +1138,7 @@ static int t300rs_update_effect(void *data, struct tmff2_effect_state *state)
 	}
 }
 
-static int t300rs_upload_effect(void *data, struct tmff2_effect_state *state)
+int t300rs_upload_effect(void *data, struct tmff2_effect_state *state)
 {
 	struct t300rs_device_entry *t300rs = data;
 	switch (state->effect.type) {
@@ -1201,7 +1185,7 @@ static int t300rs_switch_mode(void *data, uint16_t mode)
 	return 0;
 }
 
-static int t300rs_set_autocenter(void *data, uint16_t value)
+int t300rs_set_autocenter(void *data, uint16_t value)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_autocenter {
@@ -1236,7 +1220,7 @@ static int t300rs_set_autocenter(void *data, uint16_t value)
 	return ret;
 }
 
-static int t300rs_set_gain(void *data, uint16_t gain)
+int t300rs_set_gain(void *data, uint16_t gain)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_gain {
@@ -1257,7 +1241,7 @@ static int t300rs_set_gain(void *data, uint16_t gain)
 	return ret;
 }
 
-static int t300rs_set_range(void *data, uint16_t value)
+int t300rs_set_range(void *data, uint16_t value)
 {
 	struct t300rs_device_entry *t300rs = data;
 	/* it's important that we don't use t300rs->send_buffer, as range can be
@@ -1299,7 +1283,7 @@ err:
 	return ret;
 }
 
-static int t300rs_open(void *data)
+int t300rs_open(void *data)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_open {
@@ -1319,7 +1303,7 @@ static int t300rs_open(void *data)
 	return t300rs->open(t300rs->input_dev);
 }
 
-static int t300rs_close(void *data)
+int t300rs_close(void *data)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct t300rs_packet_close {

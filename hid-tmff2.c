@@ -552,6 +552,11 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 				goto wheel_err;
 			break;
 
+		case TMT248_PC_ID:
+			if ((ret = t248_populate_api(tmff2)))
+				goto wheel_err;
+			break;
+
 		default:
 			ret = -ENODEV;
 			goto wheel_err;
@@ -634,6 +639,8 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
+	/* t248 PC*/
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
 	{}
 };
 MODULE_DEVICE_TABLE(hid, tmff2_devices);

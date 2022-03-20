@@ -91,9 +91,41 @@ struct tmff2_device_entry {
 
 /* external */
 int t300rs_populate_api(struct tmff2_device_entry *tmff2);
+int t248_populate_api(struct tmff2_device_entry *tmff2);
 
-#define TMT300RS_PS3_NORM_ID 0xb66e
-#define TMT300RS_PS3_ADV_ID 0xb66f
-#define TMT300RS_PS4_NORM_ID 0xb66d
+#define TMT300RS_PS3_NORM_ID	0xb66e
+#define TMT300RS_PS3_ADV_ID	0xb66f
+#define TMT300RS_PS4_NORM_ID	0xb66d
+
+#define TMT248_PC_ID		0xb696
+
+/* apis to different wheel families */
+/* T248 at least uses the T300RS api, not sure if there are other wheels but that's
+ * why these functions are given global linkage */
+
+struct t300rs_device_entry {
+	struct hid_device *hdev;
+	struct input_dev *input_dev;
+	struct hid_report *report;
+	struct hid_field *ff_field;
+	struct usb_device *usbdev;
+
+	int (*open)(struct input_dev *dev);
+	void (*close)(struct input_dev *dev);
+
+	u8 buffer_length;
+	u8 *send_buffer;
+};
+
+int t300rs_play_effect(void *, struct tmff2_effect_state *);
+int t300rs_upload_effect(void *, struct tmff2_effect_state *);
+int t300rs_update_effect(void *, struct tmff2_effect_state *);
+int t300rs_stop_effect(void *, struct tmff2_effect_state *);
+
+int t300rs_open(void *);
+int t300rs_close(void *);
+int t300rs_set_gain(void *, uint16_t);
+int t300rs_set_range(void *, uint16_t);
+int t300rs_set_autocenter(void *, uint16_t);
 
 #endif /* __HID_TMFF2_H */
