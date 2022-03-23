@@ -408,7 +408,7 @@ static void tmff2_close(struct input_dev *dev)
 		return;
 
 	if (tmff2->close) {
-		tmff2->close(tmff2->data);
+		tmff2->close(tmff2->data, tmff2->hdev != 0);
 		return;
 	}
 
@@ -524,6 +524,7 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 
 	return 0;
 
+	input_ff_destroy(tmff2->input_dev);
 err:
 	return ret;
 }
@@ -611,7 +612,6 @@ static void tmff2_remove(struct hid_device *hdev)
 	if (!tmff2)
 		return;
 
-
 	cancel_delayed_work_sync(&tmff2->work);
 
 	dev = &tmff2->hdev->dev;
@@ -627,8 +627,11 @@ static void tmff2_remove(struct hid_device *hdev)
 	if (tmff2->params & PARAM_ALT_MODE)
 		device_remove_file(dev, &dev_attr_alt_mode);
 
-	tmff2->wheel_destroy(tmff2->data);
+	/* indicate that the underlying usb device should not be assumed to be
+	 * accessible */
+	tmff2->hdev = 0;
 	hid_hw_stop(hdev);
+	tmff2->wheel_destroy(tmff2->data);
 
 	kfree(tmff2->states);
 	kfree(tmff2);

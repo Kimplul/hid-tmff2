@@ -254,19 +254,21 @@ static int t248_open(void *data)
 	return t248->open(t248->input_dev);
 }
 
-static int t248_close(void *data)
+static int t248_close(void *data, int dev_accessible)
 {
 	struct t300rs_device_entry *t248 = data;
 	if (!t248)
 		return -ENODEV;
 
-	t248->send_buffer[0] = 0x01;
-	t248->send_buffer[1] = 0x05;
-	t300rs_send_int(t248);
+	if (dev_accessible) {
+		t248->send_buffer[0] = 0x01;
+		t248->send_buffer[1] = 0x05;
+		t300rs_send_int(t248);
 
-	t248->send_buffer[0] = 0x01;
-	t248->send_buffer[1] = 0x00;
-	t300rs_send_int(t248);
+		t248->send_buffer[0] = 0x01;
+		t248->send_buffer[1] = 0x00;
+		t300rs_send_int(t248);
+	}
 
 	t248->close(t248->input_dev);
 	return 0;

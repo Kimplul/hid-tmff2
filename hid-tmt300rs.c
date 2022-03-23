@@ -1303,7 +1303,7 @@ int t300rs_open(void *data)
 	return t300rs->open(t300rs->input_dev);
 }
 
-int t300rs_close(void *data)
+int t300rs_close(void *data, int dev_accessible)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct t300rs_packet_close {
@@ -1314,11 +1314,13 @@ int t300rs_close(void *data)
 	if (!t300rs)
 		return -ENODEV;
 
-	close_packet = (struct t300rs_packet_close *)t300rs->send_buffer;
-	close_packet->header.cmd = 0x01;
+	if (dev_accessible) {
+		close_packet = (struct t300rs_packet_close *)t300rs->send_buffer;
+		close_packet->header.cmd = 0x01;
 
-	if ((ret = t300rs_send_int(t300rs)))
-		hid_warn(t300rs->hdev, "failed sending close command\n");
+		if ((ret = t300rs_send_int(t300rs)))
+			hid_warn(t300rs->hdev, "failed sending close command\n");
+	}
 
 	t300rs->close(t300rs->input_dev);
 	return ret;
