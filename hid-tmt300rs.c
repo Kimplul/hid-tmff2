@@ -340,7 +340,7 @@ static u8 damper_values[] = {
 	0x7f, 0x07
 };
 
-static int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
+int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
 {
 	int i;
 	/* check that send_buffer fits into our report */
@@ -359,7 +359,7 @@ static int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, 
 	return 0;
 }
 
-static int t300rs_send_int(struct t300rs_device_entry *t300rs)
+int t300rs_send_int(struct t300rs_device_entry *t300rs)
 {
 	t300rs_send_buf(t300rs, t300rs->send_buffer, t300rs->buffer_length);
 	memset(t300rs->send_buffer, 0, t300rs->buffer_length);

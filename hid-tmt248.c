@@ -243,7 +243,14 @@ static int t248_open(void *data)
 	if (!t248)
 		return -ENODEV;
 
-	/* TODO: send usb commands to actually open device */
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x04;
+	t300rs_send_int(t248);
+
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x05;
+	t300rs_send_int(t248);
+
 	return t248->open(t248->input_dev);
 }
 
@@ -253,7 +260,14 @@ static int t248_close(void *data)
 	if (!t248)
 		return -ENODEV;
 
-	/* TODO: send usb commands to actually close device */
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x05;
+	t300rs_send_int(t248);
+
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x00;
+	t300rs_send_int(t248);
+
 	t248->close(t248->input_dev);
 	return 0;
 }
