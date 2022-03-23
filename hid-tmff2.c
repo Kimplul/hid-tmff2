@@ -627,8 +627,8 @@ static void tmff2_remove(struct hid_device *hdev)
 	if (tmff2->params & PARAM_ALT_MODE)
 		device_remove_file(dev, &dev_attr_alt_mode);
 
-	tmff2->wheel_destroy(tmff2->data);
 	hid_hw_stop(hdev);
+	tmff2->wheel_destroy(tmff2->data);
 
 	kfree(tmff2->states);
 	kfree(tmff2);
