@@ -11,6 +11,7 @@ extern int spring_level;
 extern int damper_level;
 extern int friction_level;
 extern int range;
+extern int gain;
 extern int alt_mode;
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
@@ -34,6 +35,7 @@ extern int alt_mode;
 #define PARAM_FRICTION_LEVEL	(1 << 2)
 #define PARAM_RANGE		(1 << 3)
 #define PARAM_ALT_MODE		(1 << 4)
+#define PARAM_GAIN		(1 << 5)
 
 #undef fixp_sin16
 #define fixp_sin16(v) (((v % 360) > 180) ?\

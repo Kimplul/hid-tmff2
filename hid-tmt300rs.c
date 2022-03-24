@@ -11,6 +11,7 @@ static const unsigned long t300rs_params =
 	PARAM_SPRING_LEVEL
 	| PARAM_DAMPER_LEVEL
 	| PARAM_FRICTION_LEVEL
+	| PARAM_GAIN
 	| PARAM_RANGE
 	| PARAM_ALT_MODE
 	;

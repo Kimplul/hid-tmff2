@@ -29,12 +29,18 @@ MODULE_PARM_DESC(friction_level,
 int range = 900;
 module_param(range, int, 0);
 MODULE_PARM_DESC(range,
-		"Range of wheel, depends on the wheel. Invalid values are ignored.");
+		"Range of wheel, depends on the wheel. Invalid values are ignored");
 
 int alt_mode = 0;
 module_param(alt_mode, int, 0);
 MODULE_PARM_DESC(alt_mode,
-		"Alternate mode, eg. F1 mode.");
+		"Alternate mode, eg. F1 mode");
+
+#define GAIN_MAX 65535
+int gain = 40000;
+module_param(gain, int, 0);
+MODULE_PARM_DESC(gain,
+		"Level of gain (0-65535)");
 
 static spinlock_t lock;
 static unsigned long lock_flags;
@@ -228,7 +234,36 @@ static ssize_t alt_mode_show(struct device *dev,
 }
 static DEVICE_ATTR_RW(alt_mode);
 
-static void tmff2_set_gain(struct input_dev *dev, uint16_t gain)
+static ssize_t gain_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	unsigned int value;
+	int ret;
+
+	if (!tmff2)
+		return -ENODEV;
+
+	if ((ret = kstrtouint(buf, 0, &value))) {
+		dev_err(dev, "kstrtouint failed at gain_store: %i", ret);
+		return ret;
+	}
+
+	gain = value;
+	if (tmff2->set_gain) /* if we can, update gain immediately */
+		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+
+	return count;
+}
+
+static ssize_t gain_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%i\n", gain);
+}
+static DEVICE_ATTR_RW(gain);
+
+static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
 
@@ -240,11 +275,11 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t gain)
 		return;
 	}
 
-	if (tmff2->set_gain(tmff2->data, gain))
+	if (tmff2->set_gain(tmff2->data, (value * gain) / GAIN_MAX))
 		hid_warn(tmff2->hdev, "unable to set gain\n");
 }
 
-static void tmff2_set_autocenter(struct input_dev *dev, uint16_t autocenter)
+static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
 
@@ -256,7 +291,7 @@ static void tmff2_set_autocenter(struct input_dev *dev, uint16_t autocenter)
 		return;
 	}
 
-	if (tmff2->set_autocenter(tmff2->data, autocenter))
+	if (tmff2->set_autocenter(tmff2->data, value))
 		hid_warn(tmff2->hdev, "unable to set autocenter\n");
 }
 
@@ -441,6 +476,13 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 
 
 	/* could use short circuiting but this is more explicit */
+	if (tmff2->params & PARAM_GAIN) {
+		if ((ret = device_create_file(dev, &dev_attr_gain))) {
+			hid_err(tmff2->hdev, "unable to create sysfs for gain\n");
+			goto gain_err;
+		}
+	}
+
 	if (tmff2->params & PARAM_ALT_MODE) {
 		if ((ret = device_create_file(dev, &dev_attr_alt_mode))) {
 			hid_err(tmff2->hdev, "unable to create sysfs for alt_mode\n");
@@ -487,6 +529,8 @@ spring_err:
 range_err:
 	device_remove_file(dev, &dev_attr_alt_mode);
 alt_err:
+	device_remove_file(dev, &dev_attr_gain);
+gain_err:
 	return ret;
 }
 
@@ -533,11 +577,17 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	if (tmff2->close)
 		tmff2->input_dev->close = tmff2_close;
 
-	if (tmff2->set_gain)
+	/* set defaults wherever possible */
+	if (tmff2->set_gain) {
 		ff->set_gain = tmff2_set_gain;
+		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+	}
 
 	if (tmff2->set_autocenter)
 		ff->set_autocenter = tmff2_set_autocenter;
+
+	if (tmff2->set_range)
+		tmff2->set_range(tmff2->data, range);
 
 	/* create files */
 	if ((ret = tmff2_create_files(tmff2)))
@@ -652,6 +702,9 @@ static void tmff2_remove(struct hid_device *hdev)
 
 	if (tmff2->params & PARAM_ALT_MODE)
 		device_remove_file(dev, &dev_attr_alt_mode);
+
+	if (tmff2->params & PARAM_GAIN)
+		device_remove_file(dev, &dev_attr_gain);
 
 	hid_hw_stop(hdev);
 	tmff2->wheel_destroy(tmff2->data);

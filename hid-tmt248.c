@@ -29,6 +29,7 @@ static const unsigned long t248_params =
 	| PARAM_DAMPER_LEVEL
 	| PARAM_FRICTION_LEVEL
 	| PARAM_RANGE
+	| PARAM_GAIN
 	;
 
 static const signed short t248_effects[] = {
