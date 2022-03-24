@@ -133,6 +133,7 @@ static int t248_interrupts(struct t300rs_device_entry *t248)
 	struct usb_interface *usbif = to_usb_interface(t248->hdev->dev.parent);
 	struct usb_host_endpoint *ep;
 	int ret, trans, b_ep, i;
+
 	if (!send_buf) {
 		hid_err(t248->hdev, "failed allocating send buffer\n");
 		return -ENOMEM;
@@ -166,6 +167,7 @@ int t248_wheel_init(struct tmff2_device_entry *tmff2)
 	struct t300rs_device_entry *t248 = kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
 	struct list_head *report_list;
 	int ret;
+
 
 	if (!t248) {
 		ret = -ENOMEM;
@@ -213,6 +215,7 @@ t248_err:
 int t248_wheel_destroy(void *data)
 {
 	struct t300rs_device_entry *t300rs = data;
+
 	if (!t300rs)
 		return -ENODEV;
 
@@ -224,6 +227,7 @@ int t248_wheel_destroy(void *data)
 int t248_set_range(void *data, uint16_t value)
 {
 	struct t300rs_device_entry *t248 = data;
+
 	if (value < 140) {
 		hid_info(t248->hdev, "value %i too small, clamping to 140\n", value);
 		value = 140;
@@ -240,6 +244,7 @@ int t248_set_range(void *data, uint16_t value)
 static int t248_open(void *data)
 {
 	struct t300rs_device_entry *t248 = data;
+
 	if (!t248)
 		return -ENODEV;
 
@@ -254,21 +259,20 @@ static int t248_open(void *data)
 	return t248->open(t248->input_dev);
 }
 
-static int t248_close(void *data, int dev_accessible)
+static int t248_close(void *data)
 {
 	struct t300rs_device_entry *t248 = data;
+
 	if (!t248)
 		return -ENODEV;
 
-	if (dev_accessible) {
-		t248->send_buffer[0] = 0x01;
-		t248->send_buffer[1] = 0x05;
-		t300rs_send_int(t248);
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x05;
+	t300rs_send_int(t248);
 
-		t248->send_buffer[0] = 0x01;
-		t248->send_buffer[1] = 0x00;
-		t300rs_send_int(t248);
-	}
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x00;
+	t300rs_send_int(t248);
 
 	t248->close(t248->input_dev);
 	return 0;

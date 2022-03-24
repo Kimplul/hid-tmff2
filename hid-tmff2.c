@@ -43,10 +43,10 @@ static struct tmff2_device_entry *tmff2_from_hdev(struct hid_device *hdev)
 {
 	struct tmff2_device_entry *tmff2;
 	spin_lock_irqsave(&lock, lock_flags);
-	if (!(tmff2 = hid_get_drvdata(hdev))) {
+
+	if (!(tmff2 = hid_get_drvdata(hdev)))
 		dev_err(&hdev->dev, "hdev private data not found\n");
-		return NULL;
-	}
+
 	spin_unlock_irqrestore(&lock, lock_flags);
 
 	return tmff2;
@@ -56,10 +56,10 @@ static struct tmff2_device_entry *tmff2_from_input(struct input_dev *input_dev)
 {
 	struct hid_device *hdev;
 	spin_lock_irqsave(&lock, lock_flags);
-	if (!(hdev = input_get_drvdata(input_dev))) {
+
+	if (!(hdev = input_get_drvdata(input_dev)))
 		dev_err(&input_dev->dev, "input_dev private data not found\n");
-		return NULL;
-	}
+
 	spin_unlock_irqrestore(&lock, lock_flags);
 
 	return tmff2_from_hdev(hdev);
@@ -90,6 +90,7 @@ static ssize_t spring_level_store(struct device *dev,
 static ssize_t spring_level_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+
 	return scnprintf(buf, PAGE_SIZE, "%u\n", spring_level);
 }
 static DEVICE_ATTR_RW(spring_level);
@@ -99,6 +100,7 @@ static ssize_t damper_level_store(struct device *dev,
 {
 	unsigned int value;
 	int ret;
+
 
 	ret = kstrtouint(buf, 0, &value);
 	if (ret) {
@@ -119,6 +121,7 @@ static ssize_t damper_level_store(struct device *dev,
 static ssize_t damper_level_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+
 	return scnprintf(buf, PAGE_SIZE, "%u\n", damper_level);
 }
 static DEVICE_ATTR_RW(damper_level);
@@ -128,6 +131,7 @@ static ssize_t friction_level_store(struct device *dev,
 {
 	unsigned int value;
 	int ret;
+
 
 	ret = kstrtouint(buf, 0, &value);
 	if (ret) {
@@ -150,6 +154,7 @@ static ssize_t friction_level_show(struct device *dev,
 {
 	size_t count;
 
+
 	count = scnprintf(buf, PAGE_SIZE, "%u\n", friction_level);
 
 	return count;
@@ -162,6 +167,7 @@ static ssize_t range_store(struct device *dev,
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
 	unsigned int value;
 	int ret;
+
 
 	if (!tmff2)
 		return -ENODEV;
@@ -182,6 +188,7 @@ static ssize_t range_store(struct device *dev,
 static ssize_t range_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+
 	return scnprintf(buf, PAGE_SIZE, "%u\n", range);
 }
 static DEVICE_ATTR_RW(range);
@@ -192,6 +199,7 @@ static ssize_t alt_mode_store(struct device *dev,
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
 	unsigned int value;
 	int ret;
+
 
 	if (!tmff2)
 		return -ENODEV;
@@ -215,6 +223,7 @@ static ssize_t alt_mode_show(struct device *dev,
 	/* TODO: could be cool to add in something like a small menu that gives
 	 * names and corresponding index to modes, or maybe parsing modes
 	 * directly? */
+
 	return scnprintf(buf, PAGE_SIZE, "%i\n", alt_mode);
 }
 static DEVICE_ATTR_RW(alt_mode);
@@ -222,6 +231,7 @@ static DEVICE_ATTR_RW(alt_mode);
 static void tmff2_set_gain(struct input_dev *dev, uint16_t gain)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+
 	if (!tmff2)
 		return;
 
@@ -237,6 +247,7 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t gain)
 static void tmff2_set_autocenter(struct input_dev *dev, uint16_t autocenter)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+
 	if (!tmff2)
 		return;
 
@@ -257,6 +268,7 @@ static void tmff2_work_handler(struct work_struct *w)
 	int max_count = 0, effect_id;
 	unsigned long time_now;
 	__u16 effect_length;
+
 
 	if (!tmff2)
 		return;
@@ -324,7 +336,7 @@ static void tmff2_work_handler(struct work_struct *w)
 		spin_unlock(&tmff2->lock);
 	}
 
-	if (max_count)
+	if (max_count && tmff2->allow_scheduling)
 		schedule_delayed_work(&tmff2->work, msecs_to_jiffies(timer_msecs));
 }
 
@@ -333,6 +345,7 @@ static int tmff2_upload(struct input_dev *dev,
 {
 	struct tmff2_effect_state *state;
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+
 	if (!tmff2)
 		return -ENODEV;
 
@@ -362,6 +375,7 @@ static int tmff2_play(struct input_dev *dev, int effect_id, int value)
 {
 	struct tmff2_effect_state *state;
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+
 	if (!tmff2)
 		return -ENODEV;
 
@@ -382,7 +396,7 @@ static int tmff2_play(struct input_dev *dev, int effect_id, int value)
 
 	spin_unlock(&tmff2->lock);
 
-	if (!delayed_work_pending(&tmff2->work))
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
 		schedule_delayed_work(&tmff2->work, 0);
 
 	return 0;
@@ -391,6 +405,7 @@ static int tmff2_play(struct input_dev *dev, int effect_id, int value)
 static int tmff2_open(struct input_dev *dev)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+
 	if (!tmff2)
 		return -ENODEV;
 
@@ -404,11 +419,15 @@ static int tmff2_open(struct input_dev *dev)
 static void tmff2_close(struct input_dev *dev)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+
 	if (!tmff2)
 		return;
 
+	/* since we're closing the device, no need to continue feeding it new data */
+	cancel_delayed_work_sync(&tmff2->work);
+
 	if (tmff2->close) {
-		tmff2->close(tmff2->data, tmff2->hdev != 0);
+		tmff2->close(tmff2->data);
 		return;
 	}
 
@@ -419,6 +438,7 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 {
 	struct device *dev = &tmff2->hdev->dev;
 	int ret;
+
 
 	/* could use short circuiting but this is more explicit */
 	if (tmff2->params & PARAM_ALT_MODE) {
@@ -474,6 +494,7 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 {
 	int ret, i;
 	struct ff_device *ff;
+
 	spin_lock_init(&lock);
 	spin_lock_init(&tmff2->lock);
 	INIT_DELAYED_WORK(&tmff2->work, tmff2_work_handler);
@@ -522,6 +543,7 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	if ((ret = tmff2_create_files(tmff2)))
 		goto err;
 
+	tmff2->allow_scheduling = 1;
 	return 0;
 
 	input_ff_destroy(tmff2->input_dev);
@@ -535,6 +557,7 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		kzalloc(sizeof(struct tmff2_device_entry), GFP_KERNEL);
 
 	int ret;
+
 
 	if (!tmff2) {
 		ret = -ENOMEM;
@@ -596,6 +619,7 @@ static __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		unsigned int *rsize)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(hdev);
+
 	if (!tmff2) /* not entirely sure what the best course of action would be here */
 		return rdesc;
 
@@ -609,9 +633,11 @@ static void tmff2_remove(struct hid_device *hdev)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(hdev);
 	struct device *dev;
+
 	if (!tmff2)
 		return;
 
+	tmff2->allow_scheduling = 0;
 	cancel_delayed_work_sync(&tmff2->work);
 
 	dev = &tmff2->hdev->dev;
@@ -627,9 +653,6 @@ static void tmff2_remove(struct hid_device *hdev)
 	if (tmff2->params & PARAM_ALT_MODE)
 		device_remove_file(dev, &dev_attr_alt_mode);
 
-	/* indicate that the underlying usb device should not be assumed to be
-	 * accessible */
-	tmff2->hdev = 0;
 	hid_hw_stop(hdev);
 	tmff2->wheel_destroy(tmff2->data);
 

@@ -62,6 +62,8 @@ struct tmff2_device_entry {
 
 	spinlock_t lock;
 
+	int allow_scheduling;
+
 	/* fields relevant to each actual device (T300, T150...) */
 	void *data;
 	unsigned long params;
@@ -79,7 +81,7 @@ struct tmff2_device_entry {
 
 	/* optional callbacks */
 	int (*open)(void *data);
-	int (*close)(void *data, int dev_accessible);
+	int (*close)(void *data);
 	int (*set_gain)(void *data, uint16_t gain);
 	int (*set_range)(void *data, uint16_t range);
 	int (*switch_mode)(void *data, uint16_t mode);
@@ -123,7 +125,7 @@ int t300rs_update_effect(void *, struct tmff2_effect_state *);
 int t300rs_stop_effect(void *, struct tmff2_effect_state *);
 
 int t300rs_open(void *);
-int t300rs_close(void *, int);
+int t300rs_close(void *);
 int t300rs_set_gain(void *, uint16_t);
 int t300rs_set_range(void *, uint16_t);
 int t300rs_set_autocenter(void *, uint16_t);
