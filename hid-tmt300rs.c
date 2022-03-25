@@ -7,6 +7,9 @@
 #define T300RS_NORM_BUFFER_LENGTH 63
 #define T300RS_PS4_BUFFER_LENGTH 31
 
+#define T300RS_DEFAULT_ATTACHMENT 0x06
+#define T300RS_F1_ATTACHMENT 0x03
+
 static const unsigned long t300rs_params =
 	PARAM_SPRING_LEVEL
 	| PARAM_DAMPER_LEVEL
@@ -1208,6 +1211,11 @@ static ssize_t t300rs_alt_mode_show(void *data, char *buf)
 	if (!t300rs)
 		return -ENODEV;
 
+	if (t300rs->attachment != T300RS_F1_ATTACHMENT)
+		/* we only support one native mode */
+		return scnprintf(buf, PAGE_SIZE, "%s: %s *\n",
+				t300rs_modes[0].id, t300rs_modes[0].label);
+
 	for (i = 0; i < ARRAY_SIZE(t300rs_modes); ++i) {
 		count += scnprintf(buf + count, PAGE_SIZE - count, "%s: %s",
 				t300rs_modes[i].id, t300rs_modes[i].label);
@@ -1229,11 +1237,14 @@ static ssize_t t300rs_alt_mode_show(void *data, char *buf)
 
 static ssize_t t300rs_alt_mode_store(void *data, const char *buf, size_t count)
 {
-	struct tmff2_device_entry *t300rs = data;
+	struct t300rs_device_entry *t300rs = data;
 	int i, len, mode_len;
 	char *lbuf;
 	if (!t300rs)
 		return -ENODEV;
+
+	if (t300rs->attachment != T300RS_F1_ATTACHMENT)
+		return count; /* don't do anything */
 
 	lbuf = kasprintf(GFP_KERNEL, "%s", buf);
 	if (!lbuf)
@@ -1443,6 +1454,79 @@ out:
 	return ret;
 }
 
+static int t300rs_get_attachment(struct t300rs_device_entry *t300rs)
+{
+	/* taken directly from hid_tminit */
+	struct __packed t300rs_attachment_response
+	{
+		uint16_t type;
+
+		union {
+			struct __packed {
+				uint16_t field0;
+				uint16_t field1;
+				uint8_t attachment;
+				uint8_t model;
+				uint16_t field2;
+				uint16_t field3;
+				uint16_t field4;
+				uint16_t field5;
+			} a;
+
+			struct __packed {
+				uint16_t field0;
+				uint16_t field1;
+				uint8_t attachment;
+				uint8_t model;
+			} b;
+		};
+	} *response = kzalloc(GFP_KERNEL, sizeof(struct t300rs_attachment_response));
+	struct usb_ctrlrequest t300rs_attachment_rq = {
+		.bRequestType = 0xc1,
+		.bRequest = 73,
+		.wValue = 0,
+		.wIndex = 0,
+		.wLength = sizeof(struct t300rs_attachment_response)
+	};
+	int ret, attachment;
+	if (!response)
+		return -ENODEV;
+
+	ret = usb_control_msg(t300rs->usbdev,
+			usb_rcvctrlpipe(t300rs->usbdev, 0),
+			t300rs_attachment_rq.bRequest,
+			t300rs_attachment_rq.bRequestType,
+			t300rs_attachment_rq.wValue,
+			t300rs_attachment_rq.wIndex,
+			response,
+			sizeof(struct t300rs_attachment_response),
+			USB_CTRL_SET_TIMEOUT
+			);
+
+	if (ret < 0) {
+		hid_err(t300rs->hdev, "could not fetch attachment: %i\n", ret);
+		goto out;
+	}
+
+	if (response->type == cpu_to_le16(0x49)) {
+		attachment = response->a.attachment;
+	} else if (response->type == cpu_to_le16(0x47)) {
+		attachment = response->b.attachment;
+	} else {
+		hid_err(t300rs->hdev, "unknown packet type %hx\n, please contact a maintainer",
+				response->type);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	kfree(response);
+	return attachment;
+
+out:
+	kfree(response);
+	return ret;
+}
+
 static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 {
 	struct t300rs_device_entry *t300rs = kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
@@ -1483,6 +1567,8 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 
 	/* TODO: PS4 advanced mode? */
 	t300rs->mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID);
+	if ((t300rs->attachment = t300rs_get_attachment(t300rs)) < 0)
+		t300rs->attachment = T300RS_DEFAULT_ATTACHMENT;
 
 	/* everythin went OK */
 	tmff2->data = t300rs;

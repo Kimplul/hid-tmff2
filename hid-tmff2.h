@@ -122,6 +122,7 @@ struct t300rs_device_entry {
 	void (*close)(struct input_dev *dev);
 
 	int mode;
+	int attachment;
 	u8 buffer_length;
 	u8 *send_buffer;
 };
