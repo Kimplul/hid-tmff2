@@ -1199,7 +1199,7 @@ static struct t300rs_alt_modes {
 	char *label;
 	uint16_t mode;
 } t300rs_modes[] = {
-	{"native", "T300RS base", 0},
+	{"base", "T300RS base", 0},
 	{"F1", "T300RS with F1 wheel attachment", 1}
 };
 
@@ -1212,7 +1212,7 @@ static ssize_t t300rs_alt_mode_show(void *data, char *buf)
 		return -ENODEV;
 
 	if (t300rs->attachment != T300RS_F1_ATTACHMENT)
-		/* we only support one native mode */
+		/* we only support one base mode */
 		return scnprintf(buf, PAGE_SIZE, "%s: %s *\n",
 				t300rs_modes[0].id, t300rs_modes[0].label);
 
