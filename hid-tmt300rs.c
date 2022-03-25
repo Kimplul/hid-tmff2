@@ -1167,23 +1167,92 @@ static int t300rs_switch_mode(void *data, uint16_t mode)
 	if (!t300rs)
 		return -ENODEV;
 
-	if(alt_mode == mode) /* already in specified mode */
+	if(t300rs->mode == mode) /* already in specified mode */
 		return 0;
 
 	if (mode == 0)
+		/* go to normal mode */
 		usb_control_msg(t300rs->usbdev,
 				usb_sndctrlpipe(t300rs->usbdev, 0),
 				83, 0x41, 5, 0, 0, 0,
 				USB_CTRL_SET_TIMEOUT
 				);
-	else
+	else if (mode == 1)
+		/* go to advanced mode */
 		usb_control_msg(t300rs->usbdev,
 				usb_sndctrlpipe(t300rs->usbdev, 0),
 				83, 0x41, 3, 0, 0, 0,
 				USB_CTRL_SET_TIMEOUT
 				);
+	else
+		hid_warn(t300rs->hdev, "mode %i not supported\n", mode);
+
 
 	return 0;
+}
+
+static struct t300rs_alt_modes {
+	char *id;
+	char *label;
+	uint16_t mode;
+} t300rs_modes[] = {
+	{"native", "T300RS base", 0},
+	{"F1", "T300RS with F1 wheel attachment", 1}
+};
+
+static ssize_t t300rs_alt_mode_show(void *data, char *buf)
+{
+	struct t300rs_device_entry *t300rs = data;
+	ssize_t count = 0;
+	int i;
+	if (!t300rs)
+		return -ENODEV;
+
+	for (i = 0; i < ARRAY_SIZE(t300rs_modes); ++i) {
+		count += scnprintf(buf + count, PAGE_SIZE - count, "%s: %s",
+				t300rs_modes[i].id, t300rs_modes[i].label);
+
+		if (count >= PAGE_SIZE - 1)
+			return count;
+
+		if (t300rs_modes[i].mode == t300rs->mode)
+			count += scnprintf(buf + count, PAGE_SIZE - count, " *\n");
+		else
+			count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
+
+		if (count >= PAGE_SIZE - 1)
+			return count;
+	}
+
+	return count;
+}
+
+static ssize_t t300rs_alt_mode_store(void *data, const char *buf, size_t count)
+{
+	struct tmff2_device_entry *t300rs = data;
+	int i, len, mode_len;
+	char *lbuf;
+	if (!t300rs)
+		return -ENODEV;
+
+	lbuf = kasprintf(GFP_KERNEL, "%s", buf);
+	if (!lbuf)
+		return -ENOMEM;
+
+	len = strlen(buf);
+	for (i = 0; i < ARRAY_SIZE(t300rs_modes); ++i) {
+		mode_len = strlen(t300rs_modes[i].id);
+		if (mode_len > len)
+			continue;
+
+		if (strncmp(lbuf, t300rs_modes[i].id, mode_len) == 0) {
+			t300rs_switch_mode(data, t300rs_modes[i].mode);
+			break;
+		}
+	}
+
+	kfree(lbuf);
+	return count;
 }
 
 int t300rs_set_autocenter(void *data, uint16_t value)
@@ -1413,7 +1482,7 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 	t300rs->close = t300rs->input_dev->close;
 
 	/* TODO: PS4 advanced mode? */
-	alt_mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID);
+	t300rs->mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID);
 
 	/* everythin went OK */
 	tmff2->data = t300rs;
@@ -1486,6 +1555,8 @@ int t300rs_populate_api(struct tmff2_device_entry *tmff2)
 	tmff2->set_gain = t300rs_set_gain;
 	tmff2->set_range = t300rs_set_range;
 	tmff2->switch_mode = t300rs_switch_mode;
+	tmff2->alt_mode_show = t300rs_alt_mode_show;
+	tmff2->alt_mode_store = t300rs_alt_mode_store;
 	tmff2->set_autocenter = t300rs_set_autocenter;
 	tmff2->wheel_fixup = t300rs_wheel_fixup;
 

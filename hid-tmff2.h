@@ -86,7 +86,11 @@ struct tmff2_device_entry {
 	int (*close)(void *data);
 	int (*set_gain)(void *data, uint16_t gain);
 	int (*set_range)(void *data, uint16_t range);
+	/* switch_mode has to not do anything if we're alredy in the specified
+	 * mode */
 	int (*switch_mode)(void *data, uint16_t mode);
+	ssize_t (*alt_mode_show)(void *data, char *buf);
+	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
 
@@ -117,6 +121,7 @@ struct t300rs_device_entry {
 	int (*open)(struct input_dev *dev);
 	void (*close)(struct input_dev *dev);
 
+	int mode;
 	u8 buffer_length;
 	u8 *send_buffer;
 };

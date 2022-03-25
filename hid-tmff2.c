@@ -199,40 +199,34 @@ static ssize_t range_show(struct device *dev,
 }
 static DEVICE_ATTR_RW(range);
 
-static ssize_t alt_mode_store(struct device *dev,
+static ssize_t alternate_modes_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
-	unsigned int value;
-	int ret;
-
 
 	if (!tmff2)
 		return -ENODEV;
 
-	if ((ret = kstrtouint(buf, 0, &value))) {
-		hid_err(tmff2->hdev, "kstrtouint failed at alt_mode_store: %i", ret);
-		return ret;
-	}
+	if (tmff2->alt_mode_store)
+		return tmff2->alt_mode_store(tmff2->data, buf, count);
 
-	if (tmff2->switch_mode) {
-		if ((ret = tmff2->switch_mode(tmff2->data, value)))
-			return ret;
-	}
-
-	return count;
+	return 0;
 }
 
-static ssize_t alt_mode_show(struct device *dev,
+static ssize_t alternate_modes_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	/* TODO: could be cool to add in something like a small menu that gives
-	 * names and corresponding index to modes, or maybe parsing modes
-	 * directly? */
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
 
-	return scnprintf(buf, PAGE_SIZE, "%i\n", alt_mode);
+	if (!tmff2)
+		return -ENODEV;
+
+	if (tmff2->alt_mode_show)
+		return tmff2->alt_mode_show(tmff2->data, buf);
+
+	return 0;
 }
-static DEVICE_ATTR_RW(alt_mode);
+static DEVICE_ATTR_RW(alternate_modes);
 
 static ssize_t gain_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -484,8 +478,8 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 	}
 
 	if (tmff2->params & PARAM_ALT_MODE) {
-		if ((ret = device_create_file(dev, &dev_attr_alt_mode))) {
-			hid_err(tmff2->hdev, "unable to create sysfs for alt_mode\n");
+		if ((ret = device_create_file(dev, &dev_attr_alternate_modes))) {
+			hid_err(tmff2->hdev, "unable to create sysfs for alternate_modes\n");
 			goto alt_err;
 		}
 	}
@@ -527,7 +521,7 @@ damper_err:
 spring_err:
 	device_remove_file(dev, &dev_attr_range);
 range_err:
-	device_remove_file(dev, &dev_attr_alt_mode);
+	device_remove_file(dev, &dev_attr_alternate_modes);
 alt_err:
 	device_remove_file(dev, &dev_attr_gain);
 gain_err:
@@ -588,6 +582,9 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 
 	if (tmff2->set_range)
 		tmff2->set_range(tmff2->data, range);
+
+	if (tmff2->switch_mode)
+		tmff2->switch_mode(tmff2->data, alt_mode);
 
 	/* create files */
 	if ((ret = tmff2_create_files(tmff2)))
@@ -701,7 +698,7 @@ static void tmff2_remove(struct hid_device *hdev)
 		device_remove_file(dev, &dev_attr_range);
 
 	if (tmff2->params & PARAM_ALT_MODE)
-		device_remove_file(dev, &dev_attr_alt_mode);
+		device_remove_file(dev, &dev_attr_alternate_modes);
 
 	if (tmff2->params & PARAM_GAIN)
 		device_remove_file(dev, &dev_attr_gain);
