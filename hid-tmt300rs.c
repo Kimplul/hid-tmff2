@@ -1170,6 +1170,7 @@ static int t300rs_switch_mode(void *data, uint16_t mode)
 	if (!t300rs)
 		return -ENODEV;
 
+	hid_info(t300rs->hdev, "switch\n");
 	if(t300rs->mode == mode) /* already in specified mode */
 		return 0;
 
@@ -1566,7 +1567,7 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 	t300rs->close = t300rs->input_dev->close;
 
 	/* TODO: PS4 advanced mode? */
-	t300rs->mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID);
+	alt_mode = t300rs->mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID);
 	if ((t300rs->attachment = t300rs_get_attachment(t300rs)) < 0)
 		t300rs->attachment = T300RS_DEFAULT_ATTACHMENT;
 
