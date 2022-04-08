@@ -1,4 +1,4 @@
-# Linux kernel module for the Thrustmaster T300RS wheel
+# Linux kernel module for Thrustmaster T300RS and T248 wheels
 
 ## Current state
 Playable. I've made some improvements to the dynamic updating of effects, and
@@ -21,7 +21,7 @@ With that in mind,
 
 Kernel modules require kernel headers to be installed.
 
-+ Debian-based: `apt install linux-headers-$(uname -m)` (typically `linux-headers-x86_64`
++ Debian-based: `apt install linux-headers-$(uname -r)`
 + Arch-based: `pacman -S linux-headers`
 + Fedora-based: `yum install kernel-devel kernel-headers`
 
@@ -49,29 +49,34 @@ Done!
 Done!
 > :warning: Warning: There have been reports that this driver does not work if the wheel's firmware version is any other than v. 31. To update the firmware, you will have to fire up a Windows installation and update the firmware using the official Thrustmaster tools.
 
+> :warning: Warning: There was a name change when adding support for the T248 from `hid-tmt300rs` to `hid-tmff-new`, and you may have to uninstall the older version of the driver.
+
 ## Additional tidbits
-    
-+ Change range:
-  
-Write a value between 0 and 1080 to
-`/sys/bus/hid/devices/XXXX:044F:B66E.XXX/range`
 
-+ Change autocenter and gain:
++ T300 RS has an advanced F1 mode that can be activated with an F1 attachment when in PS3 mode. The base wheel will also work in PS4 mode,
+ but it's less tested and if you encounter issues with this mode, please feel free to open up an issue about it.
+ 
++ T248 isn't as extensively tested as T300 RS, please see issues and open new ones if you encounter problems.
+  There is currently no support for the built-in screen.
 
-Use the default evdev ways, i.e. https://www.kernel.org/doc/html/v5.1/input/ff.html
-    
-+ Currently there is support for this driver in oversteer(https://github.com/berarma/oversteer), and ffbwrap(https://github.com/berarma/ffbtools) should work just fine.
-+ If the wheel has a deadzone in games, you can set up a udev rule:
++ To change gain, autocentering etc. use [Oversteer](https://github.com/berarma/oversteer).
+
++ If a wheel has a deadzone in games, you can try setting up a udev rule:
     
     `/etc/udev/rules.d/99-joydev.rules`
 
     ```
-    SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+    SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="WHEEL_ID", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
     ```
+    
+    where `WHEEL_ID` is
+    | Wheel                      | WHEEL_ID   |
+    |----------------------------|------|
+    | T300 RS, PS3 normal mode   | b66e |
+    | T300 RS, PS3 advanced mode | b66f |
+    | T300 RS, PS4 normal mode   | b66d |
+    | T248                       | b696 |
 
-This should make sure that the wheel behaves like you'd want from a
-wheel.
+    This should make sure that the wheel behaves like you'd want from a wheel.
 
-+ Change timer period:
-
-There have been reports that some games work better with a different timer period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and [#10](https://github.com/Kimplul/hid-tmff2/issues/10)). To change the timer period, create `/etc/modprobe.d/hid-tmt300rs.conf` and add `options hid-tmt300rs timer_msecs=NUMBER` into it. The default timer period is 8, but numbers as low as 2 should work alright.
++ There have been reports that some games work better with a different timer period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and [#10](https://github.com/Kimplul/hid-tmff2/issues/10)). To change the timer period, create `/etc/modprobe.d/hid-tmt300rs.conf` and add `options hid-tmt300rs timer_msecs=NUMBER` into it. The default timer period is 8, but numbers as low as 2 should work alright.
