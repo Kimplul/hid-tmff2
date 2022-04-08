@@ -53,6 +53,8 @@ Done!
 
 ## Additional tidbits
 
++ If you've bought a new wheel, you will most likely have to update the firmware through Windows before it will work with this driver.
+
 + T300 RS has an advanced F1 mode that can be activated with an F1 attachment when in PS3 mode. The base wheel will also work in PS4 mode,
  but it's less tested and if you encounter issues with this mode, please feel free to open up an issue about it.
  
