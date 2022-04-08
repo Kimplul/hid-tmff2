@@ -1,4 +1,3 @@
-obj-m += hid-tmt300rs.o
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 all: hid-tminit
