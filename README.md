@@ -53,6 +53,11 @@ Done!
 
 ## Additional tidbits
 
++ Until the updated `hid-tminit` is upstreamed, you might want to blacklist the kernel module `hid-thrustmaster`. Do this with
+    ```
+    echo 'blacklist hid_thrustmaster' > /etc/modprobe.d/hid_thrustmaster.con
+    ```
+
 + If you've bought a new wheel, you will most likely have to update the firmware through Windows before it will work with this driver.
 
 + T300 RS has an advanced F1 mode that can be activated with an F1 attachment when in PS3 mode. The base wheel will also work in PS4 mode,
