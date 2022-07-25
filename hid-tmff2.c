@@ -388,7 +388,7 @@ static int tmff2_upload(struct input_dev *dev,
 	state->effect = *effect;
 
 	if (old) {
-		if (test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags))
+		if (!test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags))
 			state->old = *old;
 
 		__set_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
