@@ -569,7 +569,7 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 
 	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
-	if (constant.level != constant_old.level) {
+	if ((constant.level != constant_old.level) || (effect.direction != old.direction)) {
 
 		t300rs_fill_header(&packet_mod_constant->header, effect.id, 0x0a);
 		packet_mod_constant->level = cpu_to_le16(level);
@@ -634,7 +634,9 @@ static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
 
 	level = (top * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
-	if (ramp.start_level != ramp_old.start_level || ramp.end_level != ramp_old.end_level) {
+	if ((ramp.start_level != ramp_old.start_level)
+			|| (ramp.end_level != ramp_old.end_level)
+			|| (effect.direction != old.direction)) {
 
 		t300rs_fill_header(&packet_mod_ramp->header, effect.id, 0x0e);
 		packet_mod_ramp->attribute = 0x03;
@@ -791,7 +793,8 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 
 	magnitude = magnitude < 0 ? -magnitude : magnitude;
 
-	if (periodic.magnitude != periodic_old.magnitude) {
+	if ((periodic.magnitude != periodic_old.magnitude)
+			|| (effect.direction != old.direction)) {
 
 		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
 		packet_mod_periodic->attribute = 0x01;
