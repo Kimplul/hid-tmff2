@@ -53,6 +53,10 @@ Done!
 
 ## Additional tidbits
 
++ Reportedly some games running under Wine/Proton won't recognize wheels without the official Thrustmaster drivers installed within the prefix. See [#46](https://github.com/Kimplul/hid-tmff2/issues/46#issuecomment-1199080845).
+
+  Note that you will still need the Linux driver, the Windows driver just installs some files needed by games to correctly recognize the Linux driver. The Windows driver itself does not work under Wine/Proton.
+
 + Until the updated `hid-tminit` is upstreamed, you might want to blacklist the kernel module `hid-thrustmaster`. Do this with
     ```
     echo 'blacklist hid_thrustmaster' > /etc/modprobe.d/hid_thrustmaster.con
