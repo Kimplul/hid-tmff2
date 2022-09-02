@@ -524,7 +524,6 @@ static int t300rs_update_duration(struct t300rs_device_entry *t300rs,
 		struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
-	struct ff_effect old = state->old;
 	struct t300rs_packet_mod_duration {
 		struct t300rs_packet_header header;
 		uint16_t marker;
