@@ -536,17 +536,14 @@ static int t300rs_update_duration(struct t300rs_device_entry *t300rs,
 
 	duration = effect.replay.length - 1;
 
-	if (effect.replay.length != old.replay.length) {
+	t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x49);
+	packet_mod_duration->marker = cpu_to_le16(0x4100);
+	packet_mod_duration->duration = cpu_to_le16(duration);
 
-		t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x49);
-		packet_mod_duration->marker = cpu_to_le16(0x4100);
-		packet_mod_duration->duration = cpu_to_le16(duration);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying duration\n");
-			goto error;
-		}
+	ret = t300rs_send_int(t300rs);
+	if (ret) {
+		hid_err(t300rs->hdev, "failed modifying duration\n");
+		goto error;
 	}
 
 error:
