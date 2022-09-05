@@ -53,7 +53,7 @@ Done!
 
 ## Additional tidbits
 
-+ Reportedly some games running under Wine/Proton won't recognize wheels without the official Thrustmaster drivers installed within the prefix. See [#46](https://github.com/Kimplul/hid-tmff2/issues/46#issuecomment-1199080845).
++ Reportedly some games running under Wine/Proton won't recognize wheels without the official Thrustmaster drivers installed within the prefix. See [#46](https://github.com/Kimplul/hid-tmff2/issues/46#issuecomment-1199080845). For installation instructions, see [wiki](https://github.com/Kimplul/hid-tmff2/wiki)
 
   Note that you will still need the Linux driver, the Windows driver just installs some files needed by games to correctly recognize the Linux driver. The Windows driver itself does not work under Wine/Proton.
 
