@@ -520,11 +520,11 @@ error:
 	return ret;
 }
 
-static int t300rs_update_duration(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+static int t300rs_update_simple_duration(struct t300rs_device_entry *t300rs,
+		struct tmff2_effect_state *state, unsigned type)
 {
 	struct ff_effect effect = state->effect;
-	struct t300rs_packet_mod_duration {
+	struct __packed t300rs_packet_mod_duration {
 		struct t300rs_packet_header header;
 		uint16_t marker;
 		uint16_t duration;
@@ -536,8 +536,74 @@ static int t300rs_update_duration(struct t300rs_device_entry *t300rs,
 	duration = effect.replay.length - 1;
 
 	t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x49);
-	packet_mod_duration->marker = cpu_to_le16(0x4100);
+	packet_mod_duration->marker = cpu_to_le16(0x4100 + type);
 	packet_mod_duration->duration = cpu_to_le16(duration);
+
+	ret = t300rs_send_int(t300rs);
+	if (ret) {
+		hid_err(t300rs->hdev, "failed modifying duration\n");
+		goto error;
+	}
+
+error:
+	return ret;
+}
+
+static int t300rs_update_periodic_duration(struct t300rs_device_entry *t300rs,
+		struct tmff2_effect_state *state, unsigned type)
+{
+	struct ff_effect effect = state->effect;
+	struct __packed t300rs_packet_mod_duration {
+		struct t300rs_packet_header header;
+		uint8_t type;
+		uint8_t marker;
+		uint16_t duration;
+	} *packet_mod_duration = (struct t300rs_packet_mod_duration *)t300rs->send_buffer;
+
+	uint16_t duration;
+	int ret = 0;
+
+	duration = effect.replay.length - 1;
+
+	t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x49);
+	packet_mod_duration->type = type;
+	packet_mod_duration->marker = 0x41;
+	packet_mod_duration->duration = cpu_to_le16(duration);
+
+	ret = t300rs_send_int(t300rs);
+	if (ret) {
+		hid_err(t300rs->hdev, "failed modifying duration\n");
+		goto error;
+	}
+
+error:
+	return ret;
+}
+
+static int t300rs_update_ramp_duration(struct t300rs_device_entry *t300rs,
+		struct tmff2_effect_state *state)
+{
+	struct ff_effect effect = state->effect;
+	struct __packed t300rs_packet_mod_duration {
+		struct t300rs_packet_header header;
+		uint8_t marker0;
+		uint16_t duration0;
+		uint8_t marker1;
+		uint8_t marker2;
+		uint16_t duration1;
+	} *packet_mod_duration = (struct t300rs_packet_mod_duration *)t300rs->send_buffer;
+
+	uint16_t duration;
+	int ret = 0;
+
+	duration = effect.replay.length - 1;
+
+	t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x4e);
+	packet_mod_duration->marker0 = 0x08;
+	packet_mod_duration->duration0 = cpu_to_le16(duration);
+	packet_mod_duration->marker1 = 0x05;
+	packet_mod_duration->marker2 = 0x41;
+	packet_mod_duration->duration1 = cpu_to_le16(duration);
 
 	ret = t300rs_send_int(t300rs);
 	if (ret) {
@@ -592,7 +658,7 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_update_duration(t300rs, state);
+	ret = t300rs_update_simple_duration(t300rs, state, 0x00);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying constant duration\n");
 		goto error;
@@ -662,7 +728,7 @@ static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_update_duration(t300rs, state);
+	ret = t300rs_update_ramp_duration(t300rs, state);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying ramp duration\n");
 		goto error;
@@ -744,7 +810,7 @@ static int t300rs_update_damper(struct t300rs_device_entry *t300rs,
 
 	}
 
-	ret = t300rs_update_duration(t300rs, state);
+	ret = t300rs_update_simple_duration(t300rs, state, 0x06);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying damper duration\n");
 		goto error;
@@ -775,19 +841,10 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 	} *packet_mod_periodic = (struct t300rs_packet_mod_periodic *)t300rs->send_buffer;
 
 	int ret;
-	int16_t magnitude;
-	uint16_t phase;
-	bool update_phase = false;
+	int16_t magnitude, phase;
 
 	magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 	phase = periodic.phase;
-	if(magnitude < 0){
-		phase += 0x4000;
-		phase = phase < 0 ? -phase : phase;
-		update_phase = true;
-	}
-
-	magnitude = magnitude < 0 ? -magnitude : magnitude;
 
 	if ((periodic.magnitude != periodic_old.magnitude)
 			|| (effect.direction != old.direction)) {
@@ -805,7 +862,7 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 	}
 
 	if (periodic.offset != periodic_old.offset) {
-		int16_t offset = periodic.offset;
+		uint16_t offset = periodic.offset;
 
 		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
 		packet_mod_periodic->attribute = 0x02;
@@ -819,7 +876,7 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 
 	}
 
-	if (periodic.phase != periodic_old.phase || update_phase) {
+	if (periodic.phase != periodic_old.phase) {
 
 		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
 		packet_mod_periodic->attribute = 0x04;
@@ -862,7 +919,7 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 		goto error;
 	}
 
-	ret = t300rs_update_duration(t300rs, state);
+	ret = t300rs_update_periodic_duration(t300rs, state, periodic.waveform - 0x57);
 	if (ret) {
 		hid_err(t300rs->hdev, "failed modifying periodic duration\n");
 		goto error;
@@ -1078,21 +1135,15 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 	} *packet_periodic = (struct t300rs_packet_periodic *)t300rs->send_buffer;
 
 	int ret;
-	uint16_t duration, magnitude, period, offset;
-	int16_t periodic_offset, phase;
+	uint16_t duration, period, offset, periodic_offset;
+	int16_t phase, magnitude;
 
 	duration = effect.replay.length - 1;
-
 	magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 
 	phase = periodic.phase;
-	if(magnitude < 0){
-		phase += 0x4000;
-		phase = phase < 0 ? -phase : phase;
-	}
-
-	magnitude = magnitude < 0 ? -magnitude : magnitude;
 	periodic_offset = periodic.offset;
+
 	period = periodic.period;
 	offset = effect.replay.delay;
 
@@ -1386,7 +1437,7 @@ int t300rs_open(void *data)
 int t300rs_close(void *data)
 {
 	struct t300rs_device_entry *t300rs = data;
-	struct t300rs_packet_close {
+	struct __packed t300rs_packet_close {
 		struct t300rs_setup_header header;
 	} *close_packet;
 	int ret;
