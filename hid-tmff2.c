@@ -619,6 +619,8 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		case TMT300RS_PS3_NORM_ID:
 		case TMT300RS_PS3_ADV_ID:
 		case TMT300RS_PS4_NORM_ID:
+		/* tx */
+		case TMTX_PC_ID:
 			if ((ret = t300rs_populate_api(tmff2)))
 				goto wheel_err;
 			break;
@@ -715,6 +717,8 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
+	/* tx */
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMTX_PC_ID)},
 	/* t248 PC*/
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
 	{}
