@@ -409,8 +409,6 @@ static int tmff2_play(struct input_dev *dev, int effect_id, int value)
 		return -ENODEV;
 
 	state = &tmff2->states[effect_id];
-	if (&state->effect == 0)
-		return 0;
 
 	spin_lock(&tmff2->lock);
 	if (value > 0) {
