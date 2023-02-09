@@ -693,6 +693,9 @@ static void tmff2_remove(struct hid_device *hdev)
 	cancel_delayed_work_sync(&tmff2->work);
 
 	dev = &tmff2->hdev->dev;
+	if (tmff2->params & PARAM_FRICTION_LEVEL)
+		device_remove_file(dev, &dev_attr_friction_level);
+
 	if (tmff2->params & PARAM_DAMPER_LEVEL)
 		device_remove_file(dev, &dev_attr_damper_level);
 
