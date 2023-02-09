@@ -163,7 +163,95 @@ err:
 	return ret;
 }
 
-int t248_wheel_init(struct tmff2_device_entry *tmff2)
+int t248_wheel_destroy(void *data)
+{
+	struct t300rs_device_entry *t300rs = data;
+
+	if (!t300rs)
+		return -ENODEV;
+
+	kfree(t300rs->send_buffer);
+	kfree(t300rs);
+	return 0;
+}
+
+int t248_set_range(void *data, uint16_t value)
+{
+	struct t300rs_device_entry *t248 = data;
+
+	if (value < 140) {
+		hid_info(t248->hdev, "value %i too small, clamping to 140\n", value);
+		value = 140;
+	}
+
+	if (value > 900) {
+		hid_info(t248->hdev, "value %i too large, clamping to 900\n", value);
+		value = 900;
+	}
+
+	return t300rs_set_range(data, value);
+}
+
+static int t248_send_open(struct t300rs_device_entry *t248)
+{
+	int r1, r2;
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x04;
+	if ((r1 = t300rs_send_int(t248)))
+		return r1;
+
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x05;
+	if ((r2 = t300rs_send_int(t248)))
+		return r2;
+
+	return 0;
+}
+
+static int t248_open(void *data, int open_mode)
+{
+	struct t300rs_device_entry *t248 = data;
+
+	if (!t248)
+		return -ENODEV;
+
+	if (open_mode)
+		t248_send_open(t248);
+
+	return t248->open(t248->input_dev);
+}
+
+static int t248_send_close(struct t300rs_device_entry *t248)
+{
+	int r1, r2;
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x05;
+	if ((r1 = t300rs_send_int(t248)))
+		return r1;
+
+	t248->send_buffer[0] = 0x01;
+	t248->send_buffer[1] = 0x00;
+	if ((r2 = t300rs_send_int(t248)))
+		return r2;
+
+	return 0;
+}
+
+static int t248_close(void *data, int open_mode)
+{
+	struct t300rs_device_entry *t248 = data;
+
+	if (!t248)
+		return -ENODEV;
+
+	if (open_mode)
+		t248_send_close(t248);
+
+	t248->close(t248->input_dev);
+	return 0;
+}
+
+int t248_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 {
 	struct t300rs_device_entry *t248 = kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
 	struct list_head *report_list;
@@ -202,6 +290,9 @@ int t248_wheel_init(struct tmff2_device_entry *tmff2)
 	tmff2->max_effects = T248_MAX_EFFECTS;
 	memcpy(tmff2->supported_effects, t248_effects, sizeof(t248_effects));
 
+	if (!open_mode)
+		t248_send_open(t248);
+
 	hid_info(t248->hdev, "force feedback for T248\n");
 	return 0;
 
@@ -211,72 +302,6 @@ send_err:
 t248_err:
 	hid_err(tmff2->hdev, "failed initializing T248\n");
 	return ret;
-}
-
-int t248_wheel_destroy(void *data)
-{
-	struct t300rs_device_entry *t300rs = data;
-
-	if (!t300rs)
-		return -ENODEV;
-
-	kfree(t300rs->send_buffer);
-	kfree(t300rs);
-	return 0;
-}
-
-int t248_set_range(void *data, uint16_t value)
-{
-	struct t300rs_device_entry *t248 = data;
-
-	if (value < 140) {
-		hid_info(t248->hdev, "value %i too small, clamping to 140\n", value);
-		value = 140;
-	}
-
-	if (value > 900) {
-		hid_info(t248->hdev, "value %i too large, clamping to 900\n", value);
-		value = 900;
-	}
-
-	return t300rs_set_range(data, value);
-}
-
-static int t248_open(void *data)
-{
-	struct t300rs_device_entry *t248 = data;
-
-	if (!t248)
-		return -ENODEV;
-
-	t248->send_buffer[0] = 0x01;
-	t248->send_buffer[1] = 0x04;
-	t300rs_send_int(t248);
-
-	t248->send_buffer[0] = 0x01;
-	t248->send_buffer[1] = 0x05;
-	t300rs_send_int(t248);
-
-	return t248->open(t248->input_dev);
-}
-
-static int t248_close(void *data)
-{
-	struct t300rs_device_entry *t248 = data;
-
-	if (!t248)
-		return -ENODEV;
-
-	t248->send_buffer[0] = 0x01;
-	t248->send_buffer[1] = 0x05;
-	t300rs_send_int(t248);
-
-	t248->send_buffer[0] = 0x01;
-	t248->send_buffer[1] = 0x00;
-	t300rs_send_int(t248);
-
-	t248->close(t248->input_dev);
-	return 0;
 }
 
 static __u8 *t248_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,

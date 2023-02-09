@@ -5,6 +5,11 @@
 #include "hid-tmff2.h"
 
 
+int open_mode = 1;
+module_param(open_mode, int, 0660);
+MODULE_PARM_DESC(open_mode,
+		"Whether to send mode change commands on open/close");
+
 int timer_msecs = DEFAULT_TIMER_PERIOD;
 module_param(timer_msecs, int, 0660);
 MODULE_PARM_DESC(timer_msecs,
@@ -439,7 +444,7 @@ static int tmff2_open(struct input_dev *dev)
 		return -ENODEV;
 
 	if (tmff2->open)
-		return tmff2->open(tmff2->data);
+		return tmff2->open(tmff2->data, open_mode);
 
 	hid_err(tmff2->hdev, "no open callback set\n");
 	return -EINVAL;
@@ -456,7 +461,7 @@ static void tmff2_close(struct input_dev *dev)
 	cancel_delayed_work_sync(&tmff2->work);
 
 	if (tmff2->close) {
-		tmff2->close(tmff2->data);
+		tmff2->close(tmff2->data, open_mode);
 		return;
 	}
 
@@ -538,7 +543,7 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	INIT_DELAYED_WORK(&tmff2->work, tmff2_work_handler);
 
 	/* get parameters etc from backend */
-	if ((ret = tmff2->wheel_init(tmff2)))
+	if ((ret = tmff2->wheel_init(tmff2, open_mode)))
 		goto err;
 
 

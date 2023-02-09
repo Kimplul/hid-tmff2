@@ -78,12 +78,12 @@ struct tmff2_device_entry {
 	int (*update_effect)(void *data, struct tmff2_effect_state *state);
 	int (*stop_effect)(void *data, struct tmff2_effect_state *state);
 
-	int (*wheel_init)(struct tmff2_device_entry *tmff2);
+	int (*wheel_init)(struct tmff2_device_entry *tmff2, int open_mode);
 	int (*wheel_destroy)(void *data);
 
 	/* optional callbacks */
-	int (*open)(void *data);
-	int (*close)(void *data);
+	int (*open)(void *data, int);
+	int (*close)(void *data, int);
 	int (*set_gain)(void *data, uint16_t gain);
 	int (*set_range)(void *data, uint16_t range);
 	/* switch_mode has to not do anything if we're alredy in the specified
@@ -132,8 +132,8 @@ int t300rs_upload_effect(void *, struct tmff2_effect_state *);
 int t300rs_update_effect(void *, struct tmff2_effect_state *);
 int t300rs_stop_effect(void *, struct tmff2_effect_state *);
 
-int t300rs_open(void *);
-int t300rs_close(void *);
+int t300rs_open(void *, int);
+int t300rs_close(void *, int);
 int t300rs_set_gain(void *, uint16_t);
 int t300rs_set_range(void *, uint16_t);
 int t300rs_set_autocenter(void *, uint16_t);

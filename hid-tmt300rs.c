@@ -1414,41 +1414,52 @@ err:
 	return ret;
 }
 
-int t300rs_open(void *data)
+static int t300rs_send_open(struct t300rs_device_entry *t300rs)
 {
-	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_open {
 		struct t300rs_setup_header header;
 	} *open_packet;
-
-	if (!t300rs)
-		return -ENODEV;
 
 	open_packet = (struct t300rs_packet_open *)t300rs->send_buffer;
 	open_packet->header.cmd = 0x01;
 	open_packet->header.code = 0x05;
 
-	if (t300rs_send_int(t300rs))
+	return t300rs_send_int(t300rs);
+}
+
+static int t300rs_send_close(struct t300rs_device_entry *t300rs)
+{
+	struct __packed t300rs_packet_open {
+		struct t300rs_setup_header header;
+	} *open_packet;
+
+	open_packet = (struct t300rs_packet_open *)t300rs->send_buffer;
+	open_packet->header.cmd = 0x01;
+
+	return t300rs_send_int(t300rs);
+}
+
+int t300rs_open(void *data, int open_mode)
+{
+	struct t300rs_device_entry *t300rs = data;
+	if (!t300rs)
+		return -ENODEV;
+
+	if (open_mode && t300rs_send_open(t300rs))
 		hid_warn(t300rs->hdev, "failed sending open command\n");
 
 	return t300rs->open(t300rs->input_dev);
 }
 
-int t300rs_close(void *data)
+int t300rs_close(void *data, int open_mode)
 {
 	struct t300rs_device_entry *t300rs = data;
-	struct __packed t300rs_packet_close {
-		struct t300rs_setup_header header;
-	} *close_packet;
 	int ret;
 
 	if (!t300rs)
 		return -ENODEV;
 
-	close_packet = (struct t300rs_packet_close *)t300rs->send_buffer;
-	close_packet->header.cmd = 0x01;
-
-	if ((ret = t300rs_send_int(t300rs)))
+	if (open_mode && (ret = t300rs_send_close(t300rs)))
 		hid_warn(t300rs->hdev, "failed sending close command\n");
 
 	t300rs->close(t300rs->input_dev);
@@ -1577,7 +1588,7 @@ out:
 	return ret;
 }
 
-static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
+static int t300rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 {
 	struct t300rs_device_entry *t300rs = kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
 	struct list_head *report_list;
@@ -1625,6 +1636,9 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2)
 	tmff2->params = t300rs_params;
 	tmff2->max_effects = T300RS_MAX_EFFECTS;
 	memcpy(tmff2->supported_effects, t300rs_effects, sizeof(t300rs_effects));
+
+	if (!open_mode)
+		t300rs_send_open(t300rs);
 
 	hid_info(t300rs->hdev, "force feedback for T300RS\n");
 	return 0;
