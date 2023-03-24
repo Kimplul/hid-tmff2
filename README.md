@@ -8,6 +8,20 @@ games inconsistent pedal mapping. Meaning that all pedals should be detected in 
 
 Anycase, **this version is usable in most force feedback games, supports
 rangesetting as well as gain and autocentering along with most force feedback effects.**
+
+### Help wanted with adding more Thrustmaster wheels
+
+Currently open requests for wheels:
+
++ [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
++ [TX](https://github.com/Kimplul/hid-tmff2/issues/48)
++ [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
++ [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
+
+If you would like to help add a wheel to this driver, please have a look through the
+[wiki](https://github.com/Kimplul/hid-tmff2/wiki#how-to-add-in-support-for-a-new-t-series-wheel) for what might need to be done.
+If you have a wheel that's not on the list, but suspect it might fit into the driver, please feel free to open up an issue about it.
+
 ## Small note
     
 While I haven't personally come across any crashes or lockups with this
@@ -47,9 +61,11 @@ Done!
 + reboot (not strictly necessary, but definitely recommended)
 
 Done!
-> :warning: Warning: There have been reports that this driver does not work if the wheel's firmware version is any other than v. 31. To update the firmware, you will have to fire up a Windows installation and update the firmware using the official Thrustmaster tools.
+> :warning: Warning: There have been reports that this driver does not work if the wheel's firmware version is older than v. 31.
+> To update the firmware, you will have to fire up a Windows installation and update the firmware using the official Thrustmaster tools.
 
-> :warning: Warning: There was a name change when adding support for the T248 from `hid-tmt300rs` to `hid-tmff-new`, and you may have to uninstall the older version of the driver.
+> :warning: Warning: There was a name change when adding support for the T248 from `hid-tmt300rs` to `hid-tmff-new`,
+> and you may have to uninstall the older version of the driver.
 
 ## Additional tidbits
 
