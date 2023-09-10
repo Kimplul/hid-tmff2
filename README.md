@@ -1,4 +1,4 @@
-# Linux kernel module for Thrustmaster T300RS and T248 wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX wheels
 
 ## Current state
 Playable. I've made some improvements to the dynamic updating of effects, and
@@ -14,7 +14,6 @@ rangesetting as well as gain and autocentering along with most force feedback ef
 Currently open requests for wheels:
 
 + [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
-+ [TX](https://github.com/Kimplul/hid-tmff2/issues/48)
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
 + [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
 
@@ -53,6 +52,8 @@ Done!
 
 > Note: On some systems, you will get an error/warning about SSL. This is normal for unsigned modules. For info on signing modules yourself (completely optional), see [here](https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html?highlight=module%20signing).
 
+> Note: Thrustmaster TX wheels aren't supported by `hid-tminit` as of yet, meaning that TX wheels have to be initialized with `tmrd`. Please see https://github.com/Kimplul/hid-tmff2/issues/48.
+
 ### DKMS
 
 + Unplug wheel from computer
@@ -86,6 +87,9 @@ Done!
 + T248 isn't as extensively tested as T300 RS, please see issues and open new ones if you encounter problems.
   There is currently no support for the built-in screen.
 
++ TX support is considered experimental, please see issues (especially https://github.com/Kimplul/hid-tmff2/issues/48) and open new ones
+  if you encounter issues.
+
 + To change gain, autocentering etc. use [Oversteer](https://github.com/berarma/oversteer).
 
 + If a wheel has a deadzone in games, you can try setting up a udev rule:
@@ -103,6 +107,7 @@ Done!
     | T300 RS, PS3 advanced mode | b66f |
     | T300 RS, PS4 normal mode   | b66d |
     | T248                       | b696 |
+
 
     This should make sure that the wheel behaves like you'd want from a wheel.
 
