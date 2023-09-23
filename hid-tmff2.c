@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <linux/hid.h>

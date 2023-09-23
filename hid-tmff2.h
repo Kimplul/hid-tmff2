@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifndef __HID_TMFF2_H
 #define __HID_TMFF2_H
 

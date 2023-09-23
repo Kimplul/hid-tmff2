@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include <linux/usb.h>
 #include <linux/hid.h>
 #include "hid-tmff2.h"
