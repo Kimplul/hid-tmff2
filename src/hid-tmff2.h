@@ -110,7 +110,7 @@ int tx_populate_api(struct tmff2_device_entry *tmff2);
 
 #define TX_ACTIVE 0xb669
 
-/* apis to different wheel families */
+/* APIs to different wheel families */
 /* T248 at least uses the T300RS api, not sure if there are other wheels but that's
  * why these functions are given global linkage */
 
@@ -144,4 +144,4 @@ int t300rs_set_autocenter(void *, uint16_t);
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len);
 int t300rs_send_int(struct t300rs_device_entry *t300rs);
 
-#endif /* __HID_TMFF2_H */
+#endif

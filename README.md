@@ -1,67 +1,57 @@
-# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and TX(experimental) wheels
 
-## Current state
-Playable. I've made some improvements to the dynamic updating of effects, and
-while still far for perfect, the experience is slowly getting better and better.
-Some drawbacks include possible effect inaccuracies in comparison with the Windows driver and in some
-games inconsistent pedal mapping. Meaning that all pedals should be detected in games, but may be mapped incorrectly.
+## Description
+A Linux kernel module for Thrustmaster T300RS, T248, and TX wheels is a software component designed to enhance the compatibility and functionality of these popular racing wheel peripherals when used with Linux-based operating systems. This kernel module allows seamless integration of Thrustmaster wheels with the Linux kernel, providing users with a robust and feature-rich experience for gaming and other applications.
 
-Anycase, **this version is usable in most force feedback games, supports
-rangesetting as well as gain and autocentering along with most force feedback effects.**
+I've made some improvements to the dynamic updating of effects, and while still far for perfect, the experience is slowly getting better and better. Some drawbacks include possible effect inaccuracies in comparison with the Windows driver and in some games inconsistent pedal mapping. Meaning that all pedals should be detected in games, but may be mapped incorrectly.
+
+> **Current version ``0.8`` is USABLE in most force feedback games, supports rangesetting as well as gain and autocentering along with most force feedback effects.** While I haven't personally come across any crashes or lockups with this version, I can't promise that they won't occur under any circumstances.
 
 ### Help wanted with adding more Thrustmaster wheels
-
 Currently open requests for wheels:
-
 + [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
 + [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
 
-If you would like to help add a wheel to this driver, please have a look through the
-[wiki](https://github.com/Kimplul/hid-tmff2/wiki#how-to-add-in-support-for-a-new-t-series-wheel) for what might need to be done.
-If you have a wheel that's not on the list, but suspect it might fit into the driver, please feel free to open up an issue about it.
-
-## Small note
-    
-While I haven't personally come across any crashes or lockups with this
-version, I can't promise that they won't occur under any circumstances.
-
-With that in mind,
+If you would like to help add a wheel to this driver, please have a look through the [wiki](https://github.com/Kimplul/hid-tmff2/wiki#how-to-add-in-support-for-a-new-t-series-wheel) and/or [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for what might need to be done. If you have a wheel that's not on the list, but suspect it might fit into the driver, please feel free to open up an issue about it.
 
 ## Installation
-
 ### Dependencies
-
 Kernel modules require kernel headers to be installed.
 
-+ Debian-based: `apt install linux-headers-$(uname -r)`
-+ Arch-based: `pacman -S linux-headers`
-+ Fedora-based: `yum install kernel-devel kernel-headers`
++ Debian-based: ``sudo apt install linux-headers-$(uname -r)``
++ Arch-based: ``sudo pacman -S linux-headers``
++ Fedora-based: ``sudo yum install kernel-devel kernel-headers``
 
+> **NOTE:** See [here](https://github.com/Kimplul/hid-tmff2/wiki/Integrating-driver-into-distros) for install instructions for other linux distributions.
 
 ### Manual installation
-
 + Unplug wheel from computer
-+ `git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git`
-+ `make`
-+ `sudo make install`
+```shell
+git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git
+cd hid-tmff2/src
+make
+sudo make install
+```
 + Plug wheel back in
-+ reboot (not strictly necessary, but definitely recommended)
++ Reboot (not strictly necessary, but definitely recommended)
     
 Done!
 
-> Note: On some systems, you will get an error/warning about SSL. This is normal for unsigned modules. For info on signing modules yourself (completely optional), see [here](https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html?highlight=module%20signing).
+> **NOTE:** On some systems, you will get an error/warning about SSL. This is normal for unsigned modules. For info on signing modules yourself (completely optional), see [here](https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html?highlight=module%20signing).
 
-> Note: Thrustmaster TX wheels aren't supported by `hid-tminit` as of yet, meaning that TX wheels have to be initialized with `tmrd`. Please see https://github.com/Kimplul/hid-tmff2/issues/48.
+> **NOTE:** Thrustmaster TX wheels aren't supported by `hid-tminit` as of yet, meaning that TX wheels have to be initialized with `tmrd`. Please see https://github.com/Kimplul/hid-tmff2/issues/48.
 
 ### DKMS
-
 + Unplug wheel from computer
-+ `sudo ./dkms-install.sh`
+```shell
+sudo bash ./dkms/dkms-install.sh
+```
 + Plug wheel back in
 + reboot (not strictly necessary, but definitely recommended)
 
 Done!
+
 > :warning: Warning: There have been reports that this driver does not work if the wheel's firmware version is older than v. 31.
 > To update the firmware, you will have to fire up a Windows installation and update the firmware using the official Thrustmaster tools.
 
@@ -69,13 +59,10 @@ Done!
 > and you may have to uninstall the older version of the driver.
 
 ## Additional tidbits
-
-+ Reportedly some games running under Wine/Proton won't recognize wheels without the official Thrustmaster drivers installed within the prefix. See [#46](https://github.com/Kimplul/hid-tmff2/issues/46#issuecomment-1199080845). For installation instructions, see [wiki](https://github.com/Kimplul/hid-tmff2/wiki)
-
-  Note that you will still need the Linux driver, the Windows driver just installs some files needed by games to correctly recognize the Linux driver. The Windows driver itself does not work under Wine/Proton.
++ Reportedly some games running under Wine/Proton won't recognize wheels without the official Thrustmaster drivers installed within the prefix. See [#46](https://github.com/Kimplul/hid-tmff2/issues/46#issuecomment-1199080845). For installation instructions, see [wiki](https://github.com/Kimplul/hid-tmff2/wiki). Note that you will still need the Linux driver, the Windows driver just installs some files needed by games to correctly recognize the Linux driver. The Windows driver itself does not work under Wine/Proton.
 
 + Until the updated `hid-tminit` is upstreamed, you might want to blacklist the kernel module `hid-thrustmaster`. Do this with
-    ```
+    ```shell
     echo 'blacklist hid_thrustmaster' > /etc/modprobe.d/hid_thrustmaster.con
     ```
 

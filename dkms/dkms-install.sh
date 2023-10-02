@@ -10,7 +10,7 @@ TM_VER=0.8
 DST="/usr/src/${TM_NAME}-${TM_VER}"
 
 mkdir -p "${DST}"
-cp -r ./* "${DST}"
+cp -r ../src/* "${DST}"
 
 dkms add -m "${TM_NAME}" -v "${TM_VER}"
 dkms build -m "${TM_NAME}" -v "${TM_VER}"

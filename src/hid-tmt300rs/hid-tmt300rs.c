@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <linux/usb.h>
 #include <linux/hid.h>
-#include "hid-tmff2.h"
+#include "../hid-tmff2.h"
 
 #define T300RS_MAX_EFFECTS 16
 #define T300RS_NORM_BUFFER_LENGTH 63

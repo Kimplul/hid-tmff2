@@ -1,18 +1,12 @@
-Here I will gather all info I can find out about the different force effects and
-their USB commands. All values seem to be little-endian.
-Also, general note, it seems like some effects are affected by the direction of
-the force, denoted by ***
+# Force Feedback Effects - Thrustmaster T300RS (incl. PS3/PS4 modes)
+Here I will gather all info I can find out about the different force feedback effects and their USB commands. All values seem to be little-endian. Also, general note, it seems like some effects are affected by the direction of the force, denoted by ``***``. As far as I can tell, ``fade_level`` and ``attack_level`` values are calculated by mapping the ``u16`` into ``s16`` and taking the absolute value, and after that multiplying by the direction.
 
-As far as I can tell, fade_level and attack_level values are calculated by
-mapping the u16 into s16 and taking the absolute value, and after that
-multiplying by the direction. 
+> **NOTE:** All values are examples of actual commands that I captured on the USB interface, not the only available ones.
 
-All values are examples of actual commands that I captured on the USB interface,
-not the only ones available.
 
-GENERAL:
-
-    Playing:
+## GENERAL
+### Playing
+```
     60 00 - standard header
     01 - ID
     89 - playing options
@@ -21,9 +15,10 @@ GENERAL:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-
-    Stopping/removing: (why are they rolled into one?)
+### Stopping/removing (why are they rolled into one?)
+```
     60 00 - standard header 
     01 - ID
     89 - playing options
@@ -32,9 +27,77 @@ GENERAL:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-FF_CONSTANT:
-    Initialization:
+## Open:
+```
+    60 01 - standard header?
+    04 - ?
+    00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    
+    (this command doesn't appear every time, odd)
+    60 12 - ?
+    bf 04 00 00 03 b7 1e - ? /* wow, this is different on different wheels? */
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    60 01 - ?
+    05 - ?
+    00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+## Close:
+```
+    60 01 - standard header?
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+## Rotation angle:
+```
+    60 08 - header plus settings?
+    11 - set rotation angle
+    55 d5 - angle (between ff ff and 7b 09, one degree is roughly 3c)
+    00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+## FF_AUTOCENTER:
+```    
+    60 08 - header plus settings?
+    03 - set autocenter force
+    8f 02 - force (between ff ff and 00 00)
+    00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+## FF_GAIN:
+```    
+    60 02 - header plus gain?
+    bf - gain (between ff and 00)
+    00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+## FF_CONSTANT
+### Initialization
+```
     60 00 - standard header
     01 - ID
     6a - new constant effect(?)
@@ -51,52 +114,58 @@ FF_CONSTANT:
     00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
+### Modifying (For dynamic updating of effects)
 
-    Modifying: (For dynamic updating of effects)
-        Direction: n/a
-        
-        Constant force:
-        60 00 - standard header
-        01 - ID
-        0a - modify constant force
-        05 16 - constant force ***
-        00 00 00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-        
-        Envelope:
-        60 00 - standard header
-        01 - ID
-        31 - modify envelope
-        84 - ID of envelope attribute ( attack_level 82,
-                                        attack_length 81,
-                                        fade_level 88,
-                                        fade_length 84  )
-        63 04 - value attribute should be set to ?***?
-        00 00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+#### Direction: ``N/A``
 
-        Duration:
-        60 00 - standard header
-        01 - ID
-        49 00 41 - modify timing?
-        6c 20 - length in milliseconds
-        00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+#### Constant force:
+```
+60 00 - standard header
+01 - ID
+0a - modify constant force
+05 16 - constant force ***
+00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-        Offset:
-        Not supported?
+#### Envelope:
+```
+60 00 - standard header
+01 - ID
+    31 - modify envelope
+84 - ID of envelope attribute ( attack_level 82,
+        attack_length 81,
+        fade_level 88,
+        fade_length 84  )
+    63 04 - value attribute should be set to ?***?
+    00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
+#### Duration:
+```
+    60 00 - standard header
+    01 - ID
+    49 00 41 - modify timing?
+    6c 20 - length in milliseconds
+    00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-FF_RAMP:
-    (Why on earth is it this difficult to figure out how a fucking ramp works?)
-    Init:
+#### Offset: ``N/A ?``
+
+## FF_RAMP
+(Why on earth is it this difficult to figure out how a ramp works?)
+### Init:
+```
     60 00 - standard header
     01 - ID
     6b - new ramp effect 
@@ -118,12 +187,11 @@ FF_RAMP:
     00 ff ff - end of init
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-    Modifying:
-        Sweet baby jesus
-        I'll figure this out later
-        Ramp(?):
-       60 00 - standard header
+```
+### Modifying:
+(Sweet baby jesus. I'll figure this out later ``Ramp(?)``)
+```
+    60 00 - standard header
        01 - ID
        0e - ???
        03 - ramp?
@@ -134,10 +202,10 @@ FF_RAMP:
        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-        
-        Envelope:
-        60 00 - standard header
+```     
+#### Envelope:
+```
+     60 00 - standard header
         01 - ID
         31 - modify envelope
         84 - ID of envelope attribute ( attack_level 82,
@@ -149,9 +217,9 @@ FF_RAMP:
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-        Duration:
-         
+```
+#### Duration:
+```     
         60 00
         01 - ID
         4e - ?
@@ -164,12 +232,12 @@ FF_RAMP:
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+#### Offset: ``N/A ?`` 
 
-        Offset:
-        Not supported?
-
-FF_SPRING:
-    Init:
+## FF_SPRING:
+### Init:
+```
     60 00 - standard header
     01 - ID
     64 - new conditional effect
@@ -187,12 +255,14 @@ FF_SPRING:
     00 ff ff - end of init
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-    Modifying:
-        Same as under
+### Modifying:
+Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
 
-FF_DAMPER + FF_FRICTION + FF_INERTIA:
-    Init:
+## FF_DAMPER + FF_FRICTION + FF_INERTIA:
+### Init:
+```
     60 00 - standard header
     02 -ID
     64 - new conditional effect
@@ -209,8 +279,9 @@ FF_DAMPER + FF_FRICTION + FF_INERTIA:
     00 ff ff - end of init
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    
-    Modifying:
+``` 
+### Modifying:
+```
         positive coefficient:
         60 00
         02 - ID
@@ -241,8 +312,10 @@ FF_DAMPER + FF_FRICTION + FF_INERTIA:
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-        Duration:
+### Duration:
+```
         60 00 - standard header
         01 - ID
         49 06 41 - modify timing?
@@ -251,11 +324,13 @@ FF_DAMPER + FF_FRICTION + FF_INERTIA:
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-        Offset:
-        Not supported?
+### Offset: ``N/A ?``
 
-FF_PERIODIC:
+## FF_PERIODIC:
+### Init
+```   
     60 00 - standard header
     01 - ID
     6b - new periodic effect
@@ -280,8 +355,10 @@ FF_PERIODIC:
     00 ff ff - end of init
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-    Modifying:
+### Modifying:
+```
         magnitude:
         60 00
         02 - ID
@@ -323,8 +400,10 @@ FF_PERIODIC:
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
+```
 
-        Envelope:
+### Envelope:
+```
         60 00 - standard header
         01 - ID
         31 - modify envelope
@@ -337,9 +416,10 @@ FF_PERIODIC:
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-        Duration:
-
+### Duration:
+```
         Square:
         60 00
         01 - ID
@@ -399,64 +479,64 @@ FF_PERIODIC:
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
         00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
-        Offset:
-        Not supported?
+### Offset: ``N/A ?``
 
-
-FF_AUTOCENTER:
-    60 08 - header plus settings?
-    03 - set autocenter force
-    8f 02 - force (between ff ff and 00 00)
-    00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-FF_GAIN:
-    60 02 - header plus gain?
-    bf - gain (between ff and 00)
-    00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-Rotation angle:
-    60 08 - header plus settings?
-    11 - set rotation angle
-    55 d5 - angle (between ff ff and 7b 09, one degree is roughly 3c)
-    00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-Open:
-    60 01 - standard header?
-    04 - ?
-    00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    
-    (this command doesn't appear every time, odd)
-    60 12 - ?
-    bf 04 00 00 03 b7 1e - ? /* wow, this is different on different wheels? */
-    00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-    60 01 - ?
-    05 - ?
-    00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-Close:
-    60 01 - standard header?
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
+## PS4 Input
+```
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 226 /* wheel */
+ff00.0021 = 125 /* wheel */
+ff00.0021 = 255 /* gas */
+ff00.0021 = 255 /* gas */
+ff00.0021 = 255 /* brake */
+ff00.0021 = 255 /* brake */
+ff00.0021 = 255 /* clutch */
+ff00.0021 = 255 /* clutch */
+ff00.0021 = 0
+ff00.0021 = 255
+ff00.0021 = 255
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+ff00.0021 = 0
+```
