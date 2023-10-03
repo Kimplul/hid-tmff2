@@ -1,11 +1,20 @@
 # Contributing
 
 ## Overview
-This file contains general contributing information, but individual parts also may have more specific information to them, linked here:
-    - ``[FFBEffects-T300RS](./FFBEffects-T300RS.md)``: Force Feedback Effects example for T300RS
-    - ``[FFBEffects-T248](./FFBEffects-T248.md)``: Force Feedback Effects example for T300RS
-    - ``[To-Do](./TODO.md)``: TO-DO list for maintainers
-    - ``[Structure](https://github.com/Kimplul/hid-tmff2/wiki#structure-of-the-thrustmaster-device-stack)``: Structure of Thrustmaster device stack
+This file contains general contributing information. This project is seeking for help from people who can contribute. If you have a wheel that's not on the list, but suspect it might fit into the driver, please feel free to open up an issue about it.
+
+Currently open requests for wheels:
+- [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
+- [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
+- [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
+- [T128P](https://github.com/Kimplul/hid-tmff2/issues/67)
+
+Other documents available are linked here:
+
+- [FFBEffects-T300RS](./FFBEffects-T300RS.md): Force Feedback Effects example for T300RS
+- [FFBEffects-T248](./FFBEffects-T248.md): Force Feedback Effects example for T248
+- [Structure](https://github.com/Kimplul/hid-tmff2/wiki#structure-of-the-thrustmaster-device-stack): Structure of Thrustmaster device stack
+- [TO-DO](./TODO.md): TO-DO list for maintainers
 
 ## How to add in support for a new T-series wheel?
 Should probably not be too often that you need this info, but essentially use wireshark like in the previous example, but spin up a Windows virtual machine and install the Thrustmaster drivers on to it, and pass the device to the virtual machine. I prefer to use ``qemu`` with ``virt-manager`` as a frontend. With the wheel working under Windows, install [fedit.exe](https://gimx.fr/download/b882e209a0ac023d03abbf560dfc3f25fe6367ca/fedit.zip) and methodically go through all effects the device supports and compare the USB packets the driver sends out. You should be able to build up a table of what each value in the USB packet means, see [FFBEffects-T300RS.md](./FFBEffects-T300RS.md) for an example of what I found out about the T300.
