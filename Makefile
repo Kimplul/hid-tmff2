@@ -1,16 +1,16 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-all: deps/tminit
+all: hid-tminit
 	$(MAKE) -C $(KDIR) M=$(shell pwd) modules
 
-install: deps/tminit
+install: hid-tminit
 	$(MAKE) -C $(KDIR) M=$(shell pwd) modules_install
 	depmod -A
 
-clean: deps/tminit
+clean: hid-tminit
 	$(MAKE) -C $(KDIR) M=$(shell pwd) clean
 
 
-.PHONY: deps/tminit
-deps/tminit:
-	$(MAKE) -C tminit KDIR="$(KDIR)" $(MAKECMDGOALS)
+.PHONY: hid-tminit
+hid-tminit:
+	$(MAKE) -C deps/tminit KDIR="$(KDIR)" $(MAKECMDGOALS)
