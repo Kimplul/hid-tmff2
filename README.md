@@ -1,8 +1,8 @@
 # Linux kernel module for Thrustmaster T300RS, T248 and TX(experimental) wheels
 > **DISCLAIMER:** The module is now ready for near-stable USE in most force feedback games, supports rangesetting as well as gain and autocentering along with most force feedback effects. While I haven't personally come across any crashes or lockups with this version, I can't promise that they won't occur under any circumstances.
 
-![GitHub last commit (branch)](https://img.shields.io/github/last-commit/Kimplul/hid-tmff2/master)
-![GitHub](https://img.shields.io/github/license/Kimplul/hid-tmff2)
+![GitHub last commit (master)](https://img.shields.io/github/last-commit/Kimplul/hid-tmff2/master)
+![License](https://img.shields.io/github/license/Kimplul/hid-tmff2)
 ![GitHub contributors](https://img.shields.io/github/contributors/Kimplul/hid-tmff2)
 
 
