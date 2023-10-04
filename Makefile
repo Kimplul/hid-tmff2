@@ -13,4 +13,4 @@ clean: hid-tminit
 
 .PHONY: hid-tminit
 hid-tminit:
-	$(MAKE) -C deps/tminit KDIR="$(KDIR)" $(MAKECMDGOALS)
+	$(MAKE) -C deps/hid-tminit KDIR="$(KDIR)" $(MAKECMDGOALS)
