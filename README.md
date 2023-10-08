@@ -99,6 +99,7 @@ for wheels:
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
 + [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
 + [T128P](https://github.com/Kimplul/hid-tmff2/issues/67)
++ [TS-PC](https://github.com/Kimplul/hid-tmff2/issues/65)
 
 ## FAQ (Frequently Asked Questions)
 + Reportedly some games running under Wine/Proton won't recognize wheels without

@@ -6,12 +6,6 @@ This project is seeking for help from people who can contribute. If you have a
 wheel that's not on the list, but suspect it might fit into the driver, please
 feel free to open up an issue about it.
 
-Currently open requests for wheels:
-+ [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
-+ [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
-+ [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
-+ [T128P](https://github.com/Kimplul/hid-tmff2/issues/67)
-
 Other documents available are linked here:
 
 + [FFBEEFFECTS](./FFBEFFECTS.md):
