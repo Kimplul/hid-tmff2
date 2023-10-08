@@ -69,7 +69,7 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
 > **NOTE:** On some systems, you will get an error/warning about SSL. This is
 > normal for unsigned modules. For info on signing modules yourself
 > (completely optional), see
-> [here](https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html?highlight=module%20signing).
+> [here](https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html).
 
 > **NOTE:** Thrustmaster TX wheels aren't supported by `hid-tminit` as of yet,
 > meaning that TX wheels have to be initialized with `tmdrv`. Please see
