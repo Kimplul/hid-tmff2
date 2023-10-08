@@ -101,7 +101,6 @@ static ssize_t spring_level_store(struct device *dev,
 static ssize_t spring_level_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-
 	return scnprintf(buf, PAGE_SIZE, "%u\n", spring_level);
 }
 static DEVICE_ATTR_RW(spring_level);
@@ -132,7 +131,6 @@ static ssize_t damper_level_store(struct device *dev,
 static ssize_t damper_level_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-
 	return scnprintf(buf, PAGE_SIZE, "%u\n", damper_level);
 }
 static DEVICE_ATTR_RW(damper_level);
@@ -163,12 +161,7 @@ static ssize_t friction_level_store(struct device *dev,
 static ssize_t friction_level_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	size_t count;
-
-
-	count = scnprintf(buf, PAGE_SIZE, "%u\n", friction_level);
-
-	return count;
+	return scnprintf(buf, PAGE_SIZE, "%u\n", friction_level);
 }
 static DEVICE_ATTR_RW(friction_level);
 
@@ -178,7 +171,6 @@ static ssize_t range_store(struct device *dev,
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
 	unsigned int value;
 	int ret;
-
 
 	if (!tmff2)
 		return -ENODEV;
@@ -199,7 +191,6 @@ static ssize_t range_store(struct device *dev,
 static ssize_t range_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-
 	return scnprintf(buf, PAGE_SIZE, "%u\n", range);
 }
 static DEVICE_ATTR_RW(range);
@@ -333,7 +324,7 @@ static void tmff2_work_handler(struct work_struct *w)
 			} else {
 				__clear_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 				/* if we're uploading an effect, it's bound to be the up
-				 * to date available */
+				 * to date */
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 			}
 		}
@@ -458,6 +449,8 @@ static void tmff2_close(struct input_dev *dev)
 		return;
 
 	/* since we're closing the device, no need to continue feeding it new data */
+	/* TODO: check somewhere that multiple users can't open us at the same
+	 * time */
 	cancel_delayed_work_sync(&tmff2->work);
 
 	if (tmff2->close) {
@@ -620,7 +613,6 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	hid_set_drvdata(tmff2->hdev, tmff2);
 
 	switch (tmff2->hdev->product) {
-		/* t300rs */
 		case TMT300RS_PS3_NORM_ID:
 		case TMT300RS_PS3_ADV_ID:
 		case TMT300RS_PS4_NORM_ID:

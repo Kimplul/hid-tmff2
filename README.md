@@ -116,7 +116,7 @@ for wheels:
   [upstreamed](https://github.com/scarburato/hid-tminit), you might want to
   blacklist the kernel module `hid-thrustmaster`. Do this with
   ```shell
-  echo 'blacklist hid_thrustmaster' > /etc/modprobe.d/hid_thrustmaster.con
+  echo 'blacklist hid_thrustmaster' > /etc/modprobe.d/hid_thrustmaster.conf
   ```
 
 + If you've bought a new wheel, you will most likely have to update the firmware
@@ -141,9 +141,9 @@ for wheels:
 + If a wheel has a deadzone in games, you can try setting up a udev rule:
   `/etc/udev/rules.d/99-joydev.rules`
 
-  ``` SUBSYSTEM=="input", ATTRS{idVendor}=="044f",
-  ATTRS{idProduct}=="WHEEL_ID", RUN+="/usr/bin/evdev-joystick --evdev
-  %E{DEVNAME} --deadzone 0" ```
+  ```
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="WHEEL_ID", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  ```
 
   where `WHEEL_ID` is
 
@@ -153,6 +153,7 @@ for wheels:
   | T300 RS, PS3 advanced mode | b66f       |
   | T300 RS, PS4 normal mode   | b66d       |
   | T248                       | b696       |
+  | TX                         | b669       |
 
 
   This should make sure that the wheel behaves like you'd want from a wheel.

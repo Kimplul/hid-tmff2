@@ -15,13 +15,16 @@ Currently open requests for wheels:
 Other documents available are linked here:
 
 + [FFBEEFFECTS](./FFBEFFECTS.md):
-    Force feedback effects example for T300RS and compatible wheels
+  Force feedback effects example for T300RS and compatible wheels
 
 + [STRUCTURE](./STRUCTURE.md):
-    Structure of Thrustmaster device stack
+  Structure of Thrustmaster device stack
+
++ [DRIVER.md](./DRIVER.md):
+  Info on installing Thrustmaster drivers under Wine
 
 + [TODO](./TODO.md):
-    TO-DO list for maintainers
+  TODO list for maintainers
 
 ## How to capture what effects a game sends to the driver?
 
