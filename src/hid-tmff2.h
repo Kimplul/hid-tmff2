@@ -17,7 +17,7 @@ extern int alt_mode;
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
 /* the wheel seems to only be capable of processing a certain number of
- * interrupts per second, and if this value is too low the kernel urb buffer(or
+ * interrupts per second, and if this value is too low the kernel urb buffer (or
  * some buffer at least) fills up. Optimally I would figure out some way to
  * space out the interrupts so that they all leave at regular intervals, but
  * for now this is good enough, go slow enough that everything works.
@@ -66,7 +66,7 @@ struct tmff2_device_entry {
 
 	int allow_scheduling;
 
-	/* fields relevant to each actual device (T300, T150...) */
+	/* fields relevant to each actual device (T300, T248...) */
 	void *data;
 	unsigned long params;
 	unsigned long max_effects;
@@ -86,15 +86,16 @@ struct tmff2_device_entry {
 	int (*close)(void *data, int);
 	int (*set_gain)(void *data, uint16_t gain);
 	int (*set_range)(void *data, uint16_t range);
-	/* switch_mode has to not do anything if we're alredy in the specified
-	 * mode */
+	/* switch_mode is required to not do anything if we're alredy in the
+	 * specified mode */
 	int (*switch_mode)(void *data, uint16_t mode);
 	ssize_t (*alt_mode_show)(void *data, char *buf);
 	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
 
-	/* void pointers are dangerous, I know, but in this case likely the best option... */
+	/* void pointers are dangerous, I know, but in this case likely the
+	 * best option... */
 };
 
 /* external */
@@ -108,11 +109,11 @@ int tx_populate_api(struct tmff2_device_entry *tmff2);
 
 #define TMT248_PC_ID		0xb696
 
-#define TX_ACTIVE 0xb669
+#define TX_ACTIVE               0xb669
 
-/* apis to different wheel families */
-/* T248 at least uses the T300RS api, not sure if there are other wheels but that's
- * why these functions are given global linkage */
+/* APIs to different wheel families */
+/* T248 and TX at least uses the T300RS api, not sure if there are other wheels
+ * but that's why these functions are given global linkage */
 
 struct t300rs_device_entry {
 	struct hid_device *hdev;
@@ -144,4 +145,4 @@ int t300rs_set_autocenter(void *, uint16_t);
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len);
 int t300rs_send_int(struct t300rs_device_entry *t300rs);
 
-#endif /* __HID_TMFF2_H */
+#endif

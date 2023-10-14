@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <linux/usb.h>
 #include <linux/hid.h>
-#include "hid-tmff2.h"
+#include "../hid-tmff2.h"
 
-#define T248_MAX_EFFECTS 16
-#define T248_BUFFER_LENGTH 63
+#define TMTX_MAX_EFFECTS 16
+#define TMTX_BUFFER_LENGTH 63
 
 static const u8 setup_0[64] = { 0x42, 0x01 };
 static const u8 setup_1[64] = { 0x0a, 0x04, 0x90, 0x03 };
@@ -254,7 +254,7 @@ int tx_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	tx->hdev = tmff2->hdev;
 	tx->input_dev = tmff2->input_dev;
 	tx->usbdev = to_usb_device(tmff2->hdev->dev.parent->parent);
-	tx->buffer_length = T248_BUFFER_LENGTH;
+	tx->buffer_length = TMTX_BUFFER_LENGTH;
 
 	tx->send_buffer = kzalloc(tx->buffer_length, GFP_KERNEL);
 	if (!tx->send_buffer) {
@@ -275,7 +275,7 @@ int tx_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	/* everything went OK */
 	tmff2->data = tx;
 	tmff2->params = tx_params;
-	tmff2->max_effects = T248_MAX_EFFECTS;
+	tmff2->max_effects = TMTX_MAX_EFFECTS;
 	memcpy(tmff2->supported_effects, tx_effects, sizeof(tx_effects));
 
 	if (!open_mode)

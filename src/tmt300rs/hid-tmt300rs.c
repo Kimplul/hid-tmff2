@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <linux/usb.h>
 #include <linux/hid.h>
-#include "hid-tmff2.h"
+#include "../hid-tmff2.h"
 
 #define T300RS_MAX_EFFECTS 16
 #define T300RS_NORM_BUFFER_LENGTH 63
@@ -1187,7 +1187,8 @@ int t300rs_update_effect(void *data, struct tmff2_effect_state *state)
 		case FF_PERIODIC:
 			return t300rs_update_periodic(t300rs, state);
 		default:
-			hid_err(t300rs->hdev, "invalid effect type: %x", state->effect.type);
+			hid_err(t300rs->hdev, "invalid effect type: %x",
+					state->effect.type);
 			return -1;
 	}
 }
@@ -1209,7 +1210,8 @@ int t300rs_upload_effect(void *data, struct tmff2_effect_state *state)
 		case FF_PERIODIC:
 			return t300rs_upload_periodic(t300rs, state);
 		default:
-			hid_err(t300rs->hdev, "invalid effect type: %x", state->effect.type);
+			hid_err(t300rs->hdev, "invalid effect type: %x",
+					state->effect.type);
 			return -1;
 	}
 }
@@ -1328,7 +1330,9 @@ int t300rs_set_autocenter(void *data, uint16_t value)
 	if (!t300rs)
 		return -ENODEV;
 
-	/* TODO: this should probably also use a separately allocated buffer? */
+	/* TODO: this should probably also use a separately allocated buffer?
+	 * someone might change autocentering while we're updating the buffer
+	 * which would cause corruption */
 	autocenter_packet = (struct t300rs_packet_autocenter *)t300rs->send_buffer;
 
 	autocenter_packet->header.cmd = 0x08;
@@ -1477,7 +1481,7 @@ static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
 		return -ENOMEM;
 	}
 
-	/* Fetch firmware version */
+	/* fetch firmware version */
 	ret = usb_control_msg(t300rs->usbdev,
 			usb_rcvctrlpipe(t300rs->usbdev, 0),
 			t300rs_fw_request.bRequest,
@@ -1494,7 +1498,7 @@ static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
 		goto out;
 	}
 
-	/* Educated guess */
+	/* educated guess */
 	if (fw_response->fw_version < 31 && ret >= 0) {
 		hid_err(t300rs->hdev,
 				"firmware version %i is too old, please update.\n",
@@ -1574,7 +1578,8 @@ static int t300rs_get_attachment(struct t300rs_device_entry *t300rs)
 	} else if (response->type == cpu_to_le16(0x47)) {
 		attachment = response->b.attachment;
 	} else {
-		hid_err(t300rs->hdev, "unknown packet type %hx\n, please contact a maintainer",
+		hid_err(t300rs->hdev,
+				"unknown packet type %hx\n, please contact a maintainer",
 				response->type);
 		ret = -EINVAL;
 		goto out;
