@@ -9,7 +9,7 @@ if ! [ $(id -u) = 0 ]; then
 fi
 
 TM_NAME=hid-tmff2
-TM_VER=0.8
+TM_VER=0.81
 DST="/usr/src/${TM_NAME}-${TM_VER}"
 
 mkdir -p "${DST}"
