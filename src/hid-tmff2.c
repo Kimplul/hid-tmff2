@@ -51,6 +51,10 @@ int mode = 3;
 module_param(mode, int, 0);
 MODULE_PARM_DESC(mode, "FFB Mode of the Wheel (0-3; 0: Comfort, 1: Sport, 2: Performance, 3: Extreme)");
 
+int color = 0xFF26C2FF;
+module_param(color, int, 0);
+MODULE_PARM_DESC(color, "Color of the RGB LEDs on the Wheel. Values are provided in RGBA Hex.");
+
 static spinlock_t lock;
 static unsigned long lock_flags;
 
@@ -256,6 +260,35 @@ static ssize_t mode_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%i\n", mode);
 }
 static DEVICE_ATTR_RW(mode);
+
+static ssize_t color_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	unsigned int value;
+	int ret;
+
+	if (!tmff2)
+		return -ENODEV;
+
+	if ((ret = kstrtouint(buf, 0, &value))) {
+		dev_err(dev, "kstrtouint failed at color_store: %i", ret);
+		return ret;
+	}
+
+	color = value;
+	if (tmff2->set_color) /* if we can, update color immediately */
+		tmff2->set_color(tmff2->data, color);
+
+	return count;
+}
+
+static ssize_t color_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%i\n", color);
+}
+static DEVICE_ATTR_RW(color);
 
 static ssize_t gain_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -550,6 +583,13 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 		}
 	}
 
+	if (tmff2->params & PARAM_COLOR) {
+		if ((ret = device_create_file(dev, &dev_attr_color))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for color\n");
+			goto color_err;
+		}
+	}
+
 	return 0;
 
 friction_err:
@@ -564,6 +604,8 @@ alt_err:
 	device_remove_file(dev, &dev_attr_gain);
 mode_err:
 	device_remove_file(dev, &dev_attr_mode);
+color_err:
+	device_remove_file(dev, &dev_attr_color);
 gain_err:
 	return ret;
 }
@@ -756,6 +798,9 @@ static void tmff2_remove(struct hid_device *hdev)
 
 	if (tmff2->params & PARAM_MODE)
 		device_remove_file(dev, &dev_attr_mode);
+
+	if (tmff2->params & PARAM_COLOR)
+		device_remove_file(dev, &dev_attr_color);
 
 	hid_hw_stop(hdev);
 	tmff2->wheel_destroy(tmff2->data);

@@ -24,7 +24,7 @@ static const unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_6)};
 
 static const unsigned long t248_params =
-	PARAM_SPRING_LEVEL | PARAM_DAMPER_LEVEL | PARAM_FRICTION_LEVEL | PARAM_RANGE | PARAM_GAIN | PARAM_MODE;
+	PARAM_SPRING_LEVEL | PARAM_DAMPER_LEVEL | PARAM_FRICTION_LEVEL | PARAM_RANGE | PARAM_GAIN | PARAM_MODE | PARAM_COLOR;
 
 static const signed short t248_effects[] = {
 	FF_CONSTANT,
@@ -244,6 +244,59 @@ err:
 	return ret2;
 }
 
+int t248_set_color(void *data, uint value)
+{
+	struct t300rs_device_entry *t248 = data;
+	int ret;
+
+	u8 *send_buf = kmalloc(256, GFP_KERNEL);
+	struct usb_interface *usbif = to_usb_interface(t248->hdev->dev.parent);
+	struct usb_host_endpoint *ep;
+	int ret2, trans, b_ep;
+
+	if (!send_buf)
+	{
+		hid_err(t248->hdev, "failed allocating send buffer\n");
+		return -ENOMEM;
+	}
+
+	ep = &usbif->cur_altsetting->endpoint[1];
+	b_ep = ep->desc.bEndpointAddress;
+
+	if (!t248)
+		return -ENODEV;
+
+	uint8_t rgba[4];
+	memcpy(rgba, &value, sizeof(value));
+	u8 setColor[64] = {0x0a, 0x04, 0x00, 0x24, 0xfe, 0x00, 0x00, 0x00, 0x00};
+	setColor[5] = rgba[3];
+	setColor[6] = rgba[2];
+	setColor[7] = rgba[1];
+	setColor[8] = rgba[0];
+
+	memcpy(send_buf, setColor, ARRAY_SIZE(setColor));
+
+	ret2 = usb_interrupt_msg(t248->usbdev,
+							usb_sndintpipe(t248->usbdev, b_ep),
+							send_buf, ARRAY_SIZE(setColor),
+							&trans,
+							USB_CTRL_SET_TIMEOUT);
+
+	if (ret2)
+	{
+		hid_err(t248->hdev, "color could not be set\n");
+		goto err;
+	}
+
+	// Store new mode, as everything worked out fine
+	mode = value;
+	return ret;
+
+err:
+	kfree(send_buf);
+	return ret2;
+}
+
 static int t248_send_open(struct t300rs_device_entry *t248)
 {
 	int r1, r2;
@@ -378,6 +431,7 @@ int t248_populate_api(struct tmff2_device_entry *tmff2)
 	tmff2->set_range = t248_set_range;
 	tmff2->wheel_fixup = t248_wheel_fixup;
 	tmff2->set_mode = t248_set_mode;
+	tmff2->set_color = t248_set_color;
 
 	tmff2->open = t248_open;
 	tmff2->close = t248_close;

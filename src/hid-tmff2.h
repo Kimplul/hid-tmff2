@@ -14,6 +14,7 @@ extern int range;
 extern int gain;
 extern int alt_mode;
 extern int mode;
+extern int color;
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
@@ -23,7 +24,7 @@ extern int mode;
  * space out the interrupts so that they all leave at regular intervals, but
  * for now this is good enough, go slow enough that everything works.
  */
-#define DEFAULT_TIMER_PERIOD	8
+#define DEFAULT_TIMER_PERIOD	3
 
 #define FF_EFFECT_QUEUE_UPLOAD	0
 #define FF_EFFECT_QUEUE_START	1
@@ -38,6 +39,7 @@ extern int mode;
 #define PARAM_ALT_MODE		(1 << 4)
 #define PARAM_GAIN		(1 << 5)
 #define PARAM_MODE		(1 << 6)
+#define PARAM_COLOR		(1 << 7)
 
 #undef fixp_sin16
 #define fixp_sin16(v) (((v % 360) > 180) ?\
@@ -89,6 +91,7 @@ struct tmff2_device_entry {
 	int (*set_gain)(void *data, uint16_t gain);
 	int (*set_range)(void *data, uint16_t range);
 	int (*set_mode)(void *data, uint);
+	int (*set_color)(void *data, uint32_t rgba);
 	/* switch_mode is required to not do anything if we're alredy in the
 	 * specified mode */
 	int (*switch_mode)(void *data, uint16_t mode);
