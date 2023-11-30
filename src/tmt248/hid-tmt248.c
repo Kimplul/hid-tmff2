@@ -193,10 +193,6 @@ int t248_set_range(void *data, uint16_t value)
 int t248_set_mode(void *data, uint value)
 {
 	struct t300rs_device_entry *t248 = data;
-	// struct __packed t300rs_packet_mode
-	// {
-	// 	struct t248_setup_header header;
-	// } *mode_packet;
 	int ret;
 
 	if (value > 3)
