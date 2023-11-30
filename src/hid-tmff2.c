@@ -47,6 +47,10 @@ module_param(gain, int, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
 
+int mode = 3;
+module_param(mode, int, 0);
+MODULE_PARM_DESC(mode, "FFB Mode of the Wheel (0-3; 0: Comfort, 1: Sport, 2: Performance, 3: Extreme)");
+
 static spinlock_t lock;
 static unsigned long lock_flags;
 
@@ -223,6 +227,35 @@ static ssize_t alternate_modes_show(struct device *dev,
 	return 0;
 }
 static DEVICE_ATTR_RW(alternate_modes);
+
+static ssize_t mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	unsigned int value;
+	int ret;
+
+	if (!tmff2)
+		return -ENODEV;
+
+	if ((ret = kstrtouint(buf, 0, &value))) {
+		dev_err(dev, "kstrtouint failed at mode_store: %i", ret);
+		return ret;
+	}
+
+	mode = value;
+	if (tmff2->set_mode) /* if we can, update mode immediately */
+		tmff2->set_mode(tmff2->data, mode);
+
+	return count;
+}
+
+static ssize_t mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%i\n", mode);
+}
+static DEVICE_ATTR_RW(mode);
 
 static ssize_t gain_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -510,6 +543,13 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 		}
 	}
 
+	if (tmff2->params & PARAM_MODE) {
+		if ((ret = device_create_file(dev, &dev_attr_mode))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for mode\n");
+			goto mode_err;
+		}
+	}
+
 	return 0;
 
 friction_err:
@@ -522,6 +562,8 @@ range_err:
 	device_remove_file(dev, &dev_attr_alternate_modes);
 alt_err:
 	device_remove_file(dev, &dev_attr_gain);
+mode_err:
+	device_remove_file(dev, &dev_attr_mode);
 gain_err:
 	return ret;
 }
@@ -573,6 +615,10 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	if (tmff2->set_gain) {
 		ff->set_gain = tmff2_set_gain;
 		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+	}
+
+	if(tmff2->set_mode) {
+		tmff2->set_mode(tmff2->data, mode);
 	}
 
 	if (tmff2->set_autocenter)
@@ -707,6 +753,9 @@ static void tmff2_remove(struct hid_device *hdev)
 
 	if (tmff2->params & PARAM_GAIN)
 		device_remove_file(dev, &dev_attr_gain);
+
+	if (tmff2->params & PARAM_MODE)
+		device_remove_file(dev, &dev_attr_mode);
 
 	hid_hw_stop(hdev);
 	tmff2->wheel_destroy(tmff2->data);

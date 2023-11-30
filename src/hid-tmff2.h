@@ -13,6 +13,7 @@ extern int friction_level;
 extern int range;
 extern int gain;
 extern int alt_mode;
+extern int mode;
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
@@ -36,6 +37,7 @@ extern int alt_mode;
 #define PARAM_RANGE		(1 << 3)
 #define PARAM_ALT_MODE		(1 << 4)
 #define PARAM_GAIN		(1 << 5)
+#define PARAM_MODE		(1 << 6)
 
 #undef fixp_sin16
 #define fixp_sin16(v) (((v % 360) > 180) ?\
@@ -86,6 +88,7 @@ struct tmff2_device_entry {
 	int (*close)(void *data, int);
 	int (*set_gain)(void *data, uint16_t gain);
 	int (*set_range)(void *data, uint16_t range);
+	int (*set_mode)(void *data, uint);
 	/* switch_mode is required to not do anything if we're alredy in the
 	 * specified mode */
 	int (*switch_mode)(void *data, uint16_t mode);
