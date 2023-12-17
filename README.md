@@ -23,6 +23,11 @@ the effects compare to the Windows driver. Second, in certain games, the mapping
 of pedal inputs can be inconsistent. This means that while all pedals should be
 recognized by the games, they might not be mapped correctly.
 
+I only have access to the base editions of T300RS and T248 wheels to test with, but
+from reports it seems that other editions (F1, GT, Alcantara, etc.) should also work
+with this driver. TX support was contributed by
+[@davidedmundson](https://github.com/davidedmundson).
+
 ## Installation
 
 You can either install this kernel module by using DKMS or
@@ -84,7 +89,7 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
 > from `hid-tmt300rs` to `hid-tmff-new`, and you may have to uninstall the older
 > version of the driver.
 
-## Contribute to project
+## Contributing
 
 This project wants help from people who can contribute.
 If you would like to help add a wheel to this driver,
@@ -101,7 +106,8 @@ for wheels:
 + [T128P](https://github.com/Kimplul/hid-tmff2/issues/67)
 + [TS-PC](https://github.com/Kimplul/hid-tmff2/issues/65)
 
-## FAQ (Frequently Asked Questions)
+## Common issues and notes
+
 + Reportedly some games running under Wine/Proton won't recognize wheels without
   the official Thrustmaster drivers installed within the prefix. See
   [#46](https://github.com/Kimplul/hid-tmff2/issues/46#issuecomment-1199080845).
