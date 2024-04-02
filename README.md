@@ -31,7 +31,9 @@ with this driver. TX support was contributed by
 ## Installation
 
 You can either install this kernel module by using DKMS or
-manually building from source:
+manually building from source. If you're unsure which to pick,
+go with DKMS, it will automatically recompile the driver
+whenever needed.
 
 ### Dependencies
 
