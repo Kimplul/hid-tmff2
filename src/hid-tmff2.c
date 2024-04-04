@@ -558,7 +558,7 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	/* create actual ff device*/
 	if ((ret = input_ff_create(tmff2->input_dev, tmff2->max_effects))) {
 		hid_err(tmff2->hdev, "could not create input_ff\n");
-		goto err;
+		goto ff_err;
 	}
 
 	/* set ff callbacks */
@@ -589,12 +589,15 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 
 	/* create files */
 	if ((ret = tmff2_create_files(tmff2)))
-		goto err;
+		goto file_err;
 
 	tmff2->allow_scheduling = 1;
 	return 0;
 
+file_err:
 	input_ff_destroy(tmff2->input_dev);
+ff_err:
+	kfree(tmff2->states);
 err:
 	return ret;
 }
