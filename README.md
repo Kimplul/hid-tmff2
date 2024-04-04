@@ -43,6 +43,7 @@ one of the right command for your distribution:
 ```shell
 sudo apt install linux-headers-$(uname -r)   # Debian-based
 sudo pacman -S linux-headers                 # Arch-based
+sudo pacman -S linux-neptune-61-headers      # For SteamDeck specifically
 sudo yum install kernel-devel kernel-headers # Fedora-based
 ```
 
