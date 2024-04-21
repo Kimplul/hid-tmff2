@@ -30,7 +30,7 @@ with this driver.
 TX support was contributed by
 [@davidedmundson](https://github.com/davidedmundson),
 TS-XW support was contributes by
-[yassineimounachen](https://github.com/yassineimounachen).
+[@yassineimounachen](https://github.com/yassineimounachen).
 
 ## Installation
 
