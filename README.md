@@ -1,4 +1,4 @@
-# Linux kernel module for Thrustmaster T300RS, T248 and TX (experimental) wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX and TS-XW wheels
 
 > **DISCLAIMER:** The module is now ready for near-stable USE in most force
 > feedback games, supports rangesetting as well as gain and autocentering along
@@ -13,8 +13,8 @@
 
 ## Description
 
-A Linux kernel module for Thrustmaster T300RS, T248, and TX
-(experimental support) wheels.
+A Linux kernel module for Thrustmaster T300RS, T248, and (experimental support)
+TX and TS-XV wheels.
 
 I've been working on enhancing the real-time updating of effects, and although
 it's not flawless yet, the overall experience is gradually improving. There are
@@ -25,8 +25,12 @@ recognized by the games, they might not be mapped correctly.
 
 I only have access to the base editions of T300RS and T248 wheels to test with, but
 from reports it seems that other editions (F1, GT, Alcantara, etc.) should also work
-with this driver. TX support was contributed by
-[@davidedmundson](https://github.com/davidedmundson).
+with this driver.
+
+TX support was contributed by
+[@davidedmundson](https://github.com/davidedmundson),
+TS-XW support was contributes by
+[yassineimounachen](https://github.com/yassineimounachen).
 
 ## Installation
 
@@ -106,7 +110,7 @@ for wheels:
 + [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
 + [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
-+ [T128P](https://github.com/Kimplul/hid-tmff2/issues/67)
++ [T128P](https://github.com/Kimplul/hid-tmff2/issues/67) (initial alpha support, needs `hid-tminit` tweaking)
 + [TS-PC](https://github.com/Kimplul/hid-tmff2/issues/65)
 
 ## Common issues and notes
