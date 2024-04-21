@@ -83,8 +83,8 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
 > (completely optional), see
 > [here](https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html).
 
-> **NOTE:** Thrustmaster TX wheels aren't supported by `hid-tminit` as of yet,
-> meaning that TX wheels have to be initialized with `tmdrv`. Please see
+> **NOTE:** Thrustmaster TX and TS-XW wheels aren't supported by `hid-tminit` as of yet,
+> meaning that the wheels have to be initialized with `tmdrv`. Please see
 > https://github.com/Kimplul/hid-tmff2/issues/48.
 
 > **WARNING:** There have been reports that this driver does not work if
