@@ -9,7 +9,7 @@
 ![GitHub last commit (master)](https://img.shields.io/github/last-commit/Kimplul/hid-tmff2/master)
 ![License](https://img.shields.io/github/license/Kimplul/hid-tmff2)
 ![GitHub contributors](https://img.shields.io/github/contributors/Kimplul/hid-tmff2)
-
+![AUR Package](https://img.shields.io/aur/version/hid-tmff2-dkms-git)
 
 ## Description
 
@@ -37,7 +37,8 @@ TS-XW support was contributes by
 You can either install this kernel module by using DKMS or
 manually building from source. If you're unsure which to pick,
 go with DKMS, it will automatically recompile the driver
-whenever needed.
+whenever needed.  
+An AUR package is available: [hid-tmff2-dkms-git](https://aur.archlinux.org/packages/hid-tmff2-dkms-git)
 
 ### Dependencies
 
