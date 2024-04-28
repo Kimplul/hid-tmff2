@@ -39,6 +39,9 @@ manually building from source. If you're unsure which to pick,
 go with DKMS, it will automatically recompile the driver
 whenever needed.
 
+An AUR package is also available:
+[hid-tmff2-dkms-git](https://aur.archlinux.org/packages/hid-tmff2-dkms-git)
+
 ### Dependencies
 
 Kernel modules require kernel headers to be installed. Use any
