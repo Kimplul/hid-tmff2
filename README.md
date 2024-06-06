@@ -133,7 +133,7 @@ for wheels:
   [upstreamed](https://github.com/scarburato/hid-tminit), you might want to
   blacklist the kernel module `hid-thrustmaster`. Do this with
   ```shell
-  echo 'blacklist hid_thrustmaster' > /etc/modprobe.d/hid_thrustmaster.conf
+  echo 'blacklist hid_thrustmaster' | sudo tee /etc/modprobe.d/hid_thrustmaster.conf
   ```
 
 + If you've bought a new wheel, you will most likely have to update the firmware
