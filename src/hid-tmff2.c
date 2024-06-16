@@ -306,15 +306,11 @@ static void tmff2_work_handler(struct work_struct *w)
 
 		effect_length = state->effect.replay.length;
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && effect_length) {
-			if ((time_now - state->start_time) >= effect_length) {
+			if ((time_now - state->start_time) >= effect_length * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 
-				if (state->count)
-					state->count--;
-
-				if (state->count)
-					__set_bit(FF_EFFECT_QUEUE_START, &state->flags);
+				state->count = 0;
 			}
 		}
 
@@ -359,6 +355,7 @@ static void tmff2_work_handler(struct work_struct *w)
 			max_count = state->count;
 
 		spin_unlock(&tmff2->lock);
+
 		/* wait for each effect update to actually be sent out to avoid
 		 * filling up usb output queue */
 		hid_hw_wait(tmff2->hdev);

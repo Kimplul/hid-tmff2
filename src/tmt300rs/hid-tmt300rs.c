@@ -383,14 +383,20 @@ int t300rs_play_effect(void *data, struct tmff2_effect_state *state)
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_play {
 		struct t300rs_packet_header header;
-		uint8_t value;
+		uint8_t code;
+		uint16_t count;
 	} *play_packet = (struct t300rs_packet_play *)t300rs->send_buffer;
 
 	int ret;
 
 
 	t300rs_fill_header(&play_packet->header, state->effect.id, 0x89);
-	play_packet->value = 0x01;
+	play_packet->code = 0x41;
+
+	if (state->count == 0 || state->count >= 65535)
+		play_packet->count = 0;
+	else
+		play_packet->count = cpu_to_le16(state->count);
 
 	ret = t300rs_send_int(t300rs);
 	if (ret)
