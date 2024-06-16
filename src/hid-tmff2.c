@@ -365,6 +365,32 @@ static void tmff2_work_handler(struct work_struct *w)
 		schedule_delayed_work(&tmff2->work, msecs_to_jiffies(timer_msecs));
 }
 
+static void tmff2_rewrite_rumble(struct ff_effect *effect)
+{
+	/* this is more or less directly copied from
+	 * https://elixir.bootlin.com/linux/latest/source/drivers/input/ff-core.c#L48
+	 * except we set the direction to east, to make sure the direction
+	 * scaling doesn't do any funny business */
+	int magnitude = 0;
+	if (effect->type != FF_RUMBLE)
+		return;
+
+	magnitude = effect->u.rumble.strong_magnitude / 3
+		+ effect->u.rumble.weak_magnitude / 6;
+
+	effect->type = FF_PERIODIC;
+	effect->direction = 16384;
+	effect->u.periodic.waveform = FF_SINE;
+	effect->u.periodic.period = 50;
+	effect->u.periodic.magnitude = magnitude;
+	effect->u.periodic.offset = 0;
+	effect->u.periodic.phase = 0;
+	effect->u.periodic.envelope.attack_length = 0;
+	effect->u.periodic.envelope.attack_level = 0;
+	effect->u.periodic.envelope.fade_length = 0;
+	effect->u.periodic.envelope.fade_level = 0;
+}
+
 static int tmff2_upload(struct input_dev *dev,
 		struct ff_effect *effect, struct ff_effect *old)
 {
@@ -382,10 +408,13 @@ static int tmff2_upload(struct input_dev *dev,
 	spin_lock(&tmff2->lock);
 
 	state->effect = *effect;
+	tmff2_rewrite_rumble(&state->effect);
 
 	if (old) {
-		if (!test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags))
+		if (!test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 			state->old = *old;
+			tmff2_rewrite_rumble(&state->old);
+		}
 
 		__set_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 	} else {
@@ -551,6 +580,18 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	/* set supported effects into input_dev->ffbit */
 	for (i = 0; tmff2->supported_effects[i] >= 0; ++i)
 		__set_bit(tmff2->supported_effects[i], tmff2->input_dev->ffbit);
+
+	/* tell ffb subsystem that we want to handle our own rumble effects,
+	 * this is a (maybe kind of silly) workaround to the ffb subsystem
+	 * setting the direction of rumble to 0, which in our case means 0
+	 * force. Instead, do exactly what the subsystem would do, but update
+	 * the direction.
+	 *
+	 * It *might* be a good idea to change this in the subsystem proper, but
+	 * I don't know if anyone relies on the rumble to be 0 degrees, consider
+	 * this just a proof of concept for now */
+	if (test_bit(FF_PERIODIC, tmff2->input_dev->ffbit))
+		__set_bit(FF_RUMBLE, tmff2->input_dev->ffbit);
 
 	/* create actual ff device*/
 	if ((ret = input_ff_create(tmff2->input_dev, tmff2->max_effects))) {
