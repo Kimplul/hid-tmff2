@@ -630,6 +630,8 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 	int16_t level;
 
 	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+	/* the Windows driver uses the range [-16385;16381] */
+	level = level / 2;
 
 	if ((constant.level != constant_old.level) || (effect.direction != old.direction)) {
 
@@ -948,6 +950,8 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 	int ret;
 
 	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+	/* the Windows driver uses the range [-16385;16381] */
+	level = level / 2;
 	duration = effect.replay.length - 1;
 
 	offset = effect.replay.delay;
