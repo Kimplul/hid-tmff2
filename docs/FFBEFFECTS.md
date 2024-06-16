@@ -16,13 +16,26 @@ have model specific peculiarities, though.
 > USB interface, not the only available ones.
 
 ## GENERAL
-### Playing
+### Playing a single effect once
 ```
     60 00 - standard header
     01 - ID
     89 - playing options
     01 - play
     00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+### Playing a single effect multiple or infinite times
+```
+    60 00 - standard header
+    01 - ID
+    89 - playing options
+    41 - play with count
+    00 00 00 00 - play count, 0 for infinite, seems to be u16
+    00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
