@@ -347,6 +347,7 @@ static u8 damper_values[] = {
 static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 {
 	struct ff_periodic_effect *periodic = &effect->u.periodic;
+	int16_t headroom;
 
 	effect->replay.length -= 1;
 
@@ -362,6 +363,11 @@ static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 
 	/* the interval [0; 32677[ is used by the wheel for the [0; 360[ degree phase shift */
 	periodic->phase = periodic->phase * 32677 / 0x10000;
+
+	headroom = 0x7FFF - periodic->magnitude;
+	/* magnitude + offset cannot be outside the valid magnitude range, */
+	/* otherwise the wheel behaves incorrectly */
+	periodic->offset = clamp(periodic->offset, -headroom, headroom);
 }
 
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
