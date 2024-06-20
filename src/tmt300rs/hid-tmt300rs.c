@@ -344,6 +344,32 @@ static u8 damper_values[] = {
 	0x7f, 0x07
 };
 
+static void t300rs_calculate_periodic_values(struct ff_effect *effect)
+{
+	struct ff_periodic_effect *periodic = &effect->u.periodic;
+	int16_t headroom;
+
+	effect->replay.length -= 1;
+
+	periodic->magnitude = (periodic->magnitude * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
+
+	if (periodic->magnitude < 0){
+		/* the wheel handles positive magnitudes only */
+		periodic->magnitude = -periodic->magnitude;
+
+		/* to give the expected result 180 deg is added to the phase */
+		periodic->phase = (periodic->phase + (0x10000 / 2)) % 0x10000;
+	}
+
+	/* the interval [0; 32677[ is used by the wheel for the [0; 360[ degree phase shift */
+	periodic->phase = periodic->phase * 32677 / 0x10000;
+
+	headroom = 0x7FFF - periodic->magnitude;
+	/* magnitude + offset cannot be outside the valid magnitude range, */
+	/* otherwise the wheel behaves incorrectly */
+	periodic->offset = clamp(periodic->offset, -headroom, headroom);
+}
+
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
 {
 	int i;
@@ -636,6 +662,8 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 	int16_t level;
 
 	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+	/* the Windows driver uses the range [-16385;16381] */
+	level = level / 2;
 
 	if ((constant.level != constant_old.level) || (effect.direction != old.direction)) {
 
@@ -832,25 +860,29 @@ static int t300rs_update_spring(struct t300rs_device_entry *t300rs,
 	return t300rs_update_damper(t300rs, state);
 }
 
-
 static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 		struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
-	struct ff_periodic_effect periodic = effect.u.periodic;
-	struct ff_periodic_effect periodic_old = old.u.periodic;
 	struct __packed t300rs_packet_mod_periodic {
 		struct t300rs_packet_header header;
 		uint8_t attribute;
 		uint16_t value;
 	} *packet_mod_periodic = (struct t300rs_packet_mod_periodic *)t300rs->send_buffer;
 
+	struct ff_periodic_effect periodic, periodic_old;
 	int ret;
-	int16_t magnitude, phase;
+	uint16_t phase;
+	int16_t magnitude;
 
-	magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+	t300rs_calculate_periodic_values(&effect);
+	periodic = effect.u.periodic;
+	magnitude = periodic.magnitude;
 	phase = periodic.phase;
+
+	t300rs_calculate_periodic_values(&old);
+	periodic_old = old.u.periodic;
 
 	if ((periodic.magnitude != periodic_old.magnitude)
 			|| (effect.direction != old.direction)) {
@@ -954,6 +986,8 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 	int ret;
 
 	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+	/* the Windows driver uses the range [-16385;16381] */
+	level = level / 2;
 	duration = effect.replay.length - 1;
 
 	offset = effect.replay.delay;
@@ -1127,7 +1161,6 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 		struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
-	struct ff_periodic_effect periodic = state->effect.u.periodic;
 	struct __packed t300rs_packet_periodic {
 		struct t300rs_packet_header header;
 		uint16_t magnitude;
@@ -1140,18 +1173,19 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 		struct t300rs_packet_timing timing;
 	} *packet_periodic = (struct t300rs_packet_periodic *)t300rs->send_buffer;
 
+	struct ff_periodic_effect periodic;
 	int ret;
-	uint16_t duration, period, offset, periodic_offset;
-	int16_t phase, magnitude;
+	uint16_t duration, period, phase, offset, periodic_offset;
+	int16_t magnitude;
 
-	duration = effect.replay.length - 1;
-	magnitude = (periodic.magnitude * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
-
+	t300rs_calculate_periodic_values(&effect);
+	periodic = effect.u.periodic;
+	duration = effect.replay.length;
+	offset = effect.replay.delay;
+	magnitude = periodic.magnitude;
+	period = periodic.period;
 	phase = periodic.phase;
 	periodic_offset = periodic.offset;
-
-	period = periodic.period;
-	offset = effect.replay.delay;
 
 	t300rs_fill_header(&packet_periodic->header, effect.id, 0x6b);
 
