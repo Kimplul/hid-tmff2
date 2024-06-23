@@ -262,45 +262,34 @@ Ramps seem to follow triangle wave parameters.
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
-#### Offset: `N/A`  
+#### Offset: `N/A`
 
-## FF_SPRING:
-### Init:
-```
-    60 00 - standard header
-    01 - ID
-    64 - new conditional effect
-    fc 7f - positive coefficient (right?)
-    fc 7f - negative coefficient (left?)
-    fe ff - deadband (left?) (deadband + offset) (fe ff means no deadband)
-    fe ff - deadband (right?) (deadband + offset)
-    a6 6a a6 6a fe ff fe ff fe ff fe ff df 58 a6 6a 06 - some weird hard-coded
-                                                    values to do with springs?
-
-    4f
-    f7 17 - duration
-    00 00
-    00 00 - offset
-    00 ff ff - end of init
-    00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-```
-
-### Modifying:
-Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
-
-## FF_DAMPER + FF_FRICTION + FF_INERTIA:
+## FF_DAMPER + FF_FRICTION + FF_INERTIA + FF_SPRING:
 ### Init:
 ```
     60 00 - standard header
     02 -ID
-    64 - new conditional effect
-    fc 7f - positive coefficient (right?)
-    fc 7f - negative coefficient (left?)
-    fe ff - deadband (left?) (deadband + offset) (fe ff means no deadband)
-    fe ff - deadband (right?) (deadband + offset)
-    fc 7f fc 7f fe ff fe ff fe ff fe ff fc 7f fc 7f 07 - some weird hard-coded
-                                                    values to do with friction?
+    64 - new conditional effect (sometimes e4)
+    fc 7f - positive coefficient (right)
+                between 01 80 (-32767) and fc 7f (32764)
+    fc 7f - negative coefficient (left)
+                between 01 80 (-32767) and fc 7f (32764)
+    fe ff - deadband right (offset + deadband)
+                between 01 80 (-32767) and ff 7f (32767)
+    fe ff - deadband left (offset - deadband)
+                between 01 80 (-32767) and ff 7f (32767)
+    fc 7f - positive saturation (right)
+                between 00 00 and fc 7f (32764) or a6 6a (27302)
+    fc 7f - negative saturation (left)
+                between 00 00 and fc 7f (32764) or a6 6a (27302)
+    fe ff fe ff fe ff fe ff - some weird hard-coded
+                              values to do with friction?
+    fc 7f - max positive saturation (type 07 - fc 7f
+                                     type 06 - a6 6a)
+    fc 7f - max negative saturation (type 07 - fc 7f
+                                     type 06 - a6 6a)
+    07 - type (damper, friction, inertia - 07
+                                  spring - 06)
     4f
     f7 17 - duration
     00 00
@@ -316,7 +305,7 @@ Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
     60 00
     02 - ID
     0e 41
-    64 35 - value, signed (between 00 00 and 01 80?)
+    64 35 - value, signed, between 01 80 (-32767) and fc 7f (32764)
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -326,8 +315,19 @@ Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
     60 00
     02 - ID
     0e 42
-    64 35 - value, signed (between 00 00 and ff 7f?)
+    64 35 - value, signed, between 01 80 (-32767) and fc 7f (32764)
     00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    positive and negative coefficient:
+    60 00
+    01 - ID
+    0e 43 
+    ab 67 - right coefficient, signed, between 01 80 (-32767) and fc 7f (32764)
+    50 18 - left coefficient, signed, between 01 80 (-32767) and fc 7f (32764)
+    00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -336,8 +336,40 @@ Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
     60 00
     02 - ID
     0e 4c
-    64 35 - deadband (right?) (deadband + offset) (fe ff means no deadband)
-    00 00 - deadband (left?) (deadband + offset)
+    64 35 - deadband right (offset + deadband)
+                between 01 80 (-32767) and ff 7f (32767)
+    00 00 - deadband left (offset - deadband)
+                between 01 80 (-32767) and ff 7f (32767)
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    positive saturation
+    60 00
+    01 - ID
+    0e 50
+    fc 7f - value between 00 00 and fc 7f or a6 6a (defined in init)
+    00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    negative saturation
+    60 00
+    01 - ID
+    0e 60
+    fc 7f - value between 00 00 and fc 7f or a6 6a (defined in init)
+    00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    60 00
+    01 - ID
+    0e 70
+    da 5d - right saturation between 00 00 and fc 7f or a6 6a (defined in init)
+    b9 0b - left saturation between 00 00 and fc 7f or a6 6a (defined in init)
     00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
