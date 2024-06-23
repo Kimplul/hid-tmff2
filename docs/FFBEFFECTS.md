@@ -125,7 +125,7 @@ have model specific peculiarities, though.
     60 00 - standard header
     01 - ID
     6a - new constant effect(?)
-    fe ff - strength ***
+    fe ff - strength between ff bf (-16385) and fd 3f (16381) ***
     00 00 - attack_length
     00 00 - attack_level ***
     00 00 - fade_length
@@ -149,7 +149,7 @@ have model specific peculiarities, though.
     60 00 - standard header
     01 - ID
     0a - modify constant force
-    05 16 - constant force ***
+    05 16 - constant force between ff bf (-16385) and fd 3f (16381) ***
     00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -364,10 +364,11 @@ Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
     60 00 - standard header
     01 - ID
     6b - new periodic effect
-    00 00 - magnitude ***
-    fe ff - offset (up/down)
-    00 00 - phase (left/right)
-    e8 03 - period
+    00 00 - magnitude between 00 00 and fc 7f (32764) ***
+    fe ff - offset (up/down) between ff bf (-16385) and fd 3f (16381)
+    00 00 - phase (left/right) between 00 00 and 4a f7 (32586)
+            meaning is 0 to ~359 deg phase shift in 5b steps
+    e8 03 - period between 00 00 and ff ff (in milliseconds)
     00 80 
     00 00 - attack_length
     00 00 - attack_level ***
@@ -393,7 +394,7 @@ Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
     60 00
     02 - ID
     0e 01
-    64 35 - value, signed (between 00 00 and ff 7f?)
+    64 35 - value, between 00 00 and fc 7f (32764)
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -403,7 +404,7 @@ Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
     60 00
     02 - ID
     0e 02
-    64 35 - value, signed (between 00 00 and ff 7f?)
+    64 35 - value, between ff bf (-16385) and fd 3f (16381)
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -413,7 +414,8 @@ Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
     60 00
     02 - ID
     0e 04
-    64 35 - value, signed (between 80 01 and ff 7f?)
+    64 35 - value, between 00 00 and 4a f7 (32586) in 5b steps
+            meaning is 0 to 359 deg phase shift
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -423,8 +425,7 @@ Same as below (FF_DAMPER + FF_FRICTION + FF_INERTIA)
     60 00
     02 - ID
     0e 08
-    64 35 - value, signed (between 00 00 and I guess ff 7f?) (max value in
-    wireshark is 0d 07, but I don't know if that's a driver or program issue)
+    64 35 - value, between 00 00 and ff ff (in milliseconds)
     00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
