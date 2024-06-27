@@ -365,6 +365,7 @@ Ramps seem to follow triangle wave parameters.
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
+    positive and negative saturation
     60 00
     01 - ID
     0e 70
