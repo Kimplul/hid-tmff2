@@ -300,6 +300,27 @@ Ramps seem to follow triangle wave parameters.
 ```
 
 ### Modifying:
+
+```
+4th byte 5th byte   hex
+00001110 01000001  0e 41  positive coefficient
+00001110 01000010  0e 42  negative coefficient
+00001110 01000011  0e 43  both     coefficint
+00001110 01001100  0e 4c  right and left deadband
+00001110 01010000  0e 50  positive saturation
+00001110 01100000  0e 60  negative saturation
+00001110 01110000  0e 70  both     saturation
+00001110 01001111  0e 4f  coefficient + deadband
+00001110 01111100  0e 7c  deadband    + saturation
+00001110 01110011  0e 73  coefficient + saturation
+00001110 01101101  0e 6d  positive coefficient + deadband + negative saturation
+00001100           0c     everything
+```
+
+Any combination that makes sense is possible, not restricted to the list above.
+
+The order of the fields are defined in the `everything` packet example below.
+
 ```
     positive coefficient:
     60 00
@@ -372,6 +393,20 @@ Ramps seem to follow triangle wave parameters.
     da 5d - right saturation between 00 00 and fc 7f or a6 6a (defined in init)
     b9 0b - left saturation between 00 00 and fc 7f or a6 6a (defined in init)
     00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    everything
+    60 00
+    01 - ID
+    0c
+    fe 1f - positive coefficient
+    98 19 - negative coefficient
+    96 59 - right deadband
+    fe 3f - left deadband
+    65 26 - positive saturation
+    98 19 - negative saturation
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
