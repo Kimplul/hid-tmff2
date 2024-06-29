@@ -364,9 +364,9 @@ static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 static uint16_t t300rs_condition_max_saturation(uint16_t effect_type)
 {
 	if(effect_type == FF_SPRING)
-		return 0x6AA6;
+		return 0x6aa6;
 		
-	return 0x7FFC;
+	return 0x7ffc;
 }
 
 static uint16_t t300rs_condition_effect_type(uint16_t effect_type)
@@ -827,14 +827,23 @@ static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 	struct ff_effect old = state->old;
 	struct ff_condition_effect cond = effect.u.condition[0];
 	struct ff_condition_effect cond_old = old.u.condition[0];
-	struct __packed t300rs_packet_mod_condition {
+	struct __packed t300rs_packet_mod_condition
+	{
 		struct t300rs_packet_header header;
-		uint8_t attribute;
-		uint16_t value0;
-		uint16_t value1;
+		uint16_t right_coeff;
+		uint16_t left_coeff;
+		uint16_t right_deadband;
+		uint16_t left_deadband;
+		uint16_t right_saturation;
+		uint16_t left_saturation;
+		uint8_t effect_type;
+		uint8_t update_type;
+		uint16_t duration;
+		uint16_t delay;
 	} *packet_mod_condition = (struct t300rs_packet_mod_condition *)t300rs->send_buffer;
 
-	int ret;
+	int ret = 0;
+	uint16_t duration, duration_old;
 	uint16_t right_sat, right_sat_old, left_sat, left_sat_old;
 	uint16_t right_coeff, right_coeff_old, left_coeff, left_coeff_old;
 	int16_t right_deadband, right_deadband_old, left_deadband, left_deadband_old;
@@ -854,99 +863,36 @@ static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 	left_sat = t300rs_calculate_saturation(cond.left_saturation, effect.type);
 	left_sat_old = t300rs_calculate_saturation(cond_old.left_saturation, old.type);
 
+	duration = effect.replay.length - 1;
+	duration_old = old.replay.length - 1;
+
 	if (right_coeff != right_coeff_old 
-			&& left_coeff != left_coeff_old) {
-		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x0e);
-		packet_mod_condition->attribute = 0x43;
-		packet_mod_condition->value0 = cpu_to_le16(right_coeff);
-		packet_mod_condition->value1 = cpu_to_le16(left_coeff);
+			|| left_coeff != left_coeff_old
+			|| right_deadband != right_deadband_old
+			|| left_deadband != left_deadband_old
+			|| right_sat != right_sat_old
+			|| left_sat != left_sat_old
+			|| duration != duration_old
+			|| effect.replay.delay != old.replay.delay) {
+
+		packet_mod_condition->right_coeff = cpu_to_le16(right_coeff);
+		packet_mod_condition->left_coeff = cpu_to_le16(left_coeff);
+		packet_mod_condition->right_deadband = cpu_to_le16(right_deadband);
+		packet_mod_condition->left_deadband = cpu_to_le16(left_deadband);
+		packet_mod_condition->right_saturation = cpu_to_le16(right_sat);
+		packet_mod_condition->left_saturation = cpu_to_le16(left_sat);
+		packet_mod_condition->effect_type = 0x06;
+		packet_mod_condition->update_type = 0x45;
+		packet_mod_condition->duration = cpu_to_le16(duration);
+		packet_mod_condition->delay = cpu_to_le16(effect.replay.delay);
+
+		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x4c);
 
 		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying condition coeff\n");
-			goto error;
-		}
-	}
-	else if (right_coeff != right_coeff_old) {
-		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x0e);
-		packet_mod_condition->attribute = 0x41;
-		packet_mod_condition->value0 = cpu_to_le16(right_coeff);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying condition right coeff\n");
-			goto error;
-		}
-	}
-	else if (left_coeff != left_coeff_old) {
-		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x0e);
-		packet_mod_condition->attribute = 0x42;
-		packet_mod_condition->value0 = cpu_to_le16(left_coeff);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying condition left coeff\n");
-			goto error;
-		}
+		if (ret)
+			hid_err(t300rs->hdev, "failed modifying condition effect\n");
 	}
 
-	if ((right_deadband != right_deadband_old)
-			|| (left_deadband != left_deadband_old)) {
-		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x0e);
-		packet_mod_condition->attribute = 0x4c;
-		packet_mod_condition->value0 = cpu_to_le16(right_deadband);
-		packet_mod_condition->value1 = cpu_to_le16(left_deadband);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying condition deadband\n");
-			goto error;
-		}
-	}
-
-	if (right_sat != right_sat_old 
-			&& left_sat != left_sat_old) {
-		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x0e);
-		packet_mod_condition->attribute = 0x70;
-		packet_mod_condition->value0 = cpu_to_le16(right_sat);
-		packet_mod_condition->value1 = cpu_to_le16(left_sat);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying condition saturation\n");
-			goto error;
-		}
-	}
-	else if (right_sat != right_sat_old) {
-		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x0e);
-		packet_mod_condition->attribute = 0x50;
-		packet_mod_condition->value0 = cpu_to_le16(right_sat);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying condition right saturation\n");
-			goto error;
-		}
-	}
-	else if (left_sat != left_sat_old) {
-		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x0e);
-		packet_mod_condition->attribute = 0x60;
-		packet_mod_condition->value0 = cpu_to_le16(left_sat);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying condition left saturation\n");
-			goto error;
-		}
-	}
-
-	ret = t300rs_update_simple_duration(t300rs, state, 0x06);
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying condition duration\n");
-		goto error;
-	}
-
-error:
 	return ret;
 }
 
