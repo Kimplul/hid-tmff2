@@ -314,12 +314,15 @@ Ramps seem to follow triangle wave parameters.
 00001110 01111100  0e 7c  deadband    + saturation
 00001110 01110011  0e 73  coefficient + saturation
 00001110 01101101  0e 6d  positive coefficient + deadband + negative saturation
-00001100           0c     everything
+01001110 01000001  4e 41  positive coefficient + duration
+00001100           0c     all effect specific parameters
+01001001           49     duration
+01001100           4c     all effect specific parameters + duration
 ```
 
 Any combination that makes sense is possible, not restricted to the list above.
 
-The order of the fields are defined in the `everything` packet example below.
+The order of the fields are defined in the `all effect specific parameters + duration` packet example below.
 
 ```
     positive coefficient:
@@ -397,7 +400,7 @@ The order of the fields are defined in the `everything` packet example below.
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
-    everything
+    all effect specific parameters
     60 00
     01 - ID
     0c
@@ -410,15 +413,47 @@ The order of the fields are defined in the `everything` packet example below.
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+    all effect specific parameters + duration
+    60 00
+    01 - ID
+    4c
+    30 73 - positive coefficient
+    30 73 - negative coefficient
+    ff 7f - right deadband
+    fc ff - left deadband
+    fd 5f - positive saturation
+    fd 5f - negative saturation
+    06 - effect type (condition)?
+    45 - update type, see below
+    10 27 - length in milliseconds
+    00 00 - offset in milliseconds
+    00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
 ```
 
 ### Duration:
+
+Update type:
+
+```
+6th byte  hex
+01000001  41  length
+01000100  44  offset
+01000101  45  length + offset
+```
+
 ```
     60 00 - standard header
     01 - ID
-    49 06 41 - modify timing?
+    49
+    06 - effect type (condition)?
+    45 - update type
     6c 20 - length in milliseconds
-    00 00 00 00 00 00 00 00
+    00 00 - offset in milliseconds
+    00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
