@@ -292,7 +292,7 @@ static void tmff2_work_handler(struct work_struct *w)
 	struct tmff2_effect_state *state;
 	int max_count = 0, effect_id;
 	unsigned long time_now;
-	__u16 effect_length;
+	__u16 effect_delay, effect_length;
 
 
 	if (!tmff2)
@@ -304,9 +304,10 @@ static void tmff2_work_handler(struct work_struct *w)
 		time_now = JIFFIES2MS(jiffies);
 		state = &tmff2->states[effect_id];
 
+		effect_delay = state->effect.replay.delay;
 		effect_length = state->effect.replay.length;
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && effect_length) {
-			if ((time_now - state->start_time) >= effect_length * state->count) {
+			if ((time_now - state->start_time) >= (effect_delay + effect_length) * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 
