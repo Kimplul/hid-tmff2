@@ -355,7 +355,7 @@ static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 	/* the interval [0; 32677[ is used by the wheel for the [0; 360[ degree phase shift */
 	periodic->phase = periodic->phase * 32677 / 0x10000;
 
-	headroom = 0x7FFF - periodic->magnitude;
+	headroom = 0x7fff - periodic->magnitude;
 	/* magnitude + offset cannot be outside the valid magnitude range, */
 	/* otherwise the wheel behaves incorrectly */
 	periodic->offset = clamp(periodic->offset, -headroom, headroom);
@@ -365,7 +365,7 @@ static uint16_t t300rs_condition_max_saturation(uint16_t effect_type)
 {
 	if(effect_type == FF_SPRING)
 		return 0x6aa6;
-		
+
 	return 0x7ffc;
 }
 
@@ -396,7 +396,7 @@ static int16_t t300rs_calculate_coefficient(int16_t coeff, uint16_t effect_type)
 		input_level = 100;
 		break;
 	}
-	
+
 	return coeff * input_level / 100;
 }
 
@@ -406,16 +406,17 @@ static uint16_t t300rs_calculate_saturation(uint16_t sat, uint16_t effect_type)
 
 	if(sat == 0)
 		return max;
-	
-	return sat * max / 0xFFFF;
+
+	return sat * max / 0xffff;
 }
 
-static void t300rs_calculate_deadband(int16_t *out_rband, int16_t *out_lband, uint16_t deadband, int16_t offset)
+static void t300rs_calculate_deadband(int16_t *out_rband, int16_t *out_lband,
+		uint16_t deadband, int16_t offset)
 {
-	/* max deadband value is 0x7FFF in either direction */
+	/* max deadband value is 0x7fff in either direction */
 	/* deadband is the width of the deadzone, one direction is half of it */
-	*out_rband = clamp(offset + (deadband / 2), -0x7FFF, 0x7FFF);
-	*out_lband = clamp(offset - (deadband / 2), -0x7FFF, 0x7FFF);
+	*out_rband = clamp(offset + (deadband / 2), -0x7fff, 0x7fff);
+	*out_lband = clamp(offset - (deadband / 2), -0x7fff, 0x7fff);
 }
 
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
@@ -854,8 +855,10 @@ static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 	left_coeff = t300rs_calculate_coefficient(cond.left_coeff, effect.type);
 	left_coeff_old = t300rs_calculate_coefficient(cond_old.left_coeff, old.type);
 
-	t300rs_calculate_deadband(&right_deadband, &left_deadband, cond.deadband, cond.center);
-	t300rs_calculate_deadband(&right_deadband_old, &left_deadband_old, cond_old.deadband, cond_old.center);
+	t300rs_calculate_deadband(&right_deadband, &left_deadband,
+		cond.deadband, cond.center);
+	t300rs_calculate_deadband(&right_deadband_old, &left_deadband_old,
+		cond_old.deadband, cond_old.center);
 
 	right_sat = t300rs_calculate_saturation(cond.right_saturation, effect.type);
 	right_sat_old = t300rs_calculate_saturation(cond_old.right_saturation, old.type);
@@ -866,7 +869,7 @@ static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 	duration = effect.replay.length - 1;
 	duration_old = old.replay.length - 1;
 
-	if (right_coeff != right_coeff_old 
+	if (right_coeff != right_coeff_old
 			|| left_coeff != left_coeff_old
 			|| right_deadband != right_deadband_old
 			|| left_deadband != left_deadband_old
@@ -1124,7 +1127,8 @@ static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
 	right_coeff = t300rs_calculate_coefficient(cond.right_coeff, effect.type);
 	left_coeff = t300rs_calculate_coefficient(cond.left_coeff, effect.type);
 
-	t300rs_calculate_deadband(&right_deadband, &left_deadband, cond.deadband, cond.center);
+	t300rs_calculate_deadband(&right_deadband, &left_deadband,
+		cond.deadband, cond.center);
 
 	right_sat = t300rs_calculate_saturation(cond.right_saturation, effect.type);
 	left_sat = t300rs_calculate_saturation(cond.left_saturation, effect.type);
@@ -1142,7 +1146,8 @@ static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
 	packet_condition->right_saturation = cpu_to_le16(right_sat);
 	packet_condition->left_saturation = cpu_to_le16(left_sat);
 
-	memcpy(&packet_condition->hardcoded, condition_values, ARRAY_SIZE(condition_values));
+	memcpy(&packet_condition->hardcoded, condition_values,
+		ARRAY_SIZE(condition_values));
 
 	max_sat = t300rs_condition_max_saturation(effect.type);
 	/* it seems that the maximum values do not affect the wheel. */
@@ -1154,7 +1159,7 @@ static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
 
 	ret = t300rs_send_int(t300rs);
 	if (ret)
-		hid_err(t300rs->hdev, "failed uploading spring\n");
+		hid_err(t300rs->hdev, "failed uploading condition\n");
 
 	return ret;
 }
