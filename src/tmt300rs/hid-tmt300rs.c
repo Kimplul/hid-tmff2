@@ -330,18 +330,9 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0xc0,
 };
 
-static u8 spring_values[] = {
-	0xa6, 0x6a, 0xa6, 0x6a, 0xfe,
-	0xff, 0xfe, 0xff, 0xfe, 0xff,
-	0xfe, 0xff, 0xdf, 0x58, 0xa6,
-	0x6a, 0x06
-};
-
-static u8 damper_values[] = {
-	0xfc, 0x7f, 0xfc, 0x7f, 0xfe,
-	0xff, 0xfe, 0xff, 0xfe, 0xff,
-	0xfe, 0xff, 0xfc, 0x7f, 0xfc,
-	0x7f, 0x07
+static u8 condition_values[] = {
+	0xfe, 0xff, 0xfe, 0xff, 0xfe,
+	0xff, 0xfe, 0xff
 };
 
 static void t300rs_calculate_periodic_values(struct ff_effect *effect)
@@ -364,10 +355,68 @@ static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 	/* the interval [0; 32677[ is used by the wheel for the [0; 360[ degree phase shift */
 	periodic->phase = periodic->phase * 32677 / 0x10000;
 
-	headroom = 0x7FFF - periodic->magnitude;
+	headroom = 0x7fff - periodic->magnitude;
 	/* magnitude + offset cannot be outside the valid magnitude range, */
 	/* otherwise the wheel behaves incorrectly */
 	periodic->offset = clamp(periodic->offset, -headroom, headroom);
+}
+
+static uint16_t t300rs_condition_max_saturation(uint16_t effect_type)
+{
+	if(effect_type == FF_SPRING)
+		return 0x6aa6;
+
+	return 0x7ffc;
+}
+
+static uint16_t t300rs_condition_effect_type(uint16_t effect_type)
+{
+	if(effect_type == FF_SPRING)
+		return 0x06;
+
+	return 0x07;
+}
+
+static int16_t t300rs_calculate_coefficient(int16_t coeff, uint16_t effect_type)
+{
+	uint8_t input_level;
+
+	switch (effect_type)
+	{
+	case FF_SPRING:
+		input_level = spring_level;
+		break;
+	case FF_DAMPER:
+		input_level = damper_level;
+		break;
+	case FF_FRICTION:
+		input_level = friction_level;
+		break;
+	default:
+		input_level = 100;
+		break;
+	}
+
+	return coeff * input_level / 100;
+}
+
+static uint16_t t300rs_calculate_saturation(uint16_t sat, uint16_t effect_type)
+{
+	uint16_t max = t300rs_condition_max_saturation(effect_type);
+
+	if(sat == 0)
+		return max;
+
+	return sat * max / 0xffff;
+}
+
+static void t300rs_calculate_deadband(int16_t *out_rband, int16_t *out_lband,
+		uint16_t deadband, int16_t offset)
+{
+	/* max deadband value is 0x7fff in either direction */
+	/* deadband is the width of the deadzone, one direction is half of it */
+	*out_rband = clamp(offset + (deadband / 2), -0x7fff, 0x7fff);
+	*out_lband = clamp(offset - (deadband / 2), -0x7fff, 0x7fff);
 }
 
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
@@ -772,92 +821,82 @@ error:
 	return ret;
 }
 
-static int t300rs_update_damper(struct t300rs_device_entry *t300rs,
+static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 		struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
-	struct ff_condition_effect damper = effect.u.condition[0];
-	struct ff_condition_effect damper_old = old.u.condition[0];
-	struct __packed t300rs_packet_mod_damper {
+	struct ff_condition_effect cond = effect.u.condition[0];
+	struct ff_condition_effect cond_old = old.u.condition[0];
+	struct __packed t300rs_packet_mod_condition
+	{
 		struct t300rs_packet_header header;
-		uint8_t attribute;
-		uint16_t value0;
-		uint16_t value1;
-	} *packet_mod_damper = (struct t300rs_packet_mod_damper *)t300rs->send_buffer;
+		uint16_t right_coeff;
+		uint16_t left_coeff;
+		uint16_t right_deadband;
+		uint16_t left_deadband;
+		uint16_t right_saturation;
+		uint16_t left_saturation;
+		uint8_t effect_type;
+		uint8_t update_type;
+		uint16_t duration;
+		uint16_t delay;
+	} *packet_mod_condition = (struct t300rs_packet_mod_condition *)t300rs->send_buffer;
 
-	int ret, input_level;
+	int ret = 0;
+	uint16_t duration, duration_old;
+	uint16_t right_sat, right_sat_old, left_sat, left_sat_old;
+	uint16_t right_coeff, right_coeff_old, left_coeff, left_coeff_old;
+	int16_t right_deadband, right_deadband_old, left_deadband, left_deadband_old;
 
-	input_level = damper_level;
-	if (state->effect.type == FF_FRICTION)
-		input_level = friction_level;
+	right_coeff = t300rs_calculate_coefficient(cond.right_coeff, effect.type);
+	right_coeff_old = t300rs_calculate_coefficient(cond_old.right_coeff, old.type);
 
-	if (state->effect.type == FF_SPRING)
-		input_level = spring_level;
+	left_coeff = t300rs_calculate_coefficient(cond.left_coeff, effect.type);
+	left_coeff_old = t300rs_calculate_coefficient(cond_old.left_coeff, old.type);
 
-	if (damper.right_coeff != damper_old.right_coeff) {
-		int16_t coeff = damper.right_coeff * input_level / 100;
+	t300rs_calculate_deadband(&right_deadband, &left_deadband,
+		cond.deadband, cond.center);
+	t300rs_calculate_deadband(&right_deadband_old, &left_deadband_old,
+		cond_old.deadband, cond_old.center);
 
-		t300rs_fill_header(&packet_mod_damper->header, effect.id, 0x0e);
-		packet_mod_damper->attribute = 0x41;
-		packet_mod_damper->value0 = cpu_to_le16(coeff);
+	right_sat = t300rs_calculate_saturation(cond.right_saturation, effect.type);
+	right_sat_old = t300rs_calculate_saturation(cond_old.right_saturation, old.type);
+
+	left_sat = t300rs_calculate_saturation(cond.left_saturation, effect.type);
+	left_sat_old = t300rs_calculate_saturation(cond_old.left_saturation, old.type);
+
+	duration = effect.replay.length - 1;
+	duration_old = old.replay.length - 1;
+
+	if (right_coeff != right_coeff_old
+			|| left_coeff != left_coeff_old
+			|| right_deadband != right_deadband_old
+			|| left_deadband != left_deadband_old
+			|| right_sat != right_sat_old
+			|| left_sat != left_sat_old
+			|| duration != duration_old
+			|| effect.replay.delay != old.replay.delay) {
+
+		packet_mod_condition->right_coeff = cpu_to_le16(right_coeff);
+		packet_mod_condition->left_coeff = cpu_to_le16(left_coeff);
+		packet_mod_condition->right_deadband = cpu_to_le16(right_deadband);
+		packet_mod_condition->left_deadband = cpu_to_le16(left_deadband);
+		packet_mod_condition->right_saturation = cpu_to_le16(right_sat);
+		packet_mod_condition->left_saturation = cpu_to_le16(left_sat);
+		packet_mod_condition->effect_type = 0x06;
+		packet_mod_condition->update_type = 0x45;
+		packet_mod_condition->duration = cpu_to_le16(duration);
+		packet_mod_condition->delay = cpu_to_le16(effect.replay.delay);
+
+		t300rs_fill_header(&packet_mod_condition->header, effect.id, 0x4c);
 
 		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying damper rc\n");
-			goto error;
-		}
-
+		if (ret)
+			hid_err(t300rs->hdev, "failed modifying condition effect\n");
 	}
 
-	if (damper.left_coeff != damper_old.left_coeff) {
-		int16_t coeff = damper.left_coeff * input_level / 100;
-
-		t300rs_fill_header(&packet_mod_damper->header, effect.id, 0x0e);
-		packet_mod_damper->attribute = 0x42;
-		packet_mod_damper->value0 = cpu_to_le16(coeff);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying damper lc\n");
-			goto error;
-		}
-
-	}
-
-	if ((damper.deadband != damper_old.deadband)
-			|| (damper.center != damper_old.center)) {
-
-		uint16_t right_deadband = 0xfffe - damper.deadband - damper.center;
-		uint16_t left_deadband = 0xfffe - damper.deadband + damper.center;
-
-		t300rs_fill_header(&packet_mod_damper->header, effect.id, 0x0e);
-		packet_mod_damper->attribute = 0x4c;
-		packet_mod_damper->value0 = cpu_to_le16(right_deadband);
-		packet_mod_damper->value1 = cpu_to_le16(left_deadband);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying damper deadband\n");
-			goto error;
-		}
-
-	}
-
-	ret = t300rs_update_simple_duration(t300rs, state, 0x06);
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying damper duration\n");
-		goto error;
-	}
-
-error:
 	return ret;
-}
-
-static int t300rs_update_spring(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
-{
-	return t300rs_update_damper(t300rs, state);
 }
 
 static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
@@ -1060,99 +1099,67 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 	return ret;
 }
 
-static int t300rs_upload_spring(struct t300rs_device_entry *t300rs,
+static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
 		struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	/* we only care about the first axis */
-	struct ff_condition_effect spring = state->effect.u.condition[0];
-	struct __packed t300rs_packet_spring {
+	struct ff_condition_effect cond = state->effect.u.condition[0];
+	struct __packed t300rs_packet_condition {
 		struct t300rs_packet_header header;
-		uint16_t right_coeff;
-		uint16_t left_coeff;
-		uint16_t right_deadband;
-		uint16_t left_deadband;
-		uint8_t spring_start[17];
+		int16_t right_coeff;
+		int16_t left_coeff;
+		int16_t right_deadband;
+		int16_t left_deadband;
+		uint16_t right_saturation;
+		uint16_t left_saturation;
+		uint8_t hardcoded[ARRAY_SIZE(condition_values)];
+		uint16_t max_right_saturation;
+		uint16_t max_left_saturation;
+		uint8_t type;
 		struct t300rs_packet_timing timing;
-	} *packet_spring = (struct t300rs_packet_spring *)t300rs->send_buffer;
+	} *packet_condition = (struct t300rs_packet_condition *)t300rs->send_buffer;
 
 	int ret;
-	uint16_t duration, right_coeff, left_coeff, right_deadband, left_deadband, offset;
+	uint16_t duration, right_sat, left_sat, right_coeff, left_coeff, max_sat, offset;
+	int16_t right_deadband, left_deadband;
+
+	right_coeff = t300rs_calculate_coefficient(cond.right_coeff, effect.type);
+	left_coeff = t300rs_calculate_coefficient(cond.left_coeff, effect.type);
+
+	t300rs_calculate_deadband(&right_deadband, &left_deadband,
+		cond.deadband, cond.center);
+
+	right_sat = t300rs_calculate_saturation(cond.right_saturation, effect.type);
+	left_sat = t300rs_calculate_saturation(cond.left_saturation, effect.type);
 
 	duration = effect.replay.length - 1;
 
-	right_coeff = spring.right_coeff * spring_level / 100;
-	left_coeff = spring.left_coeff * spring_level / 100;
-
-	right_deadband = 0xfffe - spring.deadband - spring.center;
-	left_deadband = 0xfffe - spring.deadband + spring.center;
-
 	offset = effect.replay.delay;
 
-	t300rs_fill_header(&packet_spring->header, effect.id, 0x64);
+	t300rs_fill_header(&packet_condition->header, effect.id, 0x64);
 
-	packet_spring->right_coeff = cpu_to_le16(right_coeff);
-	packet_spring->left_coeff = cpu_to_le16(left_coeff);
-	packet_spring->right_deadband = cpu_to_le16(right_deadband);
-	packet_spring->left_deadband = cpu_to_le16(left_deadband);
+	packet_condition->right_coeff = cpu_to_le16(right_coeff);
+	packet_condition->left_coeff = cpu_to_le16(left_coeff);
+	packet_condition->right_deadband = cpu_to_le16(right_deadband);
+	packet_condition->left_deadband = cpu_to_le16(left_deadband);
+	packet_condition->right_saturation = cpu_to_le16(right_sat);
+	packet_condition->left_saturation = cpu_to_le16(left_sat);
 
-	memcpy(&packet_spring->spring_start, spring_values, ARRAY_SIZE(spring_values));
-	t300rs_fill_timing(&packet_spring->timing, duration, offset);
+	memcpy(&packet_condition->hardcoded, condition_values,
+		ARRAY_SIZE(condition_values));
+
+	max_sat = t300rs_condition_max_saturation(effect.type);
+	/* it seems that the maximum values do not affect the wheel. */
+	packet_condition->max_right_saturation = cpu_to_le16(max_sat);
+	packet_condition->max_left_saturation = cpu_to_le16(max_sat);
+	packet_condition->type = t300rs_condition_effect_type(effect.type);
+
+	t300rs_fill_timing(&packet_condition->timing, duration, offset);
 
 	ret = t300rs_send_int(t300rs);
 	if (ret)
-		hid_err(t300rs->hdev, "failed uploading spring\n");
-
-	return ret;
-}
-
-static int t300rs_upload_damper(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
-{
-
-	struct ff_effect effect = state->effect;
-	/* we only care about the first axis */
-	struct ff_condition_effect spring = state->effect.u.condition[0];
-	struct __packed t300rs_packet_damper {
-		struct t300rs_packet_header header;
-		uint16_t right_coeff;
-		uint16_t left_coeff;
-		uint16_t right_deadband;
-		uint16_t left_deadband;
-		uint8_t damper_start[17];
-		struct t300rs_packet_timing timing;
-	} *packet_damper = (struct t300rs_packet_damper *)t300rs->send_buffer;
-
-	int ret, input_level;
-	uint16_t duration, right_coeff, left_coeff, right_deadband, left_deadband, offset;
-
-	duration = effect.replay.length - 1;
-
-	input_level = damper_level;
-	if (state->effect.type == FF_FRICTION)
-		input_level = friction_level;
-
-	right_coeff = spring.right_coeff * input_level / 100;
-	left_coeff = spring.left_coeff * input_level / 100;
-
-	right_deadband = 0xfffe - spring.deadband - spring.center;
-	left_deadband = 0xfffe - spring.deadband + spring.center;
-
-	offset = effect.replay.delay;
-
-	t300rs_fill_header(&packet_damper->header, effect.id, 0x64);
-
-	packet_damper->right_coeff = cpu_to_le16(right_coeff);
-	packet_damper->left_coeff = cpu_to_le16(left_coeff);
-	packet_damper->right_deadband = cpu_to_le16(right_deadband);
-	packet_damper->left_deadband = cpu_to_le16(left_deadband);
-
-	memcpy(&packet_damper->damper_start, damper_values, ARRAY_SIZE(damper_values));
-	t300rs_fill_timing(&packet_damper->timing, duration, offset);
-
-	ret = t300rs_send_int(t300rs);
-	if (ret)
-		hid_err(t300rs->hdev, "failed uploading spring\n");
+		hid_err(t300rs->hdev, "failed uploading condition\n");
 
 	return ret;
 }
@@ -1219,11 +1226,10 @@ int t300rs_update_effect(void *data, struct tmff2_effect_state *state)
 		case FF_RAMP:
 			return t300rs_update_ramp(t300rs, state);
 		case FF_SPRING:
-			return t300rs_update_spring(t300rs, state);
 		case FF_DAMPER:
 		case FF_FRICTION:
 		case FF_INERTIA:
-			return t300rs_update_damper(t300rs, state);
+			return t300rs_update_condition(t300rs, state);
 		case FF_PERIODIC:
 			return t300rs_update_periodic(t300rs, state);
 		default:
@@ -1242,11 +1248,10 @@ int t300rs_upload_effect(void *data, struct tmff2_effect_state *state)
 		case FF_RAMP:
 			return t300rs_upload_ramp(t300rs, state);
 		case FF_SPRING:
-			return t300rs_upload_spring(t300rs, state);
 		case FF_DAMPER:
 		case FF_FRICTION:
 		case FF_INERTIA:
-			return t300rs_upload_damper(t300rs, state);
+			return t300rs_upload_condition(t300rs, state);
 		case FF_PERIODIC:
 			return t300rs_upload_periodic(t300rs, state);
 		default:
