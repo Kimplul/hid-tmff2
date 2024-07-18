@@ -16,17 +16,17 @@ MODULE_PARM_DESC(timer_msecs,
 		"Timer resolution in msecs");
 
 /* should these be removed and just rely on /sys? */
-int spring_level = 30;
+int spring_level = 0;
 module_param(spring_level, int, 0);
 MODULE_PARM_DESC(spring_level,
 		"Level of spring force (0-100), as per Oversteer standards");
 
-int damper_level = 30;
+int damper_level = 0;
 module_param(damper_level, int, 0);
 MODULE_PARM_DESC(damper_level,
 		"Level of damper force (0-100), as per Oversteer standards");
 
-int friction_level = 30;
+int friction_level = 0;
 module_param(friction_level, int, 0);
 MODULE_PARM_DESC(friction_level,
 		"Level of friction force (0-100), as per Oversteer standards");
@@ -42,7 +42,7 @@ MODULE_PARM_DESC(alt_mode,
 		"Alternate mode, eg. F1 mode");
 
 #define GAIN_MAX 65535
-int gain = 40000;
+int gain = 65535;
 module_param(gain, int, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
@@ -714,6 +714,9 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	if (tmff2->switch_mode)
 		tmff2->switch_mode(tmff2->data, alt_mode);
 
+	if (tmff2->set_color)
+		tmff2->set_color(tmff2->data, color);
+
 	/* create files */
 	if ((ret = tmff2_create_files(tmff2)))
 		goto file_err;
@@ -753,9 +756,17 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 				goto wheel_err;
 			break;
 
-		case TMT248_PC_ID:
-			if ((ret = t248_populate_api(tmff2)))
-				goto wheel_err;
+		case TMAR_PC_ID:
+			switch (tmff2->hdev->version) {
+				case TMT818_VERSION:
+					if ((ret = t818_populate_api(tmff2)))
+						goto wheel_err;
+					break;
+				default:
+					if ((ret = t248_populate_api(tmff2)))
+						goto wheel_err;
+					break;
+			}
 			break;
 
 		case TX_ACTIVE:
@@ -863,7 +874,7 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
 	/* t248 PC*/
-	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMAR_PC_ID)},
 	/* tx */
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TX_ACTIVE)},
 	/* tsxw */
