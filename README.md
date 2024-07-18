@@ -1,4 +1,4 @@
-# Linux kernel module for Thrustmaster T300RS, T248 and TX (experimental) wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX and TS-XW wheels
 
 > **DISCLAIMER:** The module is now ready for near-stable USE in most force
 > feedback games, supports rangesetting as well as gain and autocentering along
@@ -13,8 +13,8 @@
 
 ## Description
 
-A Linux kernel module for Thrustmaster T300RS, T248, and TX
-(experimental support) wheels.
+A Linux kernel module for Thrustmaster T300RS, T248, and (experimental support)
+TX and TS-XV wheels.
 
 I've been working on enhancing the real-time updating of effects, and although
 it's not flawless yet, the overall experience is gradually improving. There are
@@ -23,10 +23,24 @@ the effects compare to the Windows driver. Second, in certain games, the mapping
 of pedal inputs can be inconsistent. This means that while all pedals should be
 recognized by the games, they might not be mapped correctly.
 
+I only have access to the base editions of T300RS and T248 wheels to test with, but
+from reports it seems that other editions (F1, GT, Alcantara, etc.) should also work
+with this driver.
+
+TX support was contributed by
+[@davidedmundson](https://github.com/davidedmundson),
+TS-XW support was contributed by
+[@yassineimounachen](https://github.com/yassineimounachen).
+
 ## Installation
 
 You can either install this kernel module by using DKMS or
-manually building from source:
+manually building from source. If you're unsure which to pick,
+go with DKMS, it will automatically recompile the driver
+whenever needed.
+
+An AUR package is also available:
+[hid-tmff2-dkms-git](https://aur.archlinux.org/packages/hid-tmff2-dkms-git)
 
 ### Dependencies
 
@@ -36,6 +50,7 @@ one of the right command for your distribution:
 ```shell
 sudo apt install linux-headers-$(uname -r)   # Debian-based
 sudo pacman -S linux-headers                 # Arch-based
+sudo pacman -S linux-neptune-61-headers      # For SteamDeck specifically
 sudo yum install kernel-devel kernel-headers # Fedora-based
 ```
 
@@ -71,8 +86,8 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
 > (completely optional), see
 > [here](https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html).
 
-> **NOTE:** Thrustmaster TX wheels aren't supported by `hid-tminit` as of yet,
-> meaning that TX wheels have to be initialized with `tmdrv`. Please see
+> **NOTE:** Thrustmaster TX and TS-XW wheels aren't supported by `hid-tminit` as of yet,
+> meaning that the wheels have to be initialized with `tmdrv`. Please see
 > https://github.com/Kimplul/hid-tmff2/issues/48.
 
 > **WARNING:** There have been reports that this driver does not work if
@@ -84,7 +99,7 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
 > from `hid-tmt300rs` to `hid-tmff-new`, and you may have to uninstall the older
 > version of the driver.
 
-## Contribute to project
+## Contributing
 
 This project wants help from people who can contribute.
 If you would like to help add a wheel to this driver,
@@ -98,10 +113,11 @@ for wheels:
 + [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
 + [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
-+ [T128P](https://github.com/Kimplul/hid-tmff2/issues/67)
++ [T128P](https://github.com/Kimplul/hid-tmff2/issues/67) (initial alpha support, needs `hid-tminit` tweaking)
 + [TS-PC](https://github.com/Kimplul/hid-tmff2/issues/65)
 
-## FAQ (Frequently Asked Questions)
+## Common issues and notes
+
 + Reportedly some games running under Wine/Proton won't recognize wheels without
   the official Thrustmaster drivers installed within the prefix. See
   [#46](https://github.com/Kimplul/hid-tmff2/issues/46#issuecomment-1199080845).
@@ -117,7 +133,7 @@ for wheels:
   [upstreamed](https://github.com/scarburato/hid-tminit), you might want to
   blacklist the kernel module `hid-thrustmaster`. Do this with
   ```shell
-  echo 'blacklist hid_thrustmaster' > /etc/modprobe.d/hid_thrustmaster.conf
+  echo 'blacklist hid_thrustmaster' | sudo tee /etc/modprobe.d/hid_thrustmaster.conf
   ```
 
 + If you've bought a new wheel, you will most likely have to update the firmware

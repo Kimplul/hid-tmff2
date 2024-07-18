@@ -358,7 +358,7 @@ static void tmff2_work_handler(struct work_struct *w)
 	struct tmff2_effect_state *state;
 	int max_count = 0, effect_id;
 	unsigned long time_now;
-	__u16 effect_length;
+	__u16 effect_delay, effect_length;
 
 
 	if (!tmff2)
@@ -370,17 +370,14 @@ static void tmff2_work_handler(struct work_struct *w)
 		time_now = JIFFIES2MS(jiffies);
 		state = &tmff2->states[effect_id];
 
+		effect_delay = state->effect.replay.delay;
 		effect_length = state->effect.replay.length;
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && effect_length) {
-			if ((time_now - state->start_time) >= effect_length) {
+			if ((time_now - state->start_time) >= (effect_delay + effect_length) * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 
-				if (state->count)
-					state->count--;
-
-				if (state->count)
-					__set_bit(FF_EFFECT_QUEUE_START, &state->flags);
+				state->count = 0;
 			}
 		}
 
@@ -425,10 +422,40 @@ static void tmff2_work_handler(struct work_struct *w)
 			max_count = state->count;
 
 		spin_unlock(&tmff2->lock);
+
+		/* wait for each effect update to actually be sent out to avoid
+		 * filling up usb output queue */
+		hid_hw_wait(tmff2->hdev);
 	}
 
 	if (max_count && tmff2->allow_scheduling)
 		schedule_delayed_work(&tmff2->work, msecs_to_jiffies(timer_msecs));
+}
+
+static void tmff2_rewrite_rumble(struct ff_effect *effect)
+{
+	/* this is more or less directly copied from
+	 * https://elixir.bootlin.com/linux/latest/source/drivers/input/ff-core.c#L48
+	 * except we set the direction to east, to make sure the direction
+	 * scaling doesn't do any funny business */
+	int magnitude = 0;
+	if (effect->type != FF_RUMBLE)
+		return;
+
+	magnitude = effect->u.rumble.strong_magnitude / 3
+		+ effect->u.rumble.weak_magnitude / 6;
+
+	effect->type = FF_PERIODIC;
+	effect->direction = 16384;
+	effect->u.periodic.waveform = FF_SINE;
+	effect->u.periodic.period = 50;
+	effect->u.periodic.magnitude = magnitude;
+	effect->u.periodic.offset = 0;
+	effect->u.periodic.phase = 0;
+	effect->u.periodic.envelope.attack_length = 0;
+	effect->u.periodic.envelope.attack_level = 0;
+	effect->u.periodic.envelope.fade_length = 0;
+	effect->u.periodic.envelope.fade_level = 0;
 }
 
 static int tmff2_upload(struct input_dev *dev,
@@ -448,10 +475,13 @@ static int tmff2_upload(struct input_dev *dev,
 	spin_lock(&tmff2->lock);
 
 	state->effect = *effect;
+	tmff2_rewrite_rumble(&state->effect);
 
 	if (old) {
-		if (!test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags))
+		if (!test_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags)) {
 			state->old = *old;
+			tmff2_rewrite_rumble(&state->old);
+		}
 
 		__set_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
 	} else {
@@ -636,10 +666,22 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	for (i = 0; tmff2->supported_effects[i] >= 0; ++i)
 		__set_bit(tmff2->supported_effects[i], tmff2->input_dev->ffbit);
 
+	/* tell ffb subsystem that we want to handle our own rumble effects,
+	 * this is a (maybe kind of silly) workaround to the ffb subsystem
+	 * setting the direction of rumble to 0, which in our case means 0
+	 * force. Instead, do exactly what the subsystem would do, but update
+	 * the direction.
+	 *
+	 * It *might* be a good idea to change this in the subsystem proper, but
+	 * I don't know if anyone relies on the rumble to be 0 degrees, consider
+	 * this just a proof of concept for now */
+	if (test_bit(FF_PERIODIC, tmff2->input_dev->ffbit))
+		__set_bit(FF_RUMBLE, tmff2->input_dev->ffbit);
+
 	/* create actual ff device*/
 	if ((ret = input_ff_create(tmff2->input_dev, tmff2->max_effects))) {
 		hid_err(tmff2->hdev, "could not create input_ff\n");
-		goto err;
+		goto ff_err;
 	}
 
 	/* set ff callbacks */
@@ -674,12 +716,15 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 
 	/* create files */
 	if ((ret = tmff2_create_files(tmff2)))
-		goto err;
+		goto file_err;
 
 	tmff2->allow_scheduling = 1;
 	return 0;
 
+file_err:
 	input_ff_destroy(tmff2->input_dev);
+ff_err:
+	kfree(tmff2->states);
 err:
 	return ret;
 }
@@ -717,7 +762,10 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			if ((ret = tx_populate_api(tmff2)))
 				goto wheel_err;
 			break;
-
+		case TSXW_ACTIVE:
+			if ((ret = tsxw_populate_api(tmff2)))
+				goto wheel_err;
+			break;
 		default:
 			ret = -ENODEV;
 			goto wheel_err;
@@ -818,6 +866,8 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
 	/* tx */
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TX_ACTIVE)},
+	/* tsxw */
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TSXW_ACTIVE)},
 
 	{}
 };
