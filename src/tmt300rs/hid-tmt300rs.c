@@ -419,6 +419,24 @@ static void t300rs_calculate_deadband(int16_t *out_rband, int16_t *out_lband,
 	*out_lband = clamp(offset - (deadband / 2), -0x7fff, 0x7fff);
 }
 
+static void t300rs_calculate_ramp_parameters(uint16_t *out_slope,
+		int16_t *out_center,
+		uint8_t *out_invert,
+		struct ff_effect *effect)
+{
+	struct ff_ramp_effect *ramp = &effect->u.ramp;
+
+	int16_t start_level, end_level;
+
+	start_level = (ramp->start_level * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
+	end_level = (ramp->end_level * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
+
+	*out_slope = abs(start_level - end_level) / 2;
+	*out_center = (start_level + end_level) / 2;
+
+	*out_invert = (start_level < end_level) ? 0x04 : 0x05;
+}
+
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
 {
 	int i;
@@ -661,41 +679,6 @@ error:
 	return ret;
 }
 
-static int t300rs_update_ramp_duration(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
-{
-	struct ff_effect effect = state->effect;
-	struct __packed t300rs_packet_mod_duration {
-		struct t300rs_packet_header header;
-		uint8_t marker0;
-		uint16_t duration0;
-		uint8_t marker1;
-		uint8_t marker2;
-		uint16_t duration1;
-	} *packet_mod_duration = (struct t300rs_packet_mod_duration *)t300rs->send_buffer;
-
-	uint16_t duration;
-	int ret = 0;
-
-	duration = effect.replay.length - 1;
-
-	t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x4e);
-	packet_mod_duration->marker0 = 0x08;
-	packet_mod_duration->duration0 = cpu_to_le16(duration);
-	packet_mod_duration->marker1 = 0x05;
-	packet_mod_duration->marker2 = 0x41;
-	packet_mod_duration->duration1 = cpu_to_le16(duration);
-
-	ret = t300rs_send_int(t300rs);
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying duration\n");
-		goto error;
-	}
-
-error:
-	return ret;
-}
-
 static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 		struct tmff2_effect_state *state)
 {
@@ -760,64 +743,62 @@ static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
 	struct ff_ramp_effect ramp_old = old.u.ramp;
 	struct __packed t300rs_packet_mod_ramp {
 		struct t300rs_packet_header header;
-		uint8_t attribute;
-		uint16_t difference;
-		uint16_t level;
+		uint8_t type;
+		uint16_t slope;
+		uint16_t center;
+		uint16_t length;
+		struct t300rs_packet_envelope envelope;
+		uint8_t effect_type;
+		uint8_t update_type;
+		uint16_t length2;
+		uint16_t offset;
 	} *packet_mod_ramp = (struct t300rs_packet_mod_ramp *)t300rs->send_buffer;
 
-	int ret;
+	int ret = 0;
 
-	uint16_t difference, top, bottom;
-	int16_t level;
+	uint8_t invert, old_invert;
+	uint16_t slope, old_slope, length, old_length;
+	int16_t center, old_center;
 
-	top = ramp.end_level > ramp.start_level ? ramp.end_level : ramp.start_level;
-	bottom = ramp.end_level > ramp.start_level ? ramp.start_level : ramp.end_level;
+	t300rs_calculate_ramp_parameters(&slope, &center, &invert, &effect);
+	t300rs_calculate_ramp_parameters(&old_slope, &old_center, &old_invert, &old);
 
+	length = effect.replay.length - 1;
+	old_length = old.replay.length - 1;
 
-	difference = ((top - bottom) * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
+	if (slope != old_slope
+			|| center != old_center
+			|| invert != old_invert
+			|| ramp.envelope.attack_length != ramp_old.envelope.attack_length
+			|| ramp.envelope.attack_level != ramp_old.envelope.attack_level
+			|| ramp.envelope.fade_length != ramp_old.envelope.fade_length
+			|| ramp.envelope.fade_level != ramp_old.envelope.fade_level
+			|| length != old_length
+			|| effect.replay.delay != old.replay.delay) {
 
-
-	level = (top * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
-
-	if ((ramp.start_level != ramp_old.start_level)
-			|| (ramp.end_level != ramp_old.end_level)
-			|| (effect.direction != old.direction)) {
-
-		t300rs_fill_header(&packet_mod_ramp->header, effect.id, 0x0e);
-		packet_mod_ramp->attribute = 0x03;
-		packet_mod_ramp->difference = cpu_to_le16(difference);
-		packet_mod_ramp->level = cpu_to_le16(level);
+		t300rs_fill_header(&packet_mod_ramp->header, effect.id, 0x6e);
+		packet_mod_ramp->type = 0x0b;
+		packet_mod_ramp->slope = cpu_to_le16(slope);
+		packet_mod_ramp->center = cpu_to_le16(center);
+		packet_mod_ramp->length = cpu_to_le16(length);
+		packet_mod_ramp->envelope.attack_length =
+			cpu_to_le16(ramp.envelope.attack_length);
+		packet_mod_ramp->envelope.attack_level =
+			cpu_to_le16(ramp.envelope.attack_level);
+		packet_mod_ramp->envelope.fade_length =
+			cpu_to_le16(ramp.envelope.fade_length);
+		packet_mod_ramp->envelope.fade_level =
+			cpu_to_le16(ramp.envelope.fade_level);
+		packet_mod_ramp->effect_type = invert;
+		packet_mod_ramp->update_type = 0x45;
+		packet_mod_ramp->length2 = packet_mod_ramp->length;
+		packet_mod_ramp->offset = cpu_to_le16(effect.replay.delay);
 
 		ret = t300rs_send_int(t300rs);
-		if (ret) {
+		if (ret)
 			hid_err(t300rs->hdev, "failed modifying ramp effect\n");
-			goto error;
-		}
-
 	}
 
-	ret = t300rs_update_envelope(t300rs,
-			state,
-			level,
-			effect.replay.length,
-			effect.id,
-			ramp.envelope,
-			ramp_old.envelope
-			);
-
-
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying ramp envelope\n");
-		goto error;
-	}
-
-	ret = t300rs_update_ramp_duration(t300rs, state);
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying ramp duration\n");
-		goto error;
-	}
-
-error:
 	return ret;
 }
 
@@ -1053,43 +1034,38 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 	struct ff_ramp_effect ramp = state->effect.u.ramp;
 	struct __packed t300rs_packet_ramp {
 		struct t300rs_packet_header header;
-		uint16_t difference;
-		uint16_t level;
+		uint16_t slope;
+		uint16_t center;
 		uint8_t zero1[2];
 		uint16_t duration;
 		uint16_t marker;
 		struct t300rs_packet_envelope envelope;
-		uint8_t direction;
+		uint8_t invert;
 		struct t300rs_packet_timing timing;
 	} *packet_ramp = (struct t300rs_packet_ramp *)t300rs->send_buffer;
 
 	int ret;
-	uint16_t difference, offset, top, bottom, duration;
-	int16_t level;
+	uint8_t invert;
+	uint16_t slope, offset, duration;
+	int16_t center;
+
+	t300rs_calculate_ramp_parameters(&slope, &center, &invert, &effect);
 
 	duration = effect.replay.length - 1;
-
-	top = ramp.end_level > ramp.start_level ? ramp.end_level : ramp.start_level;
-	bottom = ramp.end_level > ramp.start_level ? ramp.start_level : ramp.end_level;
-
-
-	difference = ((top - bottom) * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
-	level = (top * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
 	offset = effect.replay.delay;
-
 
 	t300rs_fill_header(&packet_ramp->header, effect.id, 0x6b);
 
-	packet_ramp->difference = cpu_to_le16(difference);
-	packet_ramp->level = cpu_to_le16(level);
+	packet_ramp->slope = cpu_to_le16(slope);
+	packet_ramp->center = cpu_to_le16(center);
 	packet_ramp->duration = cpu_to_le16(duration);
 
 	packet_ramp->marker = cpu_to_le16(0x8000);
 
-	t300rs_fill_envelope(&packet_ramp->envelope, level, duration,
+	t300rs_fill_envelope(&packet_ramp->envelope, slope, duration,
 			&ramp.envelope);
 
-	packet_ramp->direction = ramp.end_level > ramp.start_level ? 0x04 : 0x05;
+	packet_ramp->invert = invert;
 	t300rs_fill_timing(&packet_ramp->timing, duration, offset);
 
 	ret = t300rs_send_int(t300rs);
