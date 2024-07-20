@@ -95,7 +95,8 @@ struct tmff2_device_entry {
 	/* switch_mode is required to not do anything if we're alredy in the
 	 * specified mode */
 	int (*switch_mode)(void *data, uint16_t mode);
-	ssize_t (*alt_mode_show)(void *data, char *buf);
+	ssize_t (*alt_mode_show)(void *data, char *buf); 
+	ssize_t (*mode_show)(void *data, char *buf); 
 	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);

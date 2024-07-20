@@ -2,11 +2,12 @@
 #include <linux/usb.h>
 #include <linux/hid.h>
 #include "../hid-tmff2.h"
+#include <linux/delay.h>
 
 #define t818_MAX_EFFECTS 16
 #define t818_BUFFER_LENGTH 63
 
-static const u8 setup_0[64] = {0x42, 0x01};
+static const u8 setup_0[64] = {0x43, 0x01};
 static const u8 setup_1[64] = {0x0a, 0x04, 0x90, 0x03};
 static const u8 setup_2[64] = {0x0a, 0x04, 0x00, 0x0c};
 static const u8 setup_3[64] = {0x0a, 0x04, 0x12, 0x10};
@@ -22,6 +23,8 @@ static const unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_4),
 	ARRAY_SIZE(setup_5),
 	ARRAY_SIZE(setup_6)};
+
+static const u8 init_0[64] = {0x49, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00};
 
 static const unsigned long t818_params =
 	PARAM_SPRING_LEVEL | PARAM_DAMPER_LEVEL | PARAM_FRICTION_LEVEL | PARAM_RANGE | PARAM_GAIN | PARAM_MODE | PARAM_COLOR;
@@ -127,7 +130,6 @@ static int t818_interrupts(struct t300rs_device_entry *t818)
 	struct usb_interface *usbif = to_usb_interface(t818->hdev->dev.parent);
 	struct usb_host_endpoint *ep;
 	int ret, trans, b_ep, i;
-
 	if (!send_buf)
 	{
 		hid_err(t818->hdev, "failed allocating send buffer\n");
@@ -156,6 +158,71 @@ static int t818_interrupts(struct t300rs_device_entry *t818)
 
 err:
 	kfree(send_buf);
+	return ret;
+}
+
+struct __packed t818_fw_response
+{
+	uint8_t unused1[16];
+};
+
+static int t818_controls(struct t300rs_device_entry *t818)
+{
+	int ret, trans, b_ep, i;
+	struct t818_fw_response *first_response = kzalloc(sizeof(struct t818_fw_response), GFP_KERNEL);
+	if (!first_response)
+	{
+		hid_err(t818->hdev, "could not allocate fw_response\n");
+		return -ENOMEM;
+	}
+
+	// Wait for wheel to calibrate
+	do
+	{
+		msleep(500);
+		ret = usb_control_msg_recv(t818->usbdev, 0, 0x49,
+								   0xc1, 0, 0,
+								   first_response, 16, USB_CTRL_SET_TIMEOUT,
+								   GFP_KERNEL);
+	} while (first_response->unused1[2] == 0xFF);
+
+	// Response somehow identifies the wheel
+	// Indices 3,6,14 differentiate between attached wheel
+	// Round Wheel + Adapter: 0x01, 0x06, 0x00
+	// GT3 Wheel			  0x07, 0x0a, 0x53
+
+	// Since I have no T248 to compare, I suspect indices 2, 4, 7, 8, 9, 12, 13 somehow show it's a T818
+	// Values [0x03, 0x01, 0x0c, 0xb5, 0x0c, 0x0c, 0x0b]
+
+	if (first_response)
+	{
+		for (i = 0; i < ARRAY_SIZE(first_response->unused1); i++)
+		{
+			hid_info(t818->hdev, "0x%02X\n", first_response->unused1[i]);
+		}
+	}
+
+	ret = usb_control_msg_recv(t818->usbdev, 0, 0x49,
+								   0xc1, 0, 0,
+								   first_response, 16, USB_CTRL_SET_TIMEOUT,
+								   GFP_KERNEL);
+
+	
+	if (first_response)
+	{
+		for (i = 0; i < ARRAY_SIZE(first_response->unused1); i++)
+		{
+			hid_info(t818->hdev, "0x%02X\n", first_response->unused1[i]);
+		}
+	}
+
+	if (ret < 0)
+	{
+		hid_err(t818->hdev, "Initialization data couldn't be sent\n");
+		goto err;
+	}
+
+err:
 	return ret;
 }
 
@@ -189,6 +256,17 @@ int t818_set_range(void *data, uint16_t value)
 
 	return t300rs_set_range(data, value);
 }
+
+// 0: Comfort, 1: Sport, 2: Performance, 3: Extreme
+static struct t818_ffb_modes
+{
+	int id;
+	char *label;
+} t818_ffbmodes[] = {
+	{0, "Comfort"},
+	{1, "Sport"},
+	{2, "Performance"},
+	{3, "Extreme"}};
 
 int t818_set_mode(void *data, uint value)
 {
@@ -224,10 +302,10 @@ int t818_set_mode(void *data, uint value)
 	memcpy(send_buf, setMode, ARRAY_SIZE(setMode));
 
 	ret2 = usb_interrupt_msg(t818->usbdev,
-							usb_sndintpipe(t818->usbdev, b_ep),
-							send_buf, ARRAY_SIZE(setMode),
-							&trans,
-							USB_CTRL_SET_TIMEOUT);
+							 usb_sndintpipe(t818->usbdev, b_ep),
+							 send_buf, ARRAY_SIZE(setMode),
+							 &trans,
+							 USB_CTRL_SET_TIMEOUT);
 
 	if (ret2)
 	{
@@ -236,12 +314,39 @@ int t818_set_mode(void *data, uint value)
 	}
 
 	// Store new mode, as everything worked out fine
-	mode = value;
+	t818->mode = value;
 	return ret;
 
 err:
 	kfree(send_buf);
 	return ret2;
+}
+
+ssize_t t818_ffb_mode_show(void *data, char *buf)
+{
+	struct t300rs_device_entry *t818 = data;
+	ssize_t count = 0;
+	int i;
+	if (!t818)
+		return -ENODEV;
+
+	for (i = 0; i < ARRAY_SIZE(t818_ffbmodes); i++)
+	{
+		count += scnprintf(buf + count, PAGE_SIZE - count, "%i: %s",
+						   t818_ffbmodes[i].id, t818_ffbmodes[i].label);
+
+		if (count >= PAGE_SIZE - 1)
+			return count;
+
+		if (t818_ffbmodes[i].id == t818->mode)
+			count += scnprintf(buf + count, PAGE_SIZE - count, " *\n");
+		else
+			count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
+
+		if (count >= PAGE_SIZE - 1)
+			return count;
+	}
+	return count;
 }
 
 int t818_set_color(void *data, uint value)
@@ -277,10 +382,10 @@ int t818_set_color(void *data, uint value)
 	memcpy(send_buf, setColor, ARRAY_SIZE(setColor));
 
 	ret2 = usb_interrupt_msg(t818->usbdev,
-							usb_sndintpipe(t818->usbdev, b_ep),
-							send_buf, ARRAY_SIZE(setColor),
-							&trans,
-							USB_CTRL_SET_TIMEOUT);
+							 usb_sndintpipe(t818->usbdev, b_ep),
+							 send_buf, ARRAY_SIZE(setColor),
+							 &trans,
+							 USB_CTRL_SET_TIMEOUT);
 
 	if (ret2)
 	{
@@ -387,6 +492,9 @@ int t818_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	t818->open = t818->input_dev->open;
 	t818->close = t818->input_dev->close;
 
+	if ((ret = t818_controls(t818)))
+		goto controls_err;
+
 	if ((ret = t818_interrupts(t818)))
 		goto interrupt_err;
 
@@ -403,6 +511,7 @@ int t818_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	return 0;
 
 interrupt_err:
+controls_err:
 send_err:
 	kfree(t818);
 t818_err:
@@ -427,10 +536,10 @@ int t818_populate_api(struct tmff2_device_entry *tmff2)
 
 	tmff2->set_gain = t300rs_set_gain;
 	tmff2->set_autocenter = t300rs_set_autocenter;
-	/* t818 only has 900 degree range, instead of T300RS 1080 */
 	tmff2->set_range = t818_set_range;
 	tmff2->wheel_fixup = t818_wheel_fixup;
 	tmff2->set_mode = t818_set_mode;
+	tmff2->mode_show = t818_ffb_mode_show;
 	tmff2->set_color = t818_set_color;
 
 	tmff2->open = t818_open;

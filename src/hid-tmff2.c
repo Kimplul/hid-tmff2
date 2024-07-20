@@ -257,7 +257,15 @@ static ssize_t mode_store(struct device *dev,
 static ssize_t mode_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%i\n", mode);
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	
+	if (!tmff2)
+		return -ENODEV;
+
+	if (tmff2->mode_show)
+		return tmff2->mode_show(tmff2->data, buf);
+		
+	return -ENODEV;
 }
 static DEVICE_ATTR_RW(mode);
 

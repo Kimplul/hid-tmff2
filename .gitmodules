@@ -1,3 +1,4 @@
 [submodule "deps/hid-tminit"]
 	path = deps/hid-tminit
 	url = https://github.com/schlegp/hid-tminit
+	branch = usb
