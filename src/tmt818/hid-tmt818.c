@@ -7,14 +7,15 @@
 #define t818_MAX_EFFECTS 16
 #define t818_BUFFER_LENGTH 63
 
-static const u8 setup_0[64] = {0x43, 0x01};
-static const u8 setup_1[64] = {0x0a, 0x04, 0x90, 0x03};
-static const u8 setup_2[64] = {0x0a, 0x04, 0x00, 0x0c};
-static const u8 setup_3[64] = {0x0a, 0x04, 0x12, 0x10};
-static const u8 setup_4[64] = {0x0a, 0x04, 0x00, 0x06};
-static const u8 setup_5[64] = {0x0a, 0x04, 0x00, 0x0e};
-static const u8 setup_6[64] = {0x0a, 0x04, 0x00, 0x0e, 0x01};
-static const u8 *const setup_arr[] = {setup_0, setup_1, setup_2, setup_3, setup_4, setup_5, setup_6};
+static const u8 setup_0[64] = {0x0a, 0x04, 0x00, 0x20};
+static const u8 setup_1[64] = {0x0a, 0x04, 0x00, 0x0c};
+static const u8 setup_2[64] = {0x0a, 0x04, 0x12, 0x10};
+static const u8 setup_3[64] = {0x0a, 0x04, 0x00, 0x16};
+static const u8 setup_4[64] = {0x0a, 0x04, 0x00, 0x17, 0x01};
+static const u8 setup_5[64] = {0x0a, 0x04, 0x00, 0x2a, 0x01};
+static const u8 setup_6[64] = {0x0a, 0x04, 0x00, 0x2f, 0x01};
+static const u8 setup_7[64] = {0x0a, 0x04, 0x03};
+static const u8 *const setup_arr[] = {setup_0, setup_1, setup_2, setup_3, setup_4, setup_5, setup_6, setup_7};
 static const unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_0),
 	ARRAY_SIZE(setup_1),
@@ -22,7 +23,9 @@ static const unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_3),
 	ARRAY_SIZE(setup_4),
 	ARRAY_SIZE(setup_5),
-	ARRAY_SIZE(setup_6)};
+	ARRAY_SIZE(setup_6),
+	ARRAY_SIZE(setup_7)
+	};
 
 static const u8 init_0[64] = {0x49, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00};
 
@@ -166,6 +169,29 @@ struct __packed t818_fw_response
 	uint8_t unused1[16];
 };
 
+// Request 0x56 points to Microsoft Extended Properties Feature Descriptor
+struct __packed t818_ext_props_response
+{
+	uint8_t unused1[4];
+};
+
+struct __packed t818_short_response
+{
+	uint8_t unused1[3];
+};
+
+struct __packed t818_twobyte_response
+{
+	uint8_t unused1[2];
+};
+
+
+struct __packed t818_long_response
+{
+	uint8_t unused1[0x40];
+};
+
+
 static int t818_controls(struct t300rs_device_entry *t818)
 {
 	int ret, trans, b_ep, i;
@@ -194,27 +220,66 @@ static int t818_controls(struct t300rs_device_entry *t818)
 	// Since I have no T248 to compare, I suspect indices 2, 4, 7, 8, 9, 12, 13 somehow show it's a T818
 	// Values [0x03, 0x01, 0x0c, 0xb5, 0x0c, 0x0c, 0x0b]
 
-	if (first_response)
+	struct t818_ext_props_response *ext_props_response = kzalloc(sizeof(struct t818_ext_props_response), GFP_KERNEL);
+	if (!ext_props_response)
 	{
-		for (i = 0; i < ARRAY_SIZE(first_response->unused1); i++)
-		{
-			hid_info(t818->hdev, "0x%02X\n", first_response->unused1[i]);
-		}
+		hid_err(t818->hdev, "could not allocate fw_response\n");
+		return -ENOMEM;
 	}
 
-	ret = usb_control_msg_recv(t818->usbdev, 0, 0x49,
-								   0xc1, 0, 0,
-								   first_response, 16, USB_CTRL_SET_TIMEOUT,
-								   GFP_KERNEL);
+	ret = usb_control_msg_recv(t818->usbdev, 0, 0x56,
+							   0xc1, 0, 0,
+							   ext_props_response, 4, USB_CTRL_SET_TIMEOUT,
+							   GFP_KERNEL);
 
-	
-	if (first_response)
+	ret = usb_control_msg_recv(t818->usbdev, 0, 0x55,
+							   0xc1, 0, 0,
+							   first_response, 16, USB_CTRL_SET_TIMEOUT,
+							   GFP_KERNEL);
+
+	struct t818_long_response *long_response = kzalloc(sizeof(struct t818_long_response), GFP_KERNEL);
+	if (!long_response)
 	{
-		for (i = 0; i < ARRAY_SIZE(first_response->unused1); i++)
-		{
-			hid_info(t818->hdev, "0x%02X\n", first_response->unused1[i]);
-		}
+		hid_err(t818->hdev, "could not allocate fw_response\n");
+		return -ENOMEM;
 	}
+
+	ret = usb_control_msg_recv(t818->usbdev, 0, 0x48,
+							   0xc1, 0, 0,
+							   long_response, 0x40, USB_CTRL_SET_TIMEOUT,
+							   GFP_KERNEL);
+
+	struct t818_short_response *short_response = kzalloc(sizeof(struct t818_short_response), GFP_KERNEL);
+	if (!short_response)
+	{
+		hid_err(t818->hdev, "could not allocate fw_response\n");
+		return -ENOMEM;
+	}
+	ret = usb_control_msg_recv(t818->usbdev, 0, 0x42,
+							   0xc1, 0, 0,
+							   short_response, 3, USB_CTRL_SET_TIMEOUT,
+							   GFP_KERNEL);
+
+	struct t818_twobyte_response *twobyte_response = kzalloc(sizeof(struct t818_twobyte_response), GFP_KERNEL);
+	if (!twobyte_response)
+	{
+		hid_err(t818->hdev, "could not allocate fw_response\n");
+		return -ENOMEM;
+	}
+	ret = usb_control_msg_recv(t818->usbdev, 0, 0x4e,
+							   0xc1, 0, 0,
+							   twobyte_response, 2, USB_CTRL_SET_TIMEOUT,
+							   GFP_KERNEL);
+
+	ret = usb_control_msg_recv(t818->usbdev, 0, 0x56,
+							   0xc1, 0, 0,
+							   ext_props_response, 4, USB_CTRL_SET_TIMEOUT,
+							   GFP_KERNEL);
+
+	// for (i = 0; i < ARRAY_SIZE(ext_props_response->unused1); i++)
+	// {
+	// 	hid_info(t818->hdev, "0x%02X\n", ext_props_response->unused1[i]);
+	// }
 
 	if (ret < 0)
 	{
