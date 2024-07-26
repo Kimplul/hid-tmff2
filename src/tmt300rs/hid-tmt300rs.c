@@ -335,6 +335,16 @@ static u8 condition_values[] = {
 	0xff, 0xfe, 0xff
 };
 
+static int16_t t300rs_calculate_constant_level(int16_t level, uint16_t direction)
+{
+	level = (level * fixp_sin16(direction * 360 / 0x10000)) / 0x7fff;
+
+	/* the Windows driver uses the range [-16385;16381] */
+	level = level / 2;
+
+	return level;
+}
+
 static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 {
 	struct ff_periodic_effect *periodic = &effect->u.periodic;
@@ -619,35 +629,6 @@ error:
 	return ret;
 }
 
-static int t300rs_update_simple_duration(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state, unsigned type)
-{
-	struct ff_effect effect = state->effect;
-	struct __packed t300rs_packet_mod_duration {
-		struct t300rs_packet_header header;
-		uint16_t marker;
-		uint16_t duration;
-	} *packet_mod_duration = (struct t300rs_packet_mod_duration *)t300rs->send_buffer;
-
-	uint16_t duration;
-	int ret = 0;
-
-	duration = effect.replay.length - 1;
-
-	t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x49);
-	packet_mod_duration->marker = cpu_to_le16(0x4100 + type);
-	packet_mod_duration->duration = cpu_to_le16(duration);
-
-	ret = t300rs_send_int(t300rs);
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying duration\n");
-		goto error;
-	}
-
-error:
-	return ret;
-}
-
 static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 		struct tmff2_effect_state *state)
 {
@@ -657,49 +638,54 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 	struct ff_constant_effect constant_old = old.u.constant;
 	struct __packed t300rs_packet_mod_constant {
 		struct t300rs_packet_header header;
-		uint16_t level;
+		uint16_t magnitude;
+		struct t300rs_packet_envelope envelope;
+		uint8_t effect_type;
+		uint8_t update_type;
+		uint16_t duration;
+		uint16_t offset;
 	} *packet_mod_constant = (struct t300rs_packet_mod_constant *)t300rs->send_buffer;
-	int ret;
-	int16_t level;
 
-	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
-	/* the Windows driver uses the range [-16385;16381] */
-	level = level / 2;
+	int ret = 0;
+	int16_t level, old_level;
+	uint16_t length, old_length;
 
-	if ((constant.level != constant_old.level) || (effect.direction != old.direction)) {
+	level = t300rs_calculate_constant_level(constant.level, effect.direction);
+	old_level = t300rs_calculate_constant_level(constant_old.level, old.direction);
 
-		t300rs_fill_header(&packet_mod_constant->header, effect.id, 0x0a);
-		packet_mod_constant->level = cpu_to_le16(level);
+	length = effect.replay.length - 1;
+	old_length = old.replay.length - 1;
+
+	if (level != old_level
+			|| constant.envelope.attack_length != constant_old.envelope.attack_length
+			|| constant.envelope.attack_level != constant_old.envelope.attack_level
+			|| constant.envelope.fade_length != constant_old.envelope.fade_length
+			|| constant.envelope.fade_level != constant_old.envelope.fade_level
+			|| length != old_length
+			|| effect.replay.delay != old.replay.delay) {
+
+		t300rs_fill_header(&packet_mod_constant->header, effect.id, 0x6a);
+		packet_mod_constant->magnitude = cpu_to_le16(level);
+
+		packet_mod_constant->envelope.attack_length =
+			cpu_to_le16(constant.envelope.attack_length);
+		packet_mod_constant->envelope.attack_level =
+			cpu_to_le16(constant.envelope.attack_level);
+		packet_mod_constant->envelope.fade_length =
+			cpu_to_le16(constant.envelope.fade_length);
+		packet_mod_constant->envelope.fade_level =
+			cpu_to_le16(constant.envelope.fade_level);
+
+		packet_mod_constant->effect_type = 0x00;
+		packet_mod_constant->update_type = 0x45;
+		packet_mod_constant->duration = length;
+		packet_mod_constant->offset = effect.replay.delay;
 
 		ret = t300rs_send_int(t300rs);
-		if (ret) {
+		if (ret)
 			hid_err(t300rs->hdev, "failed modifying constant effect\n");
-			goto error;
-		}
-
 	}
 
-	ret = t300rs_update_envelope(t300rs,
-			state,
-			level,
-			effect.replay.length,
-			effect.id,
-			constant.envelope,
-			constant_old.envelope
-			);
-
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying constant envelope\n");
-		goto error;
-	}
-
-	ret = t300rs_update_simple_duration(t300rs, state, 0x00);
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying constant duration\n");
-		goto error;
-	}
-
-error:
 	return ret;
 }
 
@@ -939,9 +925,7 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 
 	int ret;
 
-	level = (constant.level * fixp_sin16(effect.direction * 360 / 0x10000)) / 0x7fff;
-	/* the Windows driver uses the range [-16385;16381] */
-	level = level / 2;
+	level = t300rs_calculate_constant_level(constant.level, effect.direction);
 	duration = effect.replay.length - 1;
 
 	offset = effect.replay.delay;
