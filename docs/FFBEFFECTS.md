@@ -142,7 +142,21 @@ have model specific peculiarities, though.
 
 ### Modifying (For dynamic updating of effects)
 
-#### Direction: ``N/A``
+```
+4th byte 5th byte  hex
+00001010          0a    - magnitude
+01001001          49    - duration / offset / duration + offset
+00110001 10000001 31 81 - envelope attack length
+00110001 10000010 31 82 - envelope attack level
+00110001 10000100 31 84 - envelope fade length
+00110001 10001000 31 88 - envelope fade level
+00101001          29    - envelope (all)
+00101010          2a    - magnitude + envelope
+01101010          6a    - magnitude + envelope + offset
+00110010          32    - magnitude + envelope attack length & level
+01110010          72    - magnitude + envelope attack length & level + duration
+01101010          6a    - magnitude + envelope + duration + offset
+```
 
 #### Constant force:
 ```
@@ -158,33 +172,106 @@ have model specific peculiarities, though.
 
 #### Envelope:
 ```
+envelope attack/fade level/length:
+    multiple values can be updated with one packet
+
     60 00 - standard header
     01 - ID
-    31 - modify envelope
-    84 - ID of envelope attribute ( attack_level 82,
-                                    attack_length 81,
-                                    fade_level 88,
-                                    fade_length 84 )
-    63 04 - value attribute should be set to ?***?
-    00 00 00 00 00 00 00 00 00
+    31 85
+    e8 03 - attack length
+    dc 05 - fade length
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+envelope (all):
+    60 00 - standard header
+    01 - ID
+    29
+    e8 03 - attack length
+    cc 0c - attack level
+    dc 05 - fade length
+    cc 0c - fade level
+    00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
 #### Duration:
+Update type:
+
+```
+ binary   hex
+01000001  41  duration
+01000100  44  offset
+01000101  45  duration + offset
+```
+
 ```
     60 00 - standard header
     01 - ID
-    49 00 41 - modify timing?
-    6c 20 - length in milliseconds
-    00 00 00 00 00 00 00 00
+    49
+    00 - effect type?
+    45 - update type
+    88 13 - duration in milliseconds
+    00 00 - offset in milliseconds
+    00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
-#### Offset: `N/A` 
+#### Combined:
+```
+magnitude + envelope:
+    60 00 - standard header
+    01 - ID
+    2a
+    fd 3f - magnitude
+    e8 03 - attack length
+    cc 0c - attack level
+    dc 05 - fade length
+    cc 0c - fade level
+    00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+magnitude + envelope attack length & level + duration:
+    60 00 - standard header
+    01 - ID
+    72
+    fd 3f - magnitude
+    83 - envelope update type
+    e8 03 - attack length
+    cc 0c - attack level
+    00 - effect type?
+    41 - update type
+    88 13 - duration
+    00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+magnitude + envelope + duration + offset:
+    60 00 - standard header
+    01 - ID
+    6a
+    fd 3f - magnitude
+    e8 03 - attack length
+    cc 0c - attack level
+    dc 05 - fade length
+    cc 0c - fade level
+    00 - effect type?
+    45 - update type
+    88 13 - duration
+    00 00 - offset
+    00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
 ## FF_RAMP
 
