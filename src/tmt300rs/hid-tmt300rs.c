@@ -648,37 +648,6 @@ error:
 	return ret;
 }
 
-static int t300rs_update_periodic_duration(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state, unsigned type)
-{
-	struct ff_effect effect = state->effect;
-	struct __packed t300rs_packet_mod_duration {
-		struct t300rs_packet_header header;
-		uint8_t type;
-		uint8_t marker;
-		uint16_t duration;
-	} *packet_mod_duration = (struct t300rs_packet_mod_duration *)t300rs->send_buffer;
-
-	uint16_t duration;
-	int ret = 0;
-
-	duration = effect.replay.length - 1;
-
-	t300rs_fill_header(&packet_mod_duration->header, effect.id, 0x49);
-	packet_mod_duration->type = type;
-	packet_mod_duration->marker = 0x41;
-	packet_mod_duration->duration = cpu_to_le16(duration);
-
-	ret = t300rs_send_int(t300rs);
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying duration\n");
-		goto error;
-	}
-
-error:
-	return ret;
-}
-
 static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 		struct tmff2_effect_state *state)
 {
@@ -887,103 +856,68 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 	struct ff_effect old = state->old;
 	struct __packed t300rs_packet_mod_periodic {
 		struct t300rs_packet_header header;
-		uint8_t attribute;
-		uint16_t value;
+		uint8_t type;
+		uint16_t magnitude;
+		uint16_t offset;
+		uint16_t phase;
+		uint16_t period;
+		struct t300rs_packet_envelope envelope;
+		uint8_t effect_type;
+		uint8_t update_type;
+		uint16_t duration;
+		uint16_t play_offset;
 	} *packet_mod_periodic = (struct t300rs_packet_mod_periodic *)t300rs->send_buffer;
 
 	struct ff_periodic_effect periodic, periodic_old;
-	int ret;
-	uint16_t phase;
-	int16_t magnitude;
+	int ret = 0;
+	uint16_t length, old_length;
 
 	t300rs_calculate_periodic_values(&effect);
 	periodic = effect.u.periodic;
-	magnitude = periodic.magnitude;
-	phase = periodic.phase;
 
 	t300rs_calculate_periodic_values(&old);
 	periodic_old = old.u.periodic;
 
-	if ((periodic.magnitude != periodic_old.magnitude)
-			|| (effect.direction != old.direction)) {
+	length = effect.replay.length - 1;
+	old_length = old.replay.length - 1;
 
-		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
-		packet_mod_periodic->attribute = 0x01;
-		packet_mod_periodic->value = cpu_to_le16(magnitude);
+	if (periodic.magnitude != periodic_old.magnitude
+			|| periodic.offset != periodic_old.offset
+			|| periodic.phase != periodic_old.phase
+			|| periodic.period != periodic_old.period
+			|| periodic.envelope.attack_length != periodic_old.envelope.attack_length
+			|| periodic.envelope.attack_level != periodic_old.envelope.attack_level
+			|| periodic.envelope.fade_length != periodic_old.envelope.fade_length
+			|| periodic.envelope.fade_level != periodic_old.envelope.fade_level
+			|| length != old_length
+			|| effect.replay.delay != old.replay.delay) {
 
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying periodic magnitude\n");
-			goto error;
-		}
+		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x6e);
+		packet_mod_periodic->type = 0x0f;
+		packet_mod_periodic->magnitude = cpu_to_le16(periodic.magnitude);
+		packet_mod_periodic->offset = cpu_to_le16(periodic.offset);
+		packet_mod_periodic->phase = cpu_to_le16(periodic.phase);
+		packet_mod_periodic->period = cpu_to_le16(periodic.period);
 
-	}
+		packet_mod_periodic->envelope.attack_length =
+			cpu_to_le16(periodic.envelope.attack_length);
+		packet_mod_periodic->envelope.attack_level =
+			cpu_to_le16(periodic.envelope.attack_level);
+		packet_mod_periodic->envelope.fade_length =
+			cpu_to_le16(periodic.envelope.fade_length);
+		packet_mod_periodic->envelope.fade_level =
+			cpu_to_le16(periodic.envelope.fade_level);
 
-	if (periodic.offset != periodic_old.offset) {
-		uint16_t offset = periodic.offset;
-
-		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
-		packet_mod_periodic->attribute = 0x02;
-		packet_mod_periodic->value = cpu_to_le16(offset);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying periodic offset\n");
-			goto error;
-		}
-
-	}
-
-	if (periodic.phase != periodic_old.phase) {
-
-		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
-		packet_mod_periodic->attribute = 0x04;
-		packet_mod_periodic->value = cpu_to_le16(phase);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying periodic phase\n");
-			goto error;
-		}
-
-	}
-
-	if (periodic.period != periodic_old.period) {
-		int16_t period = periodic.period;
-
-		t300rs_fill_header(&packet_mod_periodic->header, effect.id, 0x0e);
-		packet_mod_periodic->attribute = 0x08;
-		packet_mod_periodic->value = cpu_to_le16(period);
+		packet_mod_periodic->effect_type = periodic.waveform - 0x57;
+		packet_mod_periodic->update_type = 0x45;
+		packet_mod_periodic->duration = length;
+		packet_mod_periodic->play_offset = effect.replay.delay;
 
 		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying periodic period\n");
-			goto error;
-		}
-
+		if (ret)
+			hid_err(t300rs->hdev, "failed modifying periodic effect\n");
 	}
 
-	ret = t300rs_update_envelope(t300rs,
-			state,
-			magnitude,
-			effect.replay.length,
-			effect.id,
-			periodic.envelope,
-			periodic_old.envelope
-			);
-
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying periodic envelope\n");
-		goto error;
-	}
-
-	ret = t300rs_update_periodic_duration(t300rs, state, periodic.waveform - 0x57);
-	if (ret) {
-		hid_err(t300rs->hdev, "failed modifying periodic duration\n");
-		goto error;
-	}
-
-error:
 	return ret;
 }
 
