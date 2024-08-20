@@ -529,17 +529,23 @@ int t300rs_stop_effect(void *data, struct tmff2_effect_state *state)
 }
 
 static void t300rs_fill_envelope(struct t300rs_packet_envelope *packet_envelope,
-		int16_t level, uint16_t duration, struct ff_envelope *envelope)
+		struct ff_envelope *envelope)
 {
-	uint16_t attack_length = (duration * envelope->attack_length) / 0x7fff;
-	uint16_t attack_level = (level * envelope->attack_level) / 0x7fff;
-	uint16_t fade_length = (duration * envelope->fade_length) / 0x7fff;
-	uint16_t fade_level = (level * envelope->fade_level) / 0x7fff;
+	// Note: minimal length limitations are not enforced
+	// as per my testing, the wheel can handle lower values well
+	packet_envelope->attack_length = cpu_to_le16(envelope->attack_length);
+	packet_envelope->attack_level = cpu_to_le16(envelope->attack_level);
+	packet_envelope->fade_length = cpu_to_le16(envelope->fade_length);
+	packet_envelope->fade_level = cpu_to_le16(envelope->fade_level);
+}
 
-	packet_envelope->attack_length = cpu_to_le16(attack_length);
-	packet_envelope->attack_level = cpu_to_le16(attack_level);
-	packet_envelope->fade_length = cpu_to_le16(fade_length);
-	packet_envelope->fade_level = cpu_to_le16(fade_level);
+static int t300rs_is_envelope_changed(struct ff_envelope *new,
+	struct ff_envelope *old)
+{
+	return new->attack_length != old->attack_length
+			|| new->attack_level != old->attack_level
+			|| new->fade_length != old->fade_length
+			|| new->fade_level != old->fade_level;
 }
 
 static void t300rs_fill_timing(struct t300rs_packet_timing *packet_timing,
@@ -550,83 +556,6 @@ static void t300rs_fill_timing(struct t300rs_packet_timing *packet_timing,
 	packet_timing->offset = cpu_to_le16(offset);
 
 	packet_timing->end_marker = 0xffff;
-}
-
-static int t300rs_update_envelope(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state,
-		int16_t level,
-		uint16_t duration,
-		uint8_t id,
-		struct ff_envelope envelope,
-		struct ff_envelope envelope_old
-		)
-{
-	struct __packed t300rs_packet_mod_envelope {
-		struct t300rs_packet_header header;
-		uint8_t attribute;
-		uint16_t value;
-	} *packet_mod_envelope = (struct t300rs_packet_mod_envelope *)t300rs->send_buffer;
-
-	uint16_t attack_length, attack_level, fade_length, fade_level;
-	int ret = 0;
-
-	duration = duration - 1;
-
-	attack_length = (duration * envelope.attack_length) / 0x7fff;
-	attack_level = (level * envelope.attack_level) / 0x7fff;
-	fade_length = (duration * envelope.fade_length) / 0x7fff;
-	fade_level = (level * envelope.fade_level) / 0x7fff;
-
-	if (envelope.attack_length != envelope_old.attack_length) {
-		t300rs_fill_header(&packet_mod_envelope->header, id, 0x31);
-		packet_mod_envelope->attribute = 0x81;
-		packet_mod_envelope->value = cpu_to_le16(attack_length);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying effect envelope\n");
-			goto error;
-		}
-	}
-
-	if (envelope.attack_level != envelope_old.attack_level) {
-		t300rs_fill_header(&packet_mod_envelope->header, id, 0x31);
-		packet_mod_envelope->attribute = 0x82;
-		packet_mod_envelope->value = cpu_to_le16(attack_level);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying effect envelope\n");
-			goto error;
-		}
-	}
-
-	if (envelope.fade_length != envelope_old.fade_length) {
-		t300rs_fill_header(&packet_mod_envelope->header, id, 0x31);
-		packet_mod_envelope->attribute = 0x84;
-		packet_mod_envelope->value = cpu_to_le16(fade_length);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying effect envelope\n");
-			goto error;
-		}
-	}
-
-	if (envelope.fade_level != envelope_old.fade_level) {
-		t300rs_fill_header(&packet_mod_envelope->header, id, 0x31);
-		packet_mod_envelope->attribute = 0x88;
-		packet_mod_envelope->value = cpu_to_le16(fade_level);
-
-		ret = t300rs_send_int(t300rs);
-		if (ret) {
-			hid_err(t300rs->hdev, "failed modifying effect envelope\n");
-			goto error;
-		}
-	}
-
-error:
-	return ret;
 }
 
 static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
@@ -657,24 +586,14 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 	old_length = old.replay.length - 1;
 
 	if (level != old_level
-			|| constant.envelope.attack_length != constant_old.envelope.attack_length
-			|| constant.envelope.attack_level != constant_old.envelope.attack_level
-			|| constant.envelope.fade_length != constant_old.envelope.fade_length
-			|| constant.envelope.fade_level != constant_old.envelope.fade_level
+			|| t300rs_is_envelope_changed(&constant.envelope, &constant_old.envelope)
 			|| length != old_length
 			|| effect.replay.delay != old.replay.delay) {
 
 		t300rs_fill_header(&packet_mod_constant->header, effect.id, 0x6a);
 		packet_mod_constant->magnitude = cpu_to_le16(level);
 
-		packet_mod_constant->envelope.attack_length =
-			cpu_to_le16(constant.envelope.attack_length);
-		packet_mod_constant->envelope.attack_level =
-			cpu_to_le16(constant.envelope.attack_level);
-		packet_mod_constant->envelope.fade_length =
-			cpu_to_le16(constant.envelope.fade_length);
-		packet_mod_constant->envelope.fade_level =
-			cpu_to_le16(constant.envelope.fade_level);
+		t300rs_fill_envelope(&packet_mod_constant->envelope, &constant.envelope);
 
 		packet_mod_constant->effect_type = 0x00;
 		packet_mod_constant->update_type = 0x45;
@@ -724,26 +643,18 @@ static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
 	if (slope != old_slope
 			|| center != old_center
 			|| invert != old_invert
-			|| ramp.envelope.attack_length != ramp_old.envelope.attack_length
-			|| ramp.envelope.attack_level != ramp_old.envelope.attack_level
-			|| ramp.envelope.fade_length != ramp_old.envelope.fade_length
-			|| ramp.envelope.fade_level != ramp_old.envelope.fade_level
 			|| length != old_length
-			|| effect.replay.delay != old.replay.delay) {
+			|| effect.replay.delay != old.replay.delay
+			|| t300rs_is_envelope_changed(&ramp.envelope, &ramp_old.envelope)) {
 
 		t300rs_fill_header(&packet_mod_ramp->header, effect.id, 0x6e);
 		packet_mod_ramp->type = 0x0b;
 		packet_mod_ramp->slope = cpu_to_le16(slope);
 		packet_mod_ramp->center = cpu_to_le16(center);
 		packet_mod_ramp->length = cpu_to_le16(length);
-		packet_mod_ramp->envelope.attack_length =
-			cpu_to_le16(ramp.envelope.attack_length);
-		packet_mod_ramp->envelope.attack_level =
-			cpu_to_le16(ramp.envelope.attack_level);
-		packet_mod_ramp->envelope.fade_length =
-			cpu_to_le16(ramp.envelope.fade_length);
-		packet_mod_ramp->envelope.fade_level =
-			cpu_to_le16(ramp.envelope.fade_level);
+
+		t300rs_fill_envelope(&packet_mod_ramp->envelope, &ramp.envelope);
+
 		packet_mod_ramp->effect_type = invert;
 		packet_mod_ramp->update_type = 0x45;
 		packet_mod_ramp->length2 = packet_mod_ramp->length;
@@ -871,10 +782,7 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 			|| periodic.offset != periodic_old.offset
 			|| periodic.phase != periodic_old.phase
 			|| periodic.period != periodic_old.period
-			|| periodic.envelope.attack_length != periodic_old.envelope.attack_length
-			|| periodic.envelope.attack_level != periodic_old.envelope.attack_level
-			|| periodic.envelope.fade_length != periodic_old.envelope.fade_length
-			|| periodic.envelope.fade_level != periodic_old.envelope.fade_level
+			|| t300rs_is_envelope_changed(&periodic.envelope, &periodic_old.envelope)
 			|| length != old_length
 			|| effect.replay.delay != old.replay.delay) {
 
@@ -885,14 +793,7 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 		packet_mod_periodic->phase = cpu_to_le16(periodic.phase);
 		packet_mod_periodic->period = cpu_to_le16(periodic.period);
 
-		packet_mod_periodic->envelope.attack_length =
-			cpu_to_le16(periodic.envelope.attack_length);
-		packet_mod_periodic->envelope.attack_level =
-			cpu_to_le16(periodic.envelope.attack_level);
-		packet_mod_periodic->envelope.fade_length =
-			cpu_to_le16(periodic.envelope.fade_length);
-		packet_mod_periodic->envelope.fade_level =
-			cpu_to_le16(periodic.envelope.fade_level);
+		t300rs_fill_envelope(&packet_mod_periodic->envelope, &periodic.envelope);
 
 		packet_mod_periodic->effect_type = periodic.waveform - 0x57;
 		packet_mod_periodic->update_type = 0x45;
@@ -934,8 +835,7 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 
 	packet_constant->level = cpu_to_le16(level);
 
-	t300rs_fill_envelope(&packet_constant->envelope, level, duration,
-			&constant.envelope);
+	t300rs_fill_envelope(&packet_constant->envelope, &constant.envelope);
 	t300rs_fill_timing(&packet_constant->timing, duration, offset);
 
 	ret = t300rs_send_int(t300rs);
@@ -980,8 +880,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 
 	packet_ramp->marker = cpu_to_le16(0x8000);
 
-	t300rs_fill_envelope(&packet_ramp->envelope, slope, duration,
-			&ramp.envelope);
+	t300rs_fill_envelope(&packet_ramp->envelope, &ramp.envelope);
 
 	packet_ramp->invert = invert;
 	t300rs_fill_timing(&packet_ramp->timing, duration, offset);
@@ -1097,8 +996,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 
 	packet_periodic->marker = cpu_to_le16(0x8000);
 
-	t300rs_fill_envelope(&packet_periodic->envelope, magnitude, duration,
-			&periodic.envelope);
+	t300rs_fill_envelope(&packet_periodic->envelope, &periodic.envelope);
 
 	packet_periodic->waveform = periodic.waveform - 0x57;
 
