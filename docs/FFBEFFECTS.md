@@ -938,6 +938,52 @@ magnitude + offset + phase + period + envelope + duration + offset:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
+## Envelope
+
+Envelope related parameters are the same across all the effects. The only
+difference is which effect specific parameters are used during the calculations.
+
+Damper, Friction, Inertia, and Spring do not support envelope.
+
+### attack length
+
+between 0 and 65535
+
+On Windows, it has a minimum value depending on how far is the target from the
+attack/fade level. This means that in case of an envelope that goes from zero
+to max has the minimum length of 256ms.
+
+```length = abs((effectval * 32768 / effectmax - level) / 128)```
+
+`effectval` is the current value of an effect specific parameter
+
+`effectmax` is the maximum value of `effectval`
+
+`level` is the current value of the attack/fade level
+
+Used parameters for each effect:
+
+| Effect   | Parameter |
+|----------|-----------|
+| Constant | Strength  |
+| Periodic | Magnitude |
+| Ramp     | Slope     |
+
+### attack level
+
+between 0 and 32764
+
+### fade length
+
+between 0 and 65535
+
+Uses the same calculation as attack length.
+
+### fade level
+
+between 0 and 32764
+
+
 ## PS4 Input `rdesc`
 ```
     ff00.0021 = 0
