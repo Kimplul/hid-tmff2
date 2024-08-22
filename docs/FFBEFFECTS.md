@@ -43,7 +43,7 @@ have model specific peculiarities, though.
 
 ### Stopping/removing (why are they rolled into one?)
 ```
-    60 00 - standard header 
+    60 00 - standard header
     01 - ID
     89 - playing options
     00 - stop
@@ -99,7 +99,7 @@ have model specific peculiarities, though.
 ```
 
 ## FF_AUTOCENTER:
-```    
+```
     60 08 - header plus settings?
     03 - set autocenter force
     8f 02 - force (between ff ff and 00 00)
@@ -110,7 +110,7 @@ have model specific peculiarities, though.
 ```
 
 ## FF_GAIN:
-```    
+```
     60 02 - header plus gain?
     bf - gain (between ff and 00)
     00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -130,7 +130,8 @@ have model specific peculiarities, though.
     00 00 - attack_level ***
     00 00 - fade_length
     00 00 - fade_level ***
-    00 4f - ?
+    00 - effect type?
+    4f
     f7 17 - time in milliseconds, unsigned
     00 00
     07 00 - offset from start(?)
@@ -200,15 +201,6 @@ envelope (all):
 ```
 
 #### Duration:
-Update type:
-
-```
- binary   hex
-01000001  41  duration
-01000100  44  offset
-01000101  45  duration + offset
-```
-
 ```
     60 00 - standard header
     01 - ID
@@ -274,8 +266,6 @@ magnitude + envelope + duration + offset:
 ```
 
 ## FF_RAMP
-
-Ramps seem to follow triangle wave parameters.
 
 ```
 00001110 00000001 0e 01 - slope
@@ -361,7 +351,7 @@ Valid:
 ### Modifying:
 
 ```
-center: 
+center:
     60 00 - standard header
     01 - ID
     0e 02
@@ -408,7 +398,7 @@ duration:
     4e 08
     88 13 - duration
     04 - effect type? must reflect the actual inversion 04 or 05
-    41 - update type
+    41 - update type, see Update type section
     88 13 - duration
     00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -420,7 +410,7 @@ offset:
     01 - ID
     49
     04 - effect type? must reflect the actual inversion 04 or 05
-    44 - update type
+    44 - update type, see Update type section
     00 00 - offset
     00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -433,7 +423,7 @@ duration + offset:
     4e 08
     88 13 - duration
     04 - effect type? must reflect the actual inversion 04 or 05
-    45 - update type
+    45 - update type, see Update type section
     88 13 - duration
     00 00 - offset
     00 00 00
@@ -446,7 +436,7 @@ dir + offset:
     01 - ID
     49
     05 - effect type? must reflect the actual inversion 04 or 05
-    44 - update type
+    44 - update type, see Update type section
     00 00 - offset
     00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -545,7 +535,7 @@ duration + offset + envelope + slope + center + invert:
     dc 05 - fade length
     32 1a - fade level
     04 - effect type? (invert) 04 or 05
-    45 - update type
+    45 - update type, see Update type section
     88 13 - length 2
     00 00 - offset
     00 00 00 00 00 00 00
@@ -595,7 +585,7 @@ duration + offset + envelope + slope + center + invert:
 4th byte 5th byte   hex
 00001110 01000001  0e 41  positive coefficient
 00001110 01000010  0e 42  negative coefficient
-00001110 01000011  0e 43  both     coefficint
+00001110 01000011  0e 43  both     coefficient
 00001110 01001100  0e 4c  right and left deadband
 00001110 01010000  0e 50  positive saturation
 00001110 01100000  0e 60  negative saturation
@@ -638,7 +628,7 @@ The order of the fields are defined in the `all effect specific parameters + dur
     positive and negative coefficient:
     60 00
     01 - ID
-    0e 43 
+    0e 43
     ab 67 - right coefficient, signed, between 01 80 (-32767) and fc 7f (32764)
     50 18 - left coefficient, signed, between 01 80 (-32767) and fc 7f (32764)
     00 00 00 00 00 00 00
@@ -715,7 +705,7 @@ The order of the fields are defined in the `all effect specific parameters + dur
     fd 5f - positive saturation
     fd 5f - negative saturation
     06 - effect type (condition)?
-    45 - update type, see below
+    45 - update type, see Update type section
     10 27 - length in milliseconds
     00 00 - offset in milliseconds
     00 00 00 00 00 00 00 00 00 00
@@ -725,22 +715,12 @@ The order of the fields are defined in the `all effect specific parameters + dur
 ```
 
 ### Duration:
-
-Update type:
-
-```
-6th byte  hex
-01000001  41  length
-01000100  44  offset
-01000101  45  length + offset
-```
-
 ```
     60 00 - standard header
     01 - ID
     49
     06 - effect type (condition)?
-    45 - update type
+    45 - update type, see Update type section
     6c 20 - length in milliseconds
     00 00 - offset in milliseconds
     00 00 00 00 00 00
@@ -866,9 +846,7 @@ envelope (all):
                      03 - Sine
                      04 - Sawtooth up
                      05 - Sawtooth down
-    45 - update type 41 - duration
-                     44 - offset
-                     45 - duration + offset
+    45 - update type, see Update type section
     74 27 - duration
     00 00 - offset
     00 00 00 00 00 00
@@ -928,9 +906,7 @@ magnitude + offset + phase + period + envelope + duration + offset:
                      03 - Sine
                      04 - Sawtooth up
                      05 - Sawtooth down
-    45 - update type 41 - duration
-                     44 - offset
-                     45 - duration + offset
+    45 - update type, see Update type section
     74 27 - duration
     00 00 - offset
     00 00 00 00 00
@@ -983,6 +959,15 @@ Uses the same calculation as attack length.
 
 between 0 and 32764
 
+
+## Update type
+
+```
+binary    hex
+01000001  41  duration
+01000100  44  offset
+01000101  45  duration + offset
+```
 
 ## PS4 Input `rdesc`
 ```
