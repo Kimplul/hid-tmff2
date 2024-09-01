@@ -597,8 +597,8 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 
 		packet_mod_constant->effect_type = 0x00;
 		packet_mod_constant->update_type = 0x45;
-		packet_mod_constant->duration = length;
-		packet_mod_constant->offset = effect.replay.delay;
+		packet_mod_constant->duration = cpu_to_le16(length);
+		packet_mod_constant->offset = cpu_to_le16(effect.replay.delay);
 
 		ret = t300rs_send_int(t300rs);
 		if (ret)
@@ -797,8 +797,8 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 
 		packet_mod_periodic->effect_type = periodic.waveform - 0x57;
 		packet_mod_periodic->update_type = 0x45;
-		packet_mod_periodic->duration = length;
-		packet_mod_periodic->play_offset = effect.replay.delay;
+		packet_mod_periodic->duration = cpu_to_le16(length);
+		packet_mod_periodic->play_offset = cpu_to_le16(effect.replay.delay);
 
 		ret = t300rs_send_int(t300rs);
 		if (ret)
