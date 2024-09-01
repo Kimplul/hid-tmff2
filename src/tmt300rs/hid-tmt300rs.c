@@ -379,7 +379,7 @@ static uint16_t t300rs_condition_max_saturation(uint16_t effect_type)
 	return 0x7ffc;
 }
 
-static uint16_t t300rs_condition_effect_type(uint16_t effect_type)
+static uint8_t t300rs_condition_effect_type(uint16_t effect_type)
 {
 	if(effect_type == FF_SPRING)
 		return 0x06;
