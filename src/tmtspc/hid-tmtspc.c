@@ -28,6 +28,7 @@ static const unsigned long tspc_params =
 	PARAM_SPRING_LEVEL
 	| PARAM_DAMPER_LEVEL
 	| PARAM_FRICTION_LEVEL
+	| PARAM_ALT_MODE
 	| PARAM_RANGE
 	| PARAM_GAIN
 	;
