@@ -173,9 +173,9 @@ static int tspc_set_range(void *data, uint16_t value)
 		value = 140;
 	}
 
-	if (value > 900) {
+	if (value > 1080) {
 		hid_info(tspc->hdev, "value %i too large, clamping to 1080\n", value);
-		value = 900;
+		value = 1080;
 	}
 
 	return t300rs_set_range(data, value);
@@ -327,7 +327,7 @@ int tspc_populate_api(struct tmff2_device_entry *tmff2)
 
 	tmff2->set_gain = t300rs_set_gain;
 	tmff2->set_autocenter = t300rs_set_autocenter;
-	/* TS-PC has 900 degree range, unlike T300RS 1080 */
+	/* TS-PC has 1080 degree range, like T300RS 1080 */
 	tmff2->set_range = tspc_set_range;
 	tmff2->wheel_fixup = tspc_wheel_fixup;
 
