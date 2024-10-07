@@ -283,14 +283,14 @@ static int tspc_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	if (!open_mode)
 		tspc_send_open(tspc);
 
-	hid_info(tspc->hdev, "force feedback for TS-XW\n");
+	hid_info(tspc->hdev, "force feedback for TS-PC\n");
 	return 0;
 
 interrupt_err:
 send_err:
 	kfree(tspc);
 tspc_err:
-	hid_err(tmff2->hdev, "failed initializing TS-XW\n");
+	hid_err(tmff2->hdev, "failed initializing TS-PC\n");
 	return ret;
 }
 
