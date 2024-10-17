@@ -1,6 +1,6 @@
 # Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128 and TS-XW wheels
 
-> **DISCLAIMER:** The module is now ready for near-stable USE in most force
+> **DISCLAIMER:** The module is ready for use in most force
 > feedback games, supports rangesetting as well as gain and autocentering along
 > with most force feedback effects. While I haven't personally come across any
 > crashes or lockups with this version, I can't promise that they won't occur
@@ -155,23 +155,31 @@ for wheels:
   [Oversteer](https://github.com/berarma/oversteer).
 
 + If a wheel has a deadzone in games, you can try setting up a udev rule:
-  `/etc/udev/rules.d/99-joydev.rules`
+  `/etc/udev/rules.d/99-tmff2.rules`
 
   ```
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="WHEEL_ID", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  # T300RS PS3 normal mode
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  
+  # T300RS PS3 advanced mode
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  
+  # T300RS PS4 mode
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+
+  # T248 + T128
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+
+  # TX
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b669", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  
+  # TSXW
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+
+  # TSPC
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
   ```
-
-  where `WHEEL_ID` is
-
-  | Wheel                      | WHEEL_ID   |
-  |----------------------------|------------|
-  | T300 RS, PS3 normal mode   | b66e       |
-  | T300 RS, PS3 advanced mode | b66f       |
-  | T300 RS, PS4 normal mode   | b66d       |
-  | T248                       | b696       |
-  | TX                         | b669       |
-
-
+  
   This should make sure that the wheel behaves like you'd want from a wheel.
 
 + There have been reports that some games work better with a different timer
