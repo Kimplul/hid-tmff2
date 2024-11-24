@@ -2,6 +2,7 @@
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <linux/hid.h>
+#include <linux/version.h>
 #include "hid-tmff2.h"
 
 
@@ -712,8 +713,13 @@ oom_err:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 static __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		unsigned int *rsize)
+#else
+static const __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
+		unsigned int *rsize)
+#endif
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(hdev);
 
