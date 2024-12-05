@@ -151,7 +151,7 @@ err:
 	return ret;
 }
 
-int tx_wheel_destroy(void *data)
+static int tx_wheel_destroy(void *data)
 {
 	struct t300rs_device_entry *t300rs = data;
 
@@ -163,7 +163,7 @@ int tx_wheel_destroy(void *data)
 	return 0;
 }
 
-int tx_set_range(void *data, uint16_t value)
+static int tx_set_range(void *data, uint16_t value)
 {
 	struct t300rs_device_entry *tx = data;
 
@@ -239,9 +239,10 @@ static int tx_close(void *data, int open_mode)
 	return 0;
 }
 
-int tx_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
+static int tx_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 {
-	struct t300rs_device_entry *tx = kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
+	struct t300rs_device_entry *tx = kzalloc(sizeof(struct t300rs_device_entry),
+						 GFP_KERNEL);
 	struct list_head *report_list;
 	int ret;
 
