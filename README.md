@@ -1,6 +1,6 @@
-# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX and TS-XW wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128 and TS-XW wheels
 
-> **DISCLAIMER:** The module is now ready for near-stable USE in most force
+> **DISCLAIMER:** The module is ready for use in most force
 > feedback games, supports rangesetting as well as gain and autocentering along
 > with most force feedback effects. While I haven't personally come across any
 > crashes or lockups with this version, I can't promise that they won't occur
@@ -113,7 +113,6 @@ for wheels:
 + [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
 + [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
-+ [T128P](https://github.com/Kimplul/hid-tmff2/issues/67) (initial alpha support, needs `hid-tminit` tweaking)
 + [TS-PC](https://github.com/Kimplul/hid-tmff2/issues/65)
 
 ## Common issues and notes
@@ -155,25 +154,42 @@ for wheels:
 + To change gain, autocentering etc. use
   [Oversteer](https://github.com/berarma/oversteer).
 
-+ If a wheel has a deadzone in games, you can try setting up a udev rule:
-  `/etc/udev/rules.d/99-joydev.rules`
++ If a wheel has a deadzone in games, you can try setting up some udev rules:
+  `/etc/udev/rules.d/99-tmff2.rules`
 
   ```
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="WHEEL_ID", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  # T300RS PS3 normal mode
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+  # T300RS PS3 advanced mode
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+  # T300RS PS4 mode
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+  # T248 + T128
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", RUN+="/usr/bin/jscal -s 11,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+  # TX
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b669", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b669", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+  # TSXW
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+  # TSPC
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
   ```
-
-  where `WHEEL_ID` is
-
-  | Wheel                      | WHEEL_ID   |
-  |----------------------------|------------|
-  | T300 RS, PS3 normal mode   | b66e       |
-  | T300 RS, PS3 advanced mode | b66f       |
-  | T300 RS, PS4 normal mode   | b66d       |
-  | T248                       | b696       |
-  | TX                         | b669       |
-
 
   This should make sure that the wheel behaves like you'd want from a wheel.
+  I personally only have a T300 and a T248, so please do open up an issue if the
+  above file doesn't work for you on some other wheel.
 
 + There have been reports that some games work better with a different timer
   period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and

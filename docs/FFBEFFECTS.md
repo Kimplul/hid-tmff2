@@ -43,7 +43,7 @@ have model specific peculiarities, though.
 
 ### Stopping/removing (why are they rolled into one?)
 ```
-    60 00 - standard header 
+    60 00 - standard header
     01 - ID
     89 - playing options
     00 - stop
@@ -99,7 +99,7 @@ have model specific peculiarities, though.
 ```
 
 ## FF_AUTOCENTER:
-```    
+```
     60 08 - header plus settings?
     03 - set autocenter force
     8f 02 - force (between ff ff and 00 00)
@@ -110,7 +110,7 @@ have model specific peculiarities, though.
 ```
 
 ## FF_GAIN:
-```    
+```
     60 02 - header plus gain?
     bf - gain (between ff and 00)
     00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -130,7 +130,8 @@ have model specific peculiarities, though.
     00 00 - attack_level ***
     00 00 - fade_length
     00 00 - fade_level ***
-    00 4f - ?
+    00 - effect type?
+    4f
     f7 17 - time in milliseconds, unsigned
     00 00
     07 00 - offset from start(?)
@@ -142,7 +143,21 @@ have model specific peculiarities, though.
 
 ### Modifying (For dynamic updating of effects)
 
-#### Direction: ``N/A``
+```
+4th byte 5th byte  hex
+00001010          0a    - magnitude
+01001001          49    - duration / offset / duration + offset
+00110001 10000001 31 81 - envelope attack length
+00110001 10000010 31 82 - envelope attack level
+00110001 10000100 31 84 - envelope fade length
+00110001 10001000 31 88 - envelope fade level
+00101001          29    - envelope (all)
+00101010          2a    - magnitude + envelope
+01101010          6a    - magnitude + envelope + offset
+00110010          32    - magnitude + envelope attack length & level
+01110010          72    - magnitude + envelope attack length & level + duration
+01101010          6a    - magnitude + envelope + duration + offset
+```
 
 #### Constant force:
 ```
@@ -158,15 +173,28 @@ have model specific peculiarities, though.
 
 #### Envelope:
 ```
+envelope attack/fade level/length:
+    multiple values can be updated with one packet
+
     60 00 - standard header
     01 - ID
-    31 - modify envelope
-    84 - ID of envelope attribute ( attack_level 82,
-                                    attack_length 81,
-                                    fade_level 88,
-                                    fade_length 84 )
-    63 04 - value attribute should be set to ?***?
-    00 00 00 00 00 00 00 00 00
+    31 85
+    e8 03 - attack length
+    dc 05 - fade length
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+envelope (all):
+    60 00 - standard header
+    01 - ID
+    29
+    e8 03 - attack length
+    cc 0c - attack level
+    dc 05 - fade length
+    cc 0c - fade level
+    00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -176,28 +204,133 @@ have model specific peculiarities, though.
 ```
     60 00 - standard header
     01 - ID
-    49 00 41 - modify timing?
-    6c 20 - length in milliseconds
-    00 00 00 00 00 00 00 00
+    49
+    00 - effect type?
+    45 - update type
+    88 13 - duration in milliseconds
+    00 00 - offset in milliseconds
+    00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
-#### Offset: `N/A` 
+#### Combined:
+```
+magnitude + envelope:
+    60 00 - standard header
+    01 - ID
+    2a
+    fd 3f - magnitude
+    e8 03 - attack length
+    cc 0c - attack level
+    dc 05 - fade length
+    cc 0c - fade level
+    00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+magnitude + envelope attack length & level + duration:
+    60 00 - standard header
+    01 - ID
+    72
+    fd 3f - magnitude
+    83 - envelope update type
+    e8 03 - attack length
+    cc 0c - attack level
+    00 - effect type?
+    41 - update type
+    88 13 - duration
+    00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+magnitude + envelope + duration + offset:
+    60 00 - standard header
+    01 - ID
+    6a
+    fd 3f - magnitude
+    e8 03 - attack length
+    cc 0c - attack level
+    dc 05 - fade length
+    cc 0c - fade level
+    00 - effect type?
+    45 - update type
+    88 13 - duration
+    00 00 - offset
+    00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
 
 ## FF_RAMP
 
-Ramps seem to follow triangle wave parameters.
+```
+00001110 00000001 0e 01 - slope
+00001110 00000010 0e 02 - center
+01001001          49    - invert
+00001110 00000011 0e 03 - slope + center
+01001110 00000001 4e 01 - slope + invert
+01001110 00000011 4e 03 - slope + center + invert
+01001110 00001000 4e 08 - duration
+01001001          49    - offset
+01001110 00001000 4e 08 - duration + offset
+00110001 10000001 31 81 - envelope attack length
+00110001 10000010 31 82 - envelope attack level
+00110001 10000100 31 84 - envelope fade length
+00110001 10001000 31 88 - envelope fade level
+00101001          29    - envelope (all)
+01110110 00000011 76 03 - envelope attack & fade length + slope + center + invert
+00101110 00000011 2e 03 - envelope + slope + center + invert
+01101110 00001011 6e 0b - duration + offset + envelope + slope + center + invert
+```
+
+### Notes
+
+#### Invert
+
+There is a bug in the Windows driver during the Ramp effect update.
+If the update requires inverting the effect and the duration or the offset is
+not changed, the effect just stops.
+
+This can be fixed by adding the `update type` byte with the value of `40`.
+
+Affected examples:
+ - slope + invert
+ - slope + center + invert
+ - invert
+ - envelope attack & fade length + slope + center + invert
+ - envelope + slope + center + invert
+
+Example:
+```
+Invalid:
+    60 00 - standard header
+    01 - ID
+    49
+    05 - effect type?
+    00 <- missing "update type"
+    [...]
+
+Valid:
+    60 00 - standard header
+    01 - ID
+    49
+    05 - effect type?
+    40 - update type <- correct update type
+    [...]
+```
+
 
 ### Init:
 ```
     60 00 - standard header
     01 - ID
     6b - new ramp effect
-    f6 7f - difference ***
-    fe ff - level? *** (level = (if end_level > start_level, end_level, else
-        start_level) - difference?) (signed)
+    f6 7f - slope *** abs(start - stop) / 2
+    fe ff - center *** (start + end) / 2 (signed)
     00 00
     f7 17 - time
     00 80 - some kind of marker
@@ -216,53 +349,200 @@ Ramps seem to follow triangle wave parameters.
 ```
 
 ### Modifying:
+
 ```
+center:
     60 00 - standard header
     01 - ID
-    0e - ???
-    03 - ramp?
-    e3 04 - difference?
-    7d 75 - "level"?
-    05 - ????
+    0e 02
+    1e 40 - center
+    00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+slope + invert:
+    This packet is affected by the "invert" driver bug. See Notes above.
+
+    60 00 - standard header
+    01 - ID
+    4e 01
+    20 00 - slope
+    04 - effect type? (invert) 04 or 05
+    00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+slope + center + invert:
+    This packet is affected by the "invert" driver bug. See Notes above.
+
+    60 00 - standard header
+    01 - ID
+    4e 03
+    06 00 - slope
+    25 40 - center
+    04 - effect type? (invert) 04 or 05
     00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
-#### Envelope:
+#### Duration, offset, invert:
+
 ```
+duration:
     60 00 - standard header
     01 - ID
-    31 - modify envelope
-    84 - ID of envelope attribute ( attack_level 82,
-                                    attack_length 81,
-                                    fade_level 88,
-                                    fade_length 84 )
-    63 04 - value attribute should be set to
-    00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-```
-
-#### Duration:
-```     
-    60 00
-    01 - ID
-    4e - ?
-    08 - ?
-    01 00 - time in milliseconds
-    05 - ?
-    41 - ?
-    01 00 - time in milliseconds
+    4e 08
+    88 13 - duration
+    04 - effect type? must reflect the actual inversion 04 or 05
+    41 - update type, see Update type section
+    88 13 - duration
     00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+offset:
+    60 00 - standard header
+    01 - ID
+    49
+    04 - effect type? must reflect the actual inversion 04 or 05
+    44 - update type, see Update type section
+    00 00 - offset
+    00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+duration + offset:
+    60 00 - standard header
+    01 - ID
+    4e 08
+    88 13 - duration
+    04 - effect type? must reflect the actual inversion 04 or 05
+    45 - update type, see Update type section
+    88 13 - duration
+    00 00 - offset
+    00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+dir + offset:
+    60 00 - standard header
+    01 - ID
+    49
+    05 - effect type? must reflect the actual inversion 04 or 05
+    44 - update type, see Update type section
+    00 00 - offset
+    00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+invert:
+    This packet is affected by the "invert" driver bug. See Notes above.
+
+    60 00 - standard header
+    01 - ID
+    49
+    05 - effect type? invert 04 or 05
+    00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
-#### Offset: `N/A`
+#### Envelope:
+
+```
+envelope attack/fade level/length:
+    multiple values can be updated with one packet
+
+    60 00 - standard header
+    01 - ID
+    31 85
+    d0 07 - attack length
+    dc 05 - fade length
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+envelope (all):
+    60 00 - standard header
+    01 - ID
+    29
+    d0 07 - attack length
+    69 34 - attack level
+    dc 05 - fade length
+    32 1a - fade level
+    00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+#### Combined:
+
+```
+envelope attack & fade length + slope + center + invert:
+    This packet is affected by the "invert" driver bug. See Notes above.
+
+    60 00 - standard header
+    01 - ID
+    76 03
+    06 00 - slope
+    25 40 - center
+    85 - envelope update type
+    d0 07 - attack length
+    dc 05 - fade length
+    04 - effect type? (invert) 04 or 05
+    00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+envelope + slope + center + invert:
+    This packet is affected by the "invert" driver bug. See Notes above.
+
+    60 00 - standard header
+    01 - ID
+    6e 03
+    06 00 - slope
+    25 40 - center
+    d0 07 - attack length
+    69 34 - attack level
+    dc 05 - fade length
+    32 1a - fade level
+    04 - effect type? (invert) 04 or 05
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+duration + offset + envelope + slope + center + invert:
+    60 00 - standard header
+    01 - ID
+    6e 0b
+    06 00 - slope
+    25 40 - center
+    88 13 - length
+    d0 07 - attack length
+    69 34 - attack level
+    dc 05 - fade length
+    32 1a - fade level
+    04 - effect type? (invert) 04 or 05
+    45 - update type, see Update type section
+    88 13 - length 2
+    00 00 - offset
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+```
 
 ## FF_DAMPER + FF_FRICTION + FF_INERTIA + FF_SPRING:
 ### Init:
@@ -305,7 +585,7 @@ Ramps seem to follow triangle wave parameters.
 4th byte 5th byte   hex
 00001110 01000001  0e 41  positive coefficient
 00001110 01000010  0e 42  negative coefficient
-00001110 01000011  0e 43  both     coefficint
+00001110 01000011  0e 43  both     coefficient
 00001110 01001100  0e 4c  right and left deadband
 00001110 01010000  0e 50  positive saturation
 00001110 01100000  0e 60  negative saturation
@@ -348,7 +628,7 @@ The order of the fields are defined in the `all effect specific parameters + dur
     positive and negative coefficient:
     60 00
     01 - ID
-    0e 43 
+    0e 43
     ab 67 - right coefficient, signed, between 01 80 (-32767) and fc 7f (32764)
     50 18 - left coefficient, signed, between 01 80 (-32767) and fc 7f (32764)
     00 00 00 00 00 00 00
@@ -425,7 +705,7 @@ The order of the fields are defined in the `all effect specific parameters + dur
     fd 5f - positive saturation
     fd 5f - negative saturation
     06 - effect type (condition)?
-    45 - update type, see below
+    45 - update type, see Update type section
     10 27 - length in milliseconds
     00 00 - offset in milliseconds
     00 00 00 00 00 00 00 00 00 00
@@ -435,22 +715,12 @@ The order of the fields are defined in the `all effect specific parameters + dur
 ```
 
 ### Duration:
-
-Update type:
-
-```
-6th byte  hex
-01000001  41  length
-01000100  44  offset
-01000101  45  length + offset
-```
-
 ```
     60 00 - standard header
     01 - ID
     49
     06 - effect type (condition)?
-    45 - update type
+    45 - update type, see Update type section
     6c 20 - length in milliseconds
     00 00 - offset in milliseconds
     00 00 00 00 00 00
@@ -459,11 +729,10 @@ Update type:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
-### Offset: `N/A` 
-
 ## FF_PERIODIC:
+
 ### Init
-```   
+```
     60 00 - standard header
     01 - ID
     6b - new periodic effect
@@ -472,7 +741,7 @@ Update type:
     00 00 - phase (left/right) between 00 00 and 4a f7 (32586)
             meaning is 0 to ~359 deg phase shift in 5b steps
     e8 03 - period between 00 00 and ff ff (in milliseconds)
-    00 80 
+    00 80
     00 00 - attack_length
     00 00 - attack_level ***
     00 00 - fade_length
@@ -492,8 +761,27 @@ Update type:
 ```
 
 ### Modifying:
+
 ```
-    magnitude:
+4th byte 5th byte  hex
+00001110 00000001 0e 01 - magnitude
+00001110 00000010 0e 02 - offset
+00001110 00000100 0e 04 - phase
+00001110 00001000 0e 08 - period
+00001110 00001111 0e 0f - magnitude + offset + phase + period
+01001001          49    - duration / offset / duration + offset
+00110001 10000001 31 81 - envelope attack length
+00110001 10000010 31 82 - envelope attack level
+00110001 10000100 31 84 - envelope fade length
+00110001 10001000 31 88 - envelope fade level
+00101001          29    - envelope (all)
+00101110 00001111 2e 0f - magnitude + offset + phase + period + envelope
+00110110 00001111 36 0f - magnitude + offset + phase + period + envelope attack length & level
+01101110 00001111 6e 0f - magnitude + offset + phase + period + envelope + duration + offset
+```
+
+```
+magnitude:
     60 00
     02 - ID
     0e 01
@@ -503,118 +791,183 @@ Update type:
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
-    offset of effect:
+magnitude + offset + phase + period:
     60 00
-    02 - ID
-    0e 02
-    64 35 - value, between ff bf (-16385) and fd 3f (16381)
-    00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-    phase:
-    60 00
-    02 - ID
-    0e 04
-    64 35 - value, between 00 00 and 4a f7 (32586) in 5b steps
+    01 - ID
+    0e 0f
+    dd 3f - magnitude, between 00 00 and fc 7f (32764)
+    cb 0c - offset, between ff bf (-16385) and fd 3f (16381)
+    5a 00 - phase, between 00 00 and 4a f7 (32586) in 5b steps
             meaning is 0 to 359 deg phase shift
-    00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-    period:
-    60 00
-    02 - ID
-    0e 08
-    64 35 - value, between 00 00 and ff ff (in milliseconds)
-    00 00 00 00 00 00 00 00 00
+    f8 2a - period, between 00 00 and ff ff (in milliseconds)
+    00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
 ```
 
-### Envelope:
+#### Envelope:
 ```
+envelope attack/fade level/length:
+    multiple values can be updated with one packet
+
     60 00 - standard header
     01 - ID
-    31 - modify envelope
-    84 - ID of envelope attribute ( attack_level 82,
-                                    attack_length 81,
-                                    fade_level 88,
-                                    fade_length 84  )
-    63 04 - value attribute should be set to
-    00 00 00 00 00 00 00 00 00
+    31 85
+    d0 07 - attack length
+    dc 05 - fade length
+    00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+envelope (all):
+    60 00 - standard header
+    01 - ID
+    29
+    d0 07 - attack length
+    69 34 - attack level
+    dc 05 - fade length
+    32 1a - fade level
+    00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
-### Duration:
+#### Duration:
 ```
-    Square:
     60 00
     01 - ID
-    49 - ?
-    01 - Effect type
-    41 - ?
-    4e 0c - Time in milliseconds
-    00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-    Sine:
-    60 00
-    01 - ID
-    49 - ?
-    03 - Effect type
-    41 - ?
-    ec 13 - Time in milliseconds
-    00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-    Triangle:
-    60 00
-    01 - ID
-    49 - ?
-    02 - Effect type
-    41 - ?
-    4e 0c - Time in milliseconds
-    00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-    Sawtooth up:
-    60 00
-    01 - ID
-    49 - ?
-    04 - Effect type
-    41 - ?
-    4e 0c - Time in milliseconds
-    00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-
-    Sawtooth down:
-    60 00
-    01 - ID
-    49 - ?
-    05 - Effect type
-    41 - ?
-    ec 13 - Time in milliseconds
-    00 00 00 00 00 00 00 00
+    49
+    03 - effect type 01 - Square
+                     02 - Triangle
+                     03 - Sine
+                     04 - Sawtooth up
+                     05 - Sawtooth down
+    45 - update type, see Update type section
+    74 27 - duration
+    00 00 - offset
+    00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
-### Offset: `N/A ?`
+
+#### Combined
+
+```
+magnitude + offset + phase + period + envelope:
+    60 00
+    01 - ID
+    2e 0f
+    dd 3f - magnitude, between 00 00 and fc 7f (32764)
+    cb 0c - offset
+    5a 00 - phase
+    f8 2a - period
+    dc 05 - attack length
+    30 73 - attack level
+    e8 03 - fade length
+    30 73 - fade level
+    00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+magnitude + offset + phase + period + envelope attack length & level:
+    60 00
+    01 - ID
+    36 0f
+    dd 3f - magnitude
+    cb 0c - offset
+    5a 00 - phase
+    f8 2a - period
+    83 - envelope update type
+    e8 03 - attack length
+    cc 0c - attack level
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+magnitude + offset + phase + period + envelope + duration + offset:
+    60 00
+    01 - ID
+    6e 0f
+    dd 3f - magnitude
+    cb 0c - offset
+    5a 00 - phase
+    f8 2a - period
+    cc 0c - attack length
+    e8 03 - attack level
+    dc 05 - fade length
+    cc 0c - fade level
+    03 - effect type 01 - Square
+                     02 - Triangle
+                     03 - Sine
+                     04 - Sawtooth up
+                     05 - Sawtooth down
+    45 - update type, see Update type section
+    74 27 - duration
+    00 00 - offset
+    00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+## Envelope
+
+Envelope related parameters are the same across all the effects. The only
+difference is which effect specific parameters are used during the calculations.
+
+Damper, Friction, Inertia, and Spring do not support envelope.
+
+### attack length
+
+between 0 and 65535
+
+On Windows, it has a minimum value depending on how far is the target from the
+attack/fade level. This means that in case of an envelope that goes from zero
+to max has the minimum length of 256ms.
+
+```length = abs((effectval * 32768 / effectmax - level) / 128)```
+
+`effectval` is the current value of an effect specific parameter
+
+`effectmax` is the maximum value of `effectval`
+
+`level` is the current value of the attack/fade level
+
+Used parameters for each effect:
+
+| Effect   | Parameter |
+|----------|-----------|
+| Constant | Strength  |
+| Periodic | Magnitude |
+| Ramp     | Slope     |
+
+### attack level
+
+between 0 and 32764
+
+### fade length
+
+between 0 and 65535
+
+Uses the same calculation as attack length.
+
+### fade level
+
+between 0 and 32764
+
+
+## Update type
+
+```
+binary    hex
+01000001  41  duration
+01000100  44  offset
+01000101  45  duration + offset
+```
 
 ## PS4 Input `rdesc`
 ```

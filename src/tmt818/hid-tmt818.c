@@ -15,6 +15,8 @@ static const u8 setup_4[64] = {0x0a, 0x04, 0x00, 0x17, 0x01};
 static const u8 setup_5[64] = {0x0a, 0x04, 0x00, 0x2a, 0x01};
 static const u8 setup_6[64] = {0x0a, 0x04, 0x00, 0x2f, 0x01};
 static const u8 setup_7[64] = {0x0a, 0x04, 0x03};
+static const u8 setup_8[64] = {0x0a, 0x04, 0x00, 0x2f, 0x00, 0xcd, 0xcc, 0x4c, 0x3d}; // Set Linearity to 5%
+static const u8 setup_9[64] = {0x0a, 0x04, 0x00, 0x17, 0x00, 0x0a, 0xd7, 0xa3, 0x3c}; // Set Linearity to 5%
 static const u8 *const setup_arr[] = {setup_0, setup_1, setup_2, setup_3, setup_4, setup_5, setup_6, setup_7};
 static const unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_0),
@@ -24,7 +26,9 @@ static const unsigned int setup_arr_sizes[] = {
 	ARRAY_SIZE(setup_4),
 	ARRAY_SIZE(setup_5),
 	ARRAY_SIZE(setup_6),
-	ARRAY_SIZE(setup_7)
+	ARRAY_SIZE(setup_7),
+	ARRAY_SIZE(setup_8),
+	ARRAY_SIZE(setup_9)
 	};
 
 static const u8 init_0[64] = {0x49, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00};
