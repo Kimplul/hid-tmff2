@@ -75,6 +75,7 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
   git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git
   cd hid-tmff2
   sudo ./dkms/dkms-install.sh
+  sudo make udev-rules # optional but should fix some common issues
   ```
 + Plug wheel back in
 + Reboot *(Optional, yet Recommended)*
