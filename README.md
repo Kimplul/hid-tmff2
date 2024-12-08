@@ -50,9 +50,17 @@ one of the right command for your distribution:
 ```shell
 sudo apt install linux-headers-$(uname -r)   # Debian-based
 sudo pacman -S linux-headers                 # Arch-based
-sudo pacman -S linux-neptune-61-headers      # For SteamDeck specifically
 sudo yum install kernel-devel kernel-headers # Fedora-based
 ```
+
+The SteamDeck has a few possible options it seems, try some of these:
+```shell
+sudo pacman -S linux-neptune-61-headers
+sudo pacman -S linux-neptune-65-headers
+sudo pacman -S linux-neptune-68-headers
+```
+
+If none of the above work, please do open up an issue.
 
 #### Manual installation
 + Unplug wheel from computer
