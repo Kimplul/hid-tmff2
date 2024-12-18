@@ -1309,7 +1309,7 @@ int t300rs_close(void *data, int open_mode)
 
 static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
 {
-	int ret;
+	int ret = 0;
 	struct t300rs_fw_response *fw_response =
 		kzalloc(sizeof(struct t300rs_fw_response), GFP_KERNEL);
 
@@ -1337,15 +1337,12 @@ static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
 
 	/* educated guess */
 	if (fw_response->fw_version < 31 && ret >= 0) {
-		hid_err(t300rs->hdev,
-				"firmware version %i is too old, please update.\n",
+		hid_warn(t300rs->hdev,
+				"firmware version %i might be too old, consider updating\n",
 				fw_response->fw_version
 		       );
 
 		hid_info(t300rs->hdev, "note: this has to be done through Windows.\n");
-
-		ret = -EINVAL;
-		goto out;
 	}
 
 	/* everything OK */
