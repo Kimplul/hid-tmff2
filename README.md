@@ -1,4 +1,4 @@
-# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128 and TS-XW wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128, T-GT II and TS-XW wheels
 
 > **DISCLAIMER:** The module is ready for use in most force
 > feedback games, supports rangesetting as well as gain and autocentering along
@@ -117,7 +117,6 @@ for wheels:
 
 + [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
-+ [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
 + [TS-PC](https://github.com/Kimplul/hid-tmff2/issues/65)
 
 ## Common issues and notes
@@ -136,6 +135,8 @@ for wheels:
   correctly recognize the Linux driver. The Windows driver itself does not work
   under Wine/Proton.
 
++ If games don't detect any input from the wheel, try disabling Steam Input.
+
 + Until the updated `hid-tminit` is
   [upstreamed](https://github.com/scarburato/hid-tminit), you might want to
   blacklist the kernel module `hid-thrustmaster`. Do this with
@@ -143,7 +144,7 @@ for wheels:
   echo 'blacklist hid_thrustmaster' | sudo tee /etc/modprobe.d/hid_thrustmaster.conf
   ```
 
-+ If you've bought a new wheel, you will most likely have to update the firmware
++ If you've bought a new wheel, you might have to update the firmware
   through Windows before it will work with this driver.
 
 + T300 RS has an advanced F1 mode that can be activated with an F1 attachment
@@ -166,3 +167,6 @@ for wheels:
   To change the timer period, create `/etc/modprobe.d/hid-tmff-new.conf`
   and add `options hid-tmff-new timer_msecs=NUMBER` into it.
   The default timer period is 8, but numbers as low as 2 should work alright.
+
++ The T-GT II might show up as a T300 at the moment, since it reuses the T300
+  USB product ID.
