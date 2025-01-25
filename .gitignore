@@ -7,3 +7,4 @@ compile_commands.json
 Module.symvers
 modules.order
 .idea
+.vscode
