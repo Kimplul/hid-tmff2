@@ -1,4 +1,4 @@
-# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128 and TS-XW wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128, T-GT II and TS-XW wheels
 
 > **DISCLAIMER:** The module is ready for use in most force
 > feedback games, supports rangesetting as well as gain and autocentering along
@@ -50,8 +50,23 @@ one of the right command for your distribution:
 ```shell
 sudo apt install linux-headers-$(uname -r)   # Debian-based
 sudo pacman -S linux-headers                 # Arch-based
-sudo pacman -S linux-neptune-61-headers      # For SteamDeck specifically
 sudo yum install kernel-devel kernel-headers # Fedora-based
+```
+
+The SteamDeck has a few possible options it seems, try some of these:
+```shell
+sudo pacman -S linux-neptune-61-headers
+sudo pacman -S linux-neptune-65-headers
+sudo pacman -S linux-neptune-68-headers
+```
+
+If none of the above work, please do open up an issue.
+
+Joystick utilities from [linuxconsole tools](http://sf.net/projects/linuxconsole/) are needed for uvdev rules to work:
+```shell
+sudo apt install joystick          # Debian-based
+sudo pacman -S joyutils            # Arch-based
+sudo yum install linuxconsoletools # Fedora-based
 ```
 
 #### Manual installation
@@ -62,6 +77,7 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
   cd hid-tmff2
   make
   sudo make install
+  sudo make udev-rules # optional but should fix some common issues
   ```
 + Plug wheel back in
 + Reboot *(Optional, yet Recommended)*
@@ -74,6 +90,7 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
   git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git
   cd hid-tmff2
   sudo ./dkms/dkms-install.sh
+  sudo make udev-rules # optional but should fix some common issues
   ```
 + Plug wheel back in
 + Reboot *(Optional, yet Recommended)*
@@ -101,21 +118,18 @@ sudo yum install kernel-devel kernel-headers # Fedora-based
 
 ## Contributing
 
-This project wants help from people who can contribute.
-If you would like to help add a wheel to this driver,
-please have a look through `docs` and/or [CONTRIBUTING.md](./docs/CONTRIBUTING.md)
-for what might need to be done.
-
 If you have a wheel that's not not supported, but suspect it might fit into the
 driver, please feel free to open up an issue about it. Currently open requests
 for wheels:
 
 + [T500 RS](https://github.com/Kimplul/hid-tmff2/issues/18)
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
-+ [T-GT II](https://github.com/Kimplul/hid-tmff2/issues/55)
 + [TS-PC](https://github.com/Kimplul/hid-tmff2/issues/65)
 
 ## Common issues and notes
+
++ To change gain, autocentering etc. use
+  [Oversteer](https://github.com/berarma/oversteer).
 
 + Reportedly some games running under Wine/Proton won't recognize wheels without
   the official Thrustmaster drivers installed within the prefix. See
@@ -128,6 +142,8 @@ for wheels:
   correctly recognize the Linux driver. The Windows driver itself does not work
   under Wine/Proton.
 
++ If games don't detect any input from the wheel, try disabling Steam Input.
+
 + Until the updated `hid-tminit` is
   [upstreamed](https://github.com/scarburato/hid-tminit), you might want to
   blacklist the kernel module `hid-thrustmaster`. Do this with
@@ -135,7 +151,7 @@ for wheels:
   echo 'blacklist hid_thrustmaster' | sudo tee /etc/modprobe.d/hid_thrustmaster.conf
   ```
 
-+ If you've bought a new wheel, you will most likely have to update the firmware
++ If you've bought a new wheel, you might have to update the firmware
   through Windows before it will work with this driver.
 
 + T300 RS has an advanced F1 mode that can be activated with an F1 attachment
@@ -151,46 +167,6 @@ for wheels:
   (especially https://github.com/Kimplul/hid-tmff2/issues/48)
   and open new ones if you encounter any problems.
 
-+ To change gain, autocentering etc. use
-  [Oversteer](https://github.com/berarma/oversteer).
-
-+ If a wheel has a deadzone in games, you can try setting up some udev rules:
-  `/etc/udev/rules.d/99-tmff2.rules`
-
-  ```
-  # T300RS PS3 normal mode
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
-
-  # T300RS PS3 advanced mode
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
-
-  # T300RS PS4 mode
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
-
-  # T248 + T128
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", RUN+="/usr/bin/jscal -s 11,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
-
-  # TX
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b669", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b669", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
-
-  # TSXW
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
-
-  # TSPC
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
-  SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
-  ```
-
-  This should make sure that the wheel behaves like you'd want from a wheel.
-  I personally only have a T300 and a T248, so please do open up an issue if the
-  above file doesn't work for you on some other wheel.
-
 + There have been reports that some games work better with a different timer
   period (see [#11](https://github.com/Kimplul/hid-tmff2/issues/11) and
   [#10](https://github.com/Kimplul/hid-tmff2/issues/10)).
@@ -198,3 +174,6 @@ for wheels:
   To change the timer period, create `/etc/modprobe.d/hid-tmff-new.conf`
   and add `options hid-tmff-new timer_msecs=NUMBER` into it.
   The default timer period is 8, but numbers as low as 2 should work alright.
+
++ The T-GT II might show up as a T300 at the moment, since it reuses the T300
+  USB product ID.
