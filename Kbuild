@@ -5,4 +5,4 @@ hid-tmff-new-y := \
 		src/tmt248/hid-tmt248.o \
 		src/tmtx/hid-tmtx.o \
 		src/tmtsxw/hid-tmtsxw.o \
-		src/tm818/hid-tm818.o
+		src/tmt818/hid-tmt818.o
