@@ -17,17 +17,17 @@ MODULE_PARM_DESC(timer_msecs,
 		"Timer resolution in msecs");
 
 /* should these be removed and just rely on /sys? */
-int spring_level = 0;
+int spring_level = 30;
 module_param(spring_level, int, 0);
 MODULE_PARM_DESC(spring_level,
 		"Level of spring force (0-100), as per Oversteer standards");
 
-int damper_level = 0;
+int damper_level = 30;
 module_param(damper_level, int, 0);
 MODULE_PARM_DESC(damper_level,
 		"Level of damper force (0-100), as per Oversteer standards");
 
-int friction_level = 0;
+int friction_level = 30;
 module_param(friction_level, int, 0);
 MODULE_PARM_DESC(friction_level,
 		"Level of friction force (0-100), as per Oversteer standards");
@@ -52,7 +52,7 @@ int mode = 3;
 module_param(mode, int, 0);
 MODULE_PARM_DESC(mode, "FFB Mode of the Wheel (0-3; 0: Comfort, 1: Sport, 2: Performance, 3: Extreme)");
 
-int color = 0xFF26C2FF;
+int color = 0xff26cff;
 module_param(color, int, 0);
 MODULE_PARM_DESC(color, "Color of the RGB LEDs on the Wheel. Values are provided in RGBA Hex.");
 

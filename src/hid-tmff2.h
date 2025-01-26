@@ -24,7 +24,7 @@ extern int color;
  * space out the interrupts so that they all leave at regular intervals, but
  * for now this is good enough, go slow enough that everything works.
  */
-#define DEFAULT_TIMER_PERIOD	3
+#define DEFAULT_TIMER_PERIOD	8
 
 #define FF_EFFECT_QUEUE_UPLOAD	0
 #define FF_EFFECT_QUEUE_START	1
