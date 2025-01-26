@@ -49,10 +49,10 @@ MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
 
 static spinlock_t lock;
-static unsigned long lock_flags;
 
 static struct tmff2_device_entry *tmff2_from_hdev(struct hid_device *hdev)
 {
+	unsigned long lock_flags = 0;
 	struct tmff2_device_entry *tmff2;
 	spin_lock_irqsave(&lock, lock_flags);
 
@@ -66,6 +66,7 @@ static struct tmff2_device_entry *tmff2_from_hdev(struct hid_device *hdev)
 
 static struct tmff2_device_entry *tmff2_from_input(struct input_dev *input_dev)
 {
+	unsigned long lock_flags = 0;
 	struct hid_device *hdev;
 	spin_lock_irqsave(&lock, lock_flags);
 
@@ -288,6 +289,7 @@ static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 
 static void tmff2_work_handler(struct work_struct *w)
 {
+	unsigned long lock_flags = 0;
 	struct delayed_work *dw = container_of(w, struct delayed_work, work);
 	struct tmff2_device_entry *tmff2 = container_of(dw, struct tmff2_device_entry, work);
 	struct tmff2_effect_state *state;
@@ -300,7 +302,7 @@ static void tmff2_work_handler(struct work_struct *w)
 		return;
 
 	for (effect_id = 0; effect_id < tmff2->max_effects; ++effect_id) {
-		spin_lock(&tmff2->lock);
+		spin_lock_irqsave(&tmff2->lock, lock_flags);
 
 		time_now = JIFFIES2MS(jiffies);
 		state = &tmff2->states[effect_id];
@@ -356,7 +358,7 @@ static void tmff2_work_handler(struct work_struct *w)
 		if (state->count > max_count)
 			max_count = state->count;
 
-		spin_unlock(&tmff2->lock);
+		spin_unlock_irqrestore(&tmff2->lock, lock_flags);
 
 		/* wait for each effect update to actually be sent out to avoid
 		 * filling up usb output queue */
@@ -396,6 +398,7 @@ static void tmff2_rewrite_rumble(struct ff_effect *effect)
 static int tmff2_upload(struct input_dev *dev,
 		struct ff_effect *effect, struct ff_effect *old)
 {
+	unsigned long lock_flags = 0;
 	struct tmff2_effect_state *state;
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
 
@@ -407,7 +410,7 @@ static int tmff2_upload(struct input_dev *dev,
 
 	state = &tmff2->states[effect->id];
 
-	spin_lock(&tmff2->lock);
+	spin_lock_irqsave(&tmff2->lock, lock_flags);
 
 	state->effect = *effect;
 	tmff2_rewrite_rumble(&state->effect);
@@ -423,12 +426,13 @@ static int tmff2_upload(struct input_dev *dev,
 		__set_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags);
 	}
 
-	spin_unlock(&tmff2->lock);
+	spin_unlock_irqrestore(&tmff2->lock, lock_flags);
 	return 0;
 }
 
 static int tmff2_play(struct input_dev *dev, int effect_id, int value)
 {
+	unsigned long lock_flags = 0;
 	struct tmff2_effect_state *state;
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
 
@@ -439,7 +443,7 @@ static int tmff2_play(struct input_dev *dev, int effect_id, int value)
 	if (!state)
 		return 0;
 
-	spin_lock(&tmff2->lock);
+	spin_lock_irqsave(&tmff2->lock, lock_flags);
 	if (value > 0) {
 		state->count = value;
 		state->start_time = JIFFIES2MS(jiffies);
@@ -450,7 +454,7 @@ static int tmff2_play(struct input_dev *dev, int effect_id, int value)
 		__clear_bit(FF_EFFECT_QUEUE_START, &state->flags);
 	}
 
-	spin_unlock(&tmff2->lock);
+	spin_unlock_irqrestore(&tmff2->lock, lock_flags);
 
 	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
 		schedule_delayed_work(&tmff2->work, 0);
