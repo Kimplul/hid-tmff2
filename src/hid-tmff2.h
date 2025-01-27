@@ -13,6 +13,8 @@ extern int friction_level;
 extern int range;
 extern int gain;
 extern int alt_mode;
+extern int mode;
+extern int color;
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
@@ -36,6 +38,8 @@ extern int alt_mode;
 #define PARAM_RANGE		(1 << 3)
 #define PARAM_ALT_MODE		(1 << 4)
 #define PARAM_GAIN		(1 << 5)
+#define PARAM_MODE		(1 << 6)
+#define PARAM_COLOR		(1 << 7)
 
 #undef fixp_sin16
 #define fixp_sin16(v) (((v % 360) > 180) ?\
@@ -86,10 +90,13 @@ struct tmff2_device_entry {
 	int (*close)(void *data, int);
 	int (*set_gain)(void *data, uint16_t gain);
 	int (*set_range)(void *data, uint16_t range);
+	int (*set_mode)(void *data, uint);
+	int (*set_color)(void *data, uint32_t rgba);
 	/* switch_mode is required to not do anything if we're alredy in the
 	 * specified mode */
 	int (*switch_mode)(void *data, uint16_t mode);
-	ssize_t (*alt_mode_show)(void *data, char *buf);
+	ssize_t (*alt_mode_show)(void *data, char *buf); 
+	ssize_t (*mode_show)(void *data, char *buf); 
 	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
@@ -103,12 +110,14 @@ int t300rs_populate_api(struct tmff2_device_entry *tmff2);
 int t248_populate_api(struct tmff2_device_entry *tmff2);
 int tx_populate_api(struct tmff2_device_entry *tmff2);
 int tsxw_populate_api(struct tmff2_device_entry *tmff2);
+int t818_populate_api(struct tmff2_device_entry *tmff2);
 
 #define TMT300RS_PS3_NORM_ID	0xb66e
 #define TMT300RS_PS3_ADV_ID	0xb66f
 #define TMT300RS_PS4_NORM_ID	0xb66d
 
-#define TMT248_PC_ID		0xb696
+#define TMAR_PC_ID		0xb696
+#define TMT818_VERSION		0x111
 
 #define TX_ACTIVE               0xb669
 

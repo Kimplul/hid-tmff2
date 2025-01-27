@@ -43,10 +43,18 @@ MODULE_PARM_DESC(alt_mode,
 		"Alternate mode, eg. F1 mode");
 
 #define GAIN_MAX 65535
-int gain = 40000;
+int gain = 65535;
 module_param(gain, int, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
+
+int mode = 3;
+module_param(mode, int, 0);
+MODULE_PARM_DESC(mode, "FFB Mode of the Wheel (0-3; 0: Comfort, 1: Sport, 2: Performance, 3: Extreme)");
+
+int color = 0xff26cff;
+module_param(color, int, 0);
+MODULE_PARM_DESC(color, "Color of the RGB LEDs on the Wheel. Values are provided in RGBA Hex.");
 
 static spinlock_t lock;
 
@@ -225,6 +233,72 @@ static ssize_t alternate_modes_show(struct device *dev,
 	return 0;
 }
 static DEVICE_ATTR_RW(alternate_modes);
+
+static ssize_t mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	unsigned int value;
+	int ret;
+
+	if (!tmff2)
+		return -ENODEV;
+
+	if ((ret = kstrtouint(buf, 0, &value))) {
+		dev_err(dev, "kstrtouint failed at mode_store: %i", ret);
+		return ret;
+	}
+
+	mode = value;
+	if (tmff2->set_mode) /* if we can, update mode immediately */
+		tmff2->set_mode(tmff2->data, mode);
+
+	return count;
+}
+
+static ssize_t mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	
+	if (!tmff2)
+		return -ENODEV;
+
+	if (tmff2->mode_show)
+		return tmff2->mode_show(tmff2->data, buf);
+		
+	return -ENODEV;
+}
+static DEVICE_ATTR_RW(mode);
+
+static ssize_t color_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	unsigned int value;
+	int ret;
+
+	if (!tmff2)
+		return -ENODEV;
+
+	if ((ret = kstrtouint(buf, 0, &value))) {
+		dev_err(dev, "kstrtouint failed at color_store: %i", ret);
+		return ret;
+	}
+
+	color = value;
+	if (tmff2->set_color) /* if we can, update color immediately */
+		tmff2->set_color(tmff2->data, color);
+
+	return count;
+}
+
+static ssize_t color_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%i\n", color);
+}
+static DEVICE_ATTR_RW(color);
 
 static ssize_t gain_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -545,6 +619,20 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 		}
 	}
 
+	if (tmff2->params & PARAM_MODE) {
+		if ((ret = device_create_file(dev, &dev_attr_mode))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for mode\n");
+			goto mode_err;
+		}
+	}
+
+	if (tmff2->params & PARAM_COLOR) {
+		if ((ret = device_create_file(dev, &dev_attr_color))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for color\n");
+			goto color_err;
+		}
+	}
+
 	return 0;
 
 friction_err:
@@ -557,6 +645,10 @@ range_err:
 	device_remove_file(dev, &dev_attr_alternate_modes);
 alt_err:
 	device_remove_file(dev, &dev_attr_gain);
+mode_err:
+	device_remove_file(dev, &dev_attr_mode);
+color_err:
+	device_remove_file(dev, &dev_attr_color);
 gain_err:
 	return ret;
 }
@@ -622,6 +714,10 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
 	}
 
+	if(tmff2->set_mode) {
+		tmff2->set_mode(tmff2->data, mode);
+	}
+
 	if (tmff2->set_autocenter)
 		ff->set_autocenter = tmff2_set_autocenter;
 
@@ -630,6 +726,9 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 
 	if (tmff2->switch_mode)
 		tmff2->switch_mode(tmff2->data, alt_mode);
+
+	if (tmff2->set_color)
+		tmff2->set_color(tmff2->data, color);
 
 	/* create files */
 	if ((ret = tmff2_create_files(tmff2)))
@@ -670,9 +769,17 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 				goto wheel_err;
 			break;
 
-		case TMT248_PC_ID:
-			if ((ret = t248_populate_api(tmff2)))
-				goto wheel_err;
+		case TMAR_PC_ID:
+			switch (tmff2->hdev->version) {
+				case TMT818_VERSION:
+					if ((ret = t818_populate_api(tmff2)))
+						goto wheel_err;
+					break;
+				default:
+					if ((ret = t248_populate_api(tmff2)))
+						goto wheel_err;
+					break;
+			}
 			break;
 
 		case TX_ACTIVE:
@@ -766,6 +873,12 @@ static void tmff2_remove(struct hid_device *hdev)
 	if (tmff2->params & PARAM_GAIN)
 		device_remove_file(dev, &dev_attr_gain);
 
+	if (tmff2->params & PARAM_MODE)
+		device_remove_file(dev, &dev_attr_mode);
+
+	if (tmff2->params & PARAM_COLOR)
+		device_remove_file(dev, &dev_attr_color);
+
 	hid_hw_stop(hdev);
 	tmff2->wheel_destroy(tmff2->data);
 
@@ -779,7 +892,7 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
 	/* t248 PC*/
-	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMAR_PC_ID)},
 	/* tx */
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TX_ACTIVE)},
 	/* tsxw */
