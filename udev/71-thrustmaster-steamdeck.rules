@@ -1,0 +1,22 @@
+# T300RS PS3 normal mode
+# allow userspace access to wheel, seems to be required for some systems,
+# mainly the SteamDeck I believe
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", MODE="0660", TAG+="uaccess"
+
+# T300RS PS3 advanced mode
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", MODE="0660", TAG+="uaccess"
+
+# T300RS PS4 mode
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", MODE="0660", TAG+="uaccess"
+
+# T248 + T128
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", MODE="0660", TAG+="uaccess"
+
+# TX
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b666", MODE="0660", TAG+="uaccess"
+
+# TSXW
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", MODE="0660", TAG+="uaccess"
+
+# TSPC
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", MODE="0660", TAG+="uaccess"

@@ -78,6 +78,7 @@ sudo yum install linuxconsoletools # Fedora-based
   make
   sudo make install
   sudo make udev-rules # optional but should fix some common issues
+  # sudo make steamdeck-rules # ONLY run if you're on a SteamDeck
   ```
 + Plug wheel back in
 + Reboot *(Optional, yet Recommended)*
@@ -91,6 +92,7 @@ sudo yum install linuxconsoletools # Fedora-based
   cd hid-tmff2
   sudo ./dkms/dkms-install.sh
   sudo make udev-rules # optional but should fix some common issues
+  # sudo make steamdeck-rules # ONLY run if you're on a SteamDeck
   ```
 + Plug wheel back in
 + Reboot *(Optional, yet Recommended)*

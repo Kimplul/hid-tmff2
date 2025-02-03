@@ -1,39 +1,29 @@
 # T300RS PS3 normal mode
-# allow userspace access to wheel, seems to be required for some systems,
-# apparently Proton as well
-KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", MODE="0660", TAG+="uaccess"
-
 # remove deadzone for both evdev and jsdev subsystems
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66e", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
 
 # other wheels are similar, mainly with the idProduct being different
 # T300RS PS3 advanced mode
-KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66f", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
 
 # T300RS PS4 mode
-KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b66d", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
 
 # T248 + T128
-KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b696", RUN+="/usr/bin/jscal -s 11,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
 
 # TX
-KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b666", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b669", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b669", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
 
 # TSXW
-KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
 
 # TSPC
-KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"

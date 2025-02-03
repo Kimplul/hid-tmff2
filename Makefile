@@ -11,6 +11,10 @@ install: deps/hid-tminit
 udev-rules:
 	install -m 0644 udev/99-thrustmaster.rules /etc/udev/rules.d/
 
+.PHONY: steamdeck-rules
+steamdeck-rules:
+	install -m 0644 udev/71-thrustmaster-steamdeck.rules /etc/udev/rules.d/
+
 clean: deps/hid-tminit
 	$(MAKE) -C $(KDIR) M=$(shell pwd) clean
 
