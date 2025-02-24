@@ -109,6 +109,7 @@ int tsxw_populate_api(struct tmff2_device_entry *tmff2);
 #define TMT300RS_PS4_NORM_ID	0xb66d
 
 #define TMT248_PC_ID		0xb696
+#define TMT248_XBOX_ID		0xb69a
 
 #define TX_ACTIVE               0xb669
 
