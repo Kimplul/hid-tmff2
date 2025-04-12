@@ -48,6 +48,11 @@ module_param(gain, int, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
 
+int boost_constant = 100;
+module_param(boost_constant, int, 0);
+MODULE_PARM_DESC(boost_constant,
+		"How much to boost constant effect (100 is 1x, 0 is 0x, 200 is 2x, etc)");
+
 static spinlock_t lock;
 
 static struct tmff2_device_entry *tmff2_from_hdev(struct hid_device *hdev)
@@ -254,6 +259,29 @@ static ssize_t gain_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%i\n", gain);
 }
 static DEVICE_ATTR_RW(gain);
+
+static ssize_t boost_constant_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int value;
+	int ret;
+
+	if ((ret = kstrtoint(buf, 0, &value))) {
+		dev_err(dev, "kstrtouint failed at boost_constant_store: %i", ret);
+		return ret;
+	}
+
+	boost_constant = value;
+	return count;
+}
+
+static ssize_t boost_constant_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%i\n", boost_constant);
+}
+
+static DEVICE_ATTR_RW(boost_constant);
 
 static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 {
@@ -545,8 +573,15 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 		}
 	}
 
+	if ((ret = device_create_file(dev, &dev_attr_boost_constant))) {
+		hid_warn(tmff2->hdev, "unable to create sysfs for constant boost\n");
+		goto boost_constant_err;
+	}
+
 	return 0;
 
+boost_constant_err:
+	device_remove_file(dev, &dev_attr_friction_level);
 friction_err:
 	device_remove_file(dev, &dev_attr_damper_level);
 damper_err:
@@ -765,6 +800,8 @@ static void tmff2_remove(struct hid_device *hdev)
 
 	if (tmff2->params & PARAM_GAIN)
 		device_remove_file(dev, &dev_attr_gain);
+
+	device_remove_file(dev, &dev_attr_boost_constant);
 
 	hid_hw_stop(hdev);
 	tmff2->wheel_destroy(tmff2->data);

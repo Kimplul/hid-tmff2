@@ -13,6 +13,7 @@ extern int friction_level;
 extern int range;
 extern int gain;
 extern int alt_mode;
+extern int boost_constant;
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include <linux/minmax.h>
 #include <linux/usb.h>
 #include <linux/hid.h>
 #include "../hid-tmff2.h"
@@ -337,12 +338,12 @@ static u8 condition_values[] = {
 
 static int16_t t300rs_calculate_constant_level(int16_t level, uint16_t direction)
 {
-	level = (level * fixp_sin16(direction * 360 / 0x10000)) / 0x7fff;
+	int calc = (level * fixp_sin16(direction * 360 / 0x10000)) / 0x7fff;
 
 	/* the Windows driver uses the range [-16385;16381] */
-	level = level / 2;
+	calc = calc / 2;
 
-	return level;
+	return clamp((boost_constant * calc) / 100, -16385, 16381);
 }
 
 static void t300rs_calculate_periodic_values(struct ff_effect *effect)
@@ -1406,6 +1407,10 @@ static int t300rs_get_attachment(struct t300rs_device_entry *t300rs)
 		hid_err(t300rs->hdev, "could not fetch attachment: %i\n", ret);
 		goto out;
 	}
+
+	hid_info(t300rs->hdev, "attachment: %x model: %x\n",
+			response->a.attachment,
+			response->a.model);
 
 	if (response->type == cpu_to_le16(0x49)) {
 		attachment = response->a.attachment;
