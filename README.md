@@ -62,7 +62,7 @@ sudo pacman -S linux-neptune-68-headers
 
 If none of the above work, please do open up an issue.
 
-Joystick utilities from [linuxconsole tools](http://sf.net/projects/linuxconsole/) are needed for uvdev rules to work:
+Joystick utilities from [linuxconsole tools](http://sf.net/projects/linuxconsole/) are needed for `udev` rules to work:
 ```shell
 sudo apt install joystick          # Debian-based
 sudo pacman -S joyutils            # Arch-based
