@@ -109,6 +109,10 @@ sudo yum install linuxconsoletools # Fedora-based
 > meaning that the wheels have to be initialized with `tmdrv`. Please see
 > https://github.com/Kimplul/hid-tmff2/issues/48.
 
+> **NOTE:** When using Secure Boot and DKMS, you need to remember to add DKMS MOK certificate
+> otherwise the module won't be loaded and the wheel might function incorrectly/not at all.
+> You can follow the steps [here](https://github.com/dell/dkms?tab=readme-ov-file#secure-boot) on how to add DKMS MOK certificate.
+
 > **WARNING:** There have been reports that this driver does not work if
 > the wheel's firmware version is older than v. 31. To update the firmware, you
 > will have to fire up a Windows installation and update the firmware using the
