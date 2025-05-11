@@ -144,6 +144,7 @@ int t300rs_close(void *, int);
 int t300rs_set_gain(void *, uint16_t);
 int t300rs_set_range(void *, uint16_t);
 int t300rs_set_autocenter(void *, uint16_t);
+int t300rs_get_attachment(void *);
 
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len);
 int t300rs_send_int(struct t300rs_device_entry *t300rs);

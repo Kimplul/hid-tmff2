@@ -1353,8 +1353,10 @@ out:
 	return ret;
 }
 
-static int t300rs_get_attachment(struct t300rs_device_entry *t300rs)
+int t300rs_get_attachment(void *data)
 {
+	struct t300rs_device_entry *t300rs = data;
+
 	/* taken directly from hid_tminit */
 	struct __packed t300rs_attachment_response
 	{

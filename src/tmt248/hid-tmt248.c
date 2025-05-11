@@ -50,6 +50,86 @@ static const signed short t248_effects[] = {
 	-1
 };
 
+static u8 tgtII_pc_rdesc_fixed[] = {
+	0x05, 0x01, /* Usage page (Generic Desktop) */
+	0x09, 0x05, /* Usage (GamePad) */
+	0xa1, 0x01, /* Collection (Application) */
+	0x85, 0x01, /* Report ID (1) */
+	0x09, 0x30, /* Usage (X) */
+	0x09, 0x31, /* Usage (Y) */
+	0x09, 0x32, /* Usage (Z) */
+	0x09, 0x35, /* Usage (Rz) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x26, 0xff, 0x00, /* Logical maximum (255) */
+	0x75, 0x08, /* Report size (8) */
+	0x95, 0x04, /* Report count (4) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x09, 0x39, /* Usage (Hat Switch) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x25, 0x07, /* Logical maximum (7) */
+	0x35, 0x00, /* Physical minimum (0) */
+	0x46, 0x3b, 0x01, /* Physical maximum (315) */
+	0x65, 0x14, /* Unit (Eng Rot, Angular Pos) */
+	0x75, 0x04, /* Report size (4) */
+	0x95, 0x01, /* Report count (1) */
+	0x81, 0x42, /* Input (Variable, Absolute, NullState) */
+	0x65, 0x00, /* Unit (None) */
+	0x05, 0x09, /* Usage page (Button) */
+	0x19, 0x01, /* Usage minimum (1) */
+	0x29, 0x0e, /* Usage maximum (14) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x25, 0x01, /* Logical maximum (1) */
+	0x75, 0x01, /* Report size (1) */
+	0x95, 0x0e, /* Report size (14) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x06, 0x00, 0xff, /* Usage page (Vendor 1) */
+	0x09, 0x20, /* Usage (32) */
+	0x75, 0x06, /* Report size (6) */
+	0x95, 0x01, /* Report count (1) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x05, 0x01, /* Usage page (Generic Desktop) */
+	0x09, 0x33, /* Usage (Rx) */
+	0x09, 0x34, /* Usage (Ry) */
+	0x15, 0x00, /* Logical minimum (0) */
+	0x26, 0xff, 0x00, /* Logical maximum (255) */
+	0x75, 0x08, /* Report size (8) */
+	0x95, 0x02, /* Report count (2) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x06, 0x00, 0xff, /* Usage page (Vendor 1) */
+	0x09, 0x21, /* Usage (?) */
+	0x95, 0x36, /* Report count (54) (?) */
+	0x81, 0x02, /* Input (Variable, Absolute) */
+	0x85, 0x60, /* Report ID (96), prev 5*/
+	0x09, 0x22, /* Usage (96), prev 0 */
+	0x95, 0x3f, /* Report count (63), prev 31 */
+	0x91, 0x02, /* Output (Variable, Absolute) */
+	0x85, 0x03, /* Report ID (3) */
+	0x0a, 0x21, 0x27, /* ??? */
+	0x95, 0x2f, /* Report count (47) */
+	0xb1, 0x02, /* Feature (Data, Var, Abs) */
+	0xc0, /* End collection */
+	0x06, 0xf0, 0xff, /* Usage page (Vendor 1) */
+	0x09, 0x40, /* Usage (Vx) */
+	0xa1, 0x01, /* Collection (Physical) */
+	0x85, 0xf0, /* Report ID (240) */
+	0x09, 0x47, /* Usage (71) */
+	0x95, 0x3f, /* Report count (63) */
+	0xb1, 0x02, /* Feature (Data, Var, Abs) */
+	0x85, 0xf1, /* Report ID (241) */
+	0x09, 0x48, /* Usage (72) */
+	0x95, 0x3f, /* Report count (63) */
+	0xb1, 0x02, /* Feature (Data, Var, Abs) */
+	0x85, 0xf2, /* Report ID (242) */
+	0x09, 0x49, /* Usage (73) */
+	0x95, 0x0f, /* Report count (15) */
+	0xb1, 0x02, /* Feature (Data, Var, Abs) */
+	0x85, 0xf3, /* Report ID (243) */
+	0x0a, 0x01, 0x47, /* ??? */
+	0x95, 0x07, /* Report count (7) */
+	0xb1, 0x02, /* Feature (Data, Var, Abs) */
+	0xc0, /* End collection */
+};
+
 /* TODO: sort through this stuff */
 static u8 t248_pc_rdesc_fixed[] = {
 	0x05, 0x01, /* Usage page (Generic Desktop) */
@@ -285,6 +365,12 @@ static int t248_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	if ((ret = t248_interrupts(t248)))
 		goto interrupt_err;
 
+	int attachment = t300rs_get_attachment(t248);
+	if (attachment != 8) {
+		hid_err(t248->hdev, "unexpected attachment,"
+				    " this branch only works for the T-GT II\n");
+	}
+
 	/* everything went OK */
 	tmff2->data = t248;
 	tmff2->params = t248_params;
@@ -308,8 +394,10 @@ t248_err:
 static __u8 *t248_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,
 		unsigned int *rsize)
 {
-	rdesc = t248_pc_rdesc_fixed;
-	*rsize = sizeof(t248_pc_rdesc_fixed);
+	/** @todo check for attachment info at this point in the init process
+	 * (if the kernel allows that?) */
+	rdesc = tgtII_pc_rdesc_fixed;
+	*rsize = sizeof(tgtII_pc_rdesc_fixed);
 	return rdesc;
 }
 
