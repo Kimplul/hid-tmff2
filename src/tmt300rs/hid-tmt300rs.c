@@ -335,6 +335,15 @@ static u8 condition_values[] = {
 	0xff, 0xfe, 0xff
 };
 
+static uint16_t t300rs_calculate_length(uint16_t length)
+{
+	/* translate infinite effect length from Linux's 0 to the wheel's 0xffff */
+	if (length == 0)
+		return 0xffff;
+
+	return length;
+}
+
 static int16_t t300rs_calculate_constant_level(int16_t level, uint16_t direction)
 {
 	level = (level * fixp_sin16(direction * 360 / 0x10000)) / 0x7fff;
@@ -580,8 +589,8 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 	level = t300rs_calculate_constant_level(constant.level, effect.direction);
 	old_level = t300rs_calculate_constant_level(constant_old.level, old.direction);
 
-	length = effect.replay.length - 1;
-	old_length = old.replay.length - 1;
+	length = t300rs_calculate_length(effect.replay.length);
+	old_length = t300rs_calculate_length(old.replay.length);
 
 	if (!t300rs_is_envelope_changed(&constant.envelope, &constant_old.envelope)
 			&& level == old_level
@@ -635,8 +644,8 @@ static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
 	t300rs_calculate_ramp_parameters(&slope, &center, &invert, &effect);
 	t300rs_calculate_ramp_parameters(&old_slope, &old_center, &old_invert, &old);
 
-	length = effect.replay.length - 1;
-	old_length = old.replay.length - 1;
+	length = t300rs_calculate_length(effect.replay.length);
+	old_length = t300rs_calculate_length(old.replay.length);
 
 	if (!t300rs_is_envelope_changed(&ramp.envelope, &ramp_old.envelope)
 			&& slope == old_slope
@@ -711,8 +720,8 @@ static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 	left_sat = t300rs_calculate_saturation(cond.left_saturation, effect.type);
 	left_sat_old = t300rs_calculate_saturation(cond_old.left_saturation, old.type);
 
-	duration = effect.replay.length - 1;
-	duration_old = old.replay.length - 1;
+	duration = t300rs_calculate_length(effect.replay.length);
+	duration_old = t300rs_calculate_length(old.replay.length);
 
 	if (right_coeff == right_coeff_old
 			&& left_coeff == left_coeff_old
@@ -773,8 +782,8 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 	t300rs_calculate_periodic_values(&old);
 	periodic_old = old.u.periodic;
 
-	length = effect.replay.length - 1;
-	old_length = old.replay.length - 1;
+	length = t300rs_calculate_length(effect.replay.length);
+	old_length = t300rs_calculate_length(old.replay.length);
 
 	if (!t300rs_is_envelope_changed(&periodic.envelope, &periodic_old.envelope)
 			&& periodic.magnitude == periodic_old.magnitude
@@ -825,7 +834,7 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 	int ret;
 
 	level = t300rs_calculate_constant_level(constant.level, effect.direction);
-	duration = effect.replay.length - 1;
+	duration = t300rs_calculate_length(effect.replay.length);
 
 	offset = effect.replay.delay;
 
@@ -867,7 +876,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 
 	t300rs_calculate_ramp_parameters(&slope, &center, &invert, &effect);
 
-	duration = effect.replay.length - 1;
+	duration = t300rs_calculate_length(effect.replay.length);
 	offset = effect.replay.delay;
 
 	t300rs_fill_header(&packet_ramp->header, effect.id, 0x6b);
@@ -924,7 +933,7 @@ static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
 	right_sat = t300rs_calculate_saturation(cond.right_saturation, effect.type);
 	left_sat = t300rs_calculate_saturation(cond.left_saturation, effect.type);
 
-	duration = effect.replay.length - 1;
+	duration = t300rs_calculate_length(effect.replay.length);
 
 	offset = effect.replay.delay;
 
@@ -978,7 +987,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 
 	t300rs_calculate_periodic_values(&effect);
 	periodic = effect.u.periodic;
-	duration = effect.replay.length - 1;
+	duration = t300rs_calculate_length(effect.replay.length);
 	offset = effect.replay.delay;
 	magnitude = periodic.magnitude;
 	period = periodic.period;
