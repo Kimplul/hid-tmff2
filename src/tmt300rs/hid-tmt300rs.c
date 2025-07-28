@@ -350,8 +350,6 @@ static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 	struct ff_periodic_effect *periodic = &effect->u.periodic;
 	int16_t headroom;
 
-	effect->replay.length -= 1;
-
 	periodic->magnitude = (periodic->magnitude * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
 
 	if (periodic->magnitude < 0){
@@ -980,7 +978,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 
 	t300rs_calculate_periodic_values(&effect);
 	periodic = effect.u.periodic;
-	duration = effect.replay.length;
+	duration = effect.replay.length - 1;
 	offset = effect.replay.delay;
 	magnitude = periodic.magnitude;
 	period = periodic.period;
