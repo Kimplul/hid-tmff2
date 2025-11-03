@@ -488,7 +488,7 @@ static void t300rs_fill_header(struct t300rs_packet_header *packet_header,
 	packet_header->code = code;
 }
 
-int t300rs_play_effect(void *data, struct tmff2_effect_state *state)
+int t300rs_play_effect(void *data, const struct tmff2_effect_state *state)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_play {
@@ -515,7 +515,7 @@ int t300rs_play_effect(void *data, struct tmff2_effect_state *state)
 	return ret;
 }
 
-int t300rs_stop_effect(void *data, struct tmff2_effect_state *state)
+int t300rs_stop_effect(void *data, const struct tmff2_effect_state *state)
 {
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_stop {
@@ -566,7 +566,7 @@ static void t300rs_fill_timing(struct t300rs_packet_timing *packet_timing,
 }
 
 static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+		const struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
@@ -616,7 +616,7 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 }
 
 static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+		const struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
@@ -676,7 +676,7 @@ static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
 }
 
 static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+		const struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
@@ -754,7 +754,7 @@ static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 }
 
 static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+		const struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_effect old = state->old;
@@ -816,7 +816,7 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 }
 
 static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+		const struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_constant_effect constant = state->effect.u.constant;
@@ -853,7 +853,7 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 }
 
 static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+		const struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct ff_ramp_effect ramp = state->effect.u.ramp;
@@ -900,7 +900,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 }
 
 static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+		const struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	/* we only care about the first axis */
@@ -965,7 +965,7 @@ static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
 }
 
 static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
-		struct tmff2_effect_state *state)
+		const struct tmff2_effect_state *state)
 {
 	struct ff_effect effect = state->effect;
 	struct __packed t300rs_packet_periodic {
@@ -1016,7 +1016,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 	return ret;
 }
 
-int t300rs_update_effect(void *data, struct tmff2_effect_state *state)
+int t300rs_update_effect(void *data, const struct tmff2_effect_state *state)
 {
 	struct t300rs_device_entry *t300rs = data;
 	switch (state->effect.type) {
@@ -1038,7 +1038,7 @@ int t300rs_update_effect(void *data, struct tmff2_effect_state *state)
 	}
 }
 
-int t300rs_upload_effect(void *data, struct tmff2_effect_state *state)
+int t300rs_upload_effect(void *data, const struct tmff2_effect_state *state)
 {
 	struct t300rs_device_entry *t300rs = data;
 	switch (state->effect.type) {

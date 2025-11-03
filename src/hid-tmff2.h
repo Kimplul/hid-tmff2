@@ -73,10 +73,10 @@ struct tmff2_device_entry {
 	signed short supported_effects[FF_CNT];
 
 	/* obligatory callbacks */
-	int (*play_effect)(void *data, struct tmff2_effect_state *state);
-	int (*upload_effect)(void *data, struct tmff2_effect_state *state);
-	int (*update_effect)(void *data, struct tmff2_effect_state *state);
-	int (*stop_effect)(void *data, struct tmff2_effect_state *state);
+	int (*play_effect)(void *data, const struct tmff2_effect_state *state);
+	int (*upload_effect)(void *data, const struct tmff2_effect_state *state);
+	int (*update_effect)(void *data, const struct tmff2_effect_state *state);
+	int (*stop_effect)(void *data, const struct tmff2_effect_state *state);
 
 	int (*wheel_init)(struct tmff2_device_entry *tmff2, int open_mode);
 	int (*wheel_destroy)(void *data);
@@ -134,10 +134,10 @@ struct t300rs_device_entry {
 	u8 *send_buffer;
 };
 
-int t300rs_play_effect(void *, struct tmff2_effect_state *);
-int t300rs_upload_effect(void *, struct tmff2_effect_state *);
-int t300rs_update_effect(void *, struct tmff2_effect_state *);
-int t300rs_stop_effect(void *, struct tmff2_effect_state *);
+int t300rs_play_effect(void *, const struct tmff2_effect_state *);
+int t300rs_upload_effect(void *, const struct tmff2_effect_state *);
+int t300rs_update_effect(void *, const struct tmff2_effect_state *);
+int t300rs_stop_effect(void *, const struct tmff2_effect_state *);
 
 int t300rs_open(void *, int);
 int t300rs_close(void *, int);
