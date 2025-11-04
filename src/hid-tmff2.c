@@ -5,6 +5,22 @@
 #include <linux/version.h>
 #include "hid-tmff2.h"
 
+/* Share t500rs_log_level across compilation units (level 3 = unknown-only) */
+extern int t500rs_log_level;
+
+/* Known vendor/opcode IDs managed by the driver (TX side) */
+static inline int tmff2_is_known_vendor_id(unsigned char id)
+{
+	switch (id) {
+	case 0x01: case 0x02: case 0x03: case 0x04: case 0x05:
+	case 0x40: case 0x41: case 0x42: case 0x43:
+	case 0x0a:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
 
 int open_mode = 1;
 module_param(open_mode, int, 0660);
@@ -242,8 +258,15 @@ static ssize_t gain_store(struct device *dev,
 	}
 
 	gain = value;
-	if (tmff2->set_gain) /* if we can, update gain immediately */
-		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+	if (tmff2->set_gain) {
+		unsigned long flags;
+		spin_lock_irqsave(&tmff2->lock, flags);
+		tmff2->pending_gain_value = GAIN_MAX;
+		tmff2->gain_pending = 1;
+		spin_unlock_irqrestore(&tmff2->lock, flags);
+		if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+			schedule_delayed_work(&tmff2->work, 0);
+	}
 
 	return count;
 }
@@ -258,6 +281,7 @@ static DEVICE_ATTR_RW(gain);
 static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+	unsigned long flags;
 
 	if (!tmff2)
 		return;
@@ -267,13 +291,20 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_gain(tmff2->data, (value * gain) / GAIN_MAX))
-		hid_warn(tmff2->hdev, "unable to set gain\n");
+	/* Defer to workqueue: store pending gain and schedule */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->pending_gain_value = value;
+	tmff2->gain_pending = 1;
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 }
 
 static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+	unsigned long flags;
 
 	if (!tmff2)
 		return;
@@ -283,8 +314,14 @@ static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_autocenter(tmff2->data, value))
-		hid_warn(tmff2->hdev, "unable to set autocenter\n");
+	/* Defer to workqueue: store pending autocenter and schedule */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->pending_autocenter_value = value;
+	tmff2->autocenter_pending = 1;
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 }
 
 static void tmff2_work_handler(struct work_struct *w)
@@ -300,6 +337,30 @@ static void tmff2_work_handler(struct work_struct *w)
 
 	if (!tmff2)
 		return;
+
+	/* Apply pending control changes (gain/autocenter) in process context */
+	{
+		unsigned long f2;
+		uint16_t pg = 0, pac = 0;
+		int do_gain = 0, do_ac = 0;
+		spin_lock_irqsave(&tmff2->lock, f2);
+		if (tmff2->gain_pending) {
+			pg = tmff2->pending_gain_value;
+			tmff2->gain_pending = 0;
+			do_gain = 1;
+		}
+		if (tmff2->autocenter_pending) {
+			pac = tmff2->pending_autocenter_value;
+			tmff2->autocenter_pending = 0;
+			do_ac = 1;
+		}
+		spin_unlock_irqrestore(&tmff2->lock, f2);
+
+		if (do_gain && tmff2->set_gain)
+			tmff2->set_gain(tmff2->data, (pg * gain) / GAIN_MAX);
+		if (do_ac && tmff2->set_autocenter)
+			tmff2->set_autocenter(tmff2->data, pac);
+	}
 
 	for (effect_id = 0; effect_id < tmff2->max_effects; ++effect_id) {
 		unsigned long actions = 0;
@@ -694,6 +755,11 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 				goto wheel_err;
 			break;
 
+		case TMT500RS_PC_ID:
+			if ((ret = t500rs_populate_api(tmff2)))
+				goto wheel_err;
+			break;
+
 		case TMT248_PC_ID:
 			if ((ret = t248_populate_api(tmff2)))
 				goto wheel_err;
@@ -743,6 +809,7 @@ oom_err:
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 static __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
+
 		unsigned int *rsize)
 #else
 static const __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
@@ -778,6 +845,7 @@ static void tmff2_remove(struct hid_device *hdev)
 	if (tmff2->params & PARAM_DAMPER_LEVEL)
 		device_remove_file(dev, &dev_attr_damper_level);
 
+
 	if (tmff2->params & PARAM_SPRING_LEVEL)
 		device_remove_file(dev, &dev_attr_spring_level);
 
@@ -802,6 +870,8 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
+	/* t500rs */
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT500RS_PC_ID)},
 	/* t248 PC*/
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
 	/* tx */
@@ -812,6 +882,34 @@ static const struct hid_device_id tmff2_devices[] = {
 	{}
 };
 MODULE_DEVICE_TABLE(hid, tmff2_devices);
+static int tmff2_raw_event(struct hid_device *hdev, struct hid_report *report,
+				 __u8 *data, int size)
+{
+	/* At level 3: ignore normal input reports (axes/buttons) and idless reports;
+	 * only dump vendor/feature-like unknowns. */
+	if (t500rs_log_level >= 3 && report && data && size > 0) {
+		/* Skip input traffic entirely (these are the steering updates you saw). */
+		if (report->type == HID_INPUT_REPORT)
+			return 0;
+
+		/* Use the real Report ID, not data[0] (id==0 means no Report ID). */
+		if (report->id == 0)
+			return 0;
+
+		if (!tmff2_is_known_vendor_id((unsigned char)report->id)) {
+			char hex[3 * 64 + 4];
+			int i, off = 0, max = size > 64 ? 64 : size;
+			for (i = 0; i < max && off + 3 < sizeof(hex); i++)
+				off += scnprintf(hex + off, sizeof(hex) - off, "%02x ", data[i]);
+			if (size > max)
+				scnprintf(hex + off, sizeof(hex) - off, "...");
+			hid_info(hdev, "HID RX UNKNOWN [type=%d id=0x%02x len=%d]: %s\n",
+				report->type, report->id, size, hex);
+		}
+	}
+	return 0; /* always pass through */
+}
+
 
 static struct hid_driver tmff2_driver = {
 	.name = "tmff2",
@@ -819,6 +917,7 @@ static struct hid_driver tmff2_driver = {
 	.probe = tmff2_probe,
 	.remove = tmff2_remove,
 	.report_fixup = tmff2_report_fixup,
+	.raw_event = tmff2_raw_event,
 };
 module_hid_driver(tmff2_driver);
 

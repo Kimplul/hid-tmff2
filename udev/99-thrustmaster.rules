@@ -27,3 +27,29 @@ SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b692", RUN+="/us
 # TSPC
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
 SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b689", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+# T500RS initialization mode
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65d", MODE="0666", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEMS=="usb", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65d", MODE="0666", TAG+="uaccess"
+KERNEL=="js*", SUBSYSTEMS=="usb", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65d", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="hid", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65d", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65d", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65d", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+# T500RS PC mode
+# IMPORTANT FOR PROTON/STEAM GAMES:
+# If you have multiple joystick devices (js0, js1, etc.) that cause conflicts,
+# use the event device directly in Steam launch options:
+#   SDL_JOYSTICK_DEVICE=/dev/input/eventXX %command%
+# Find your event number with: cat /proc/bus/input/devices | grep -A 5 "Thrustmaster"
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65e", MODE="0666", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEMS=="usb", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65e", MODE="0666", TAG+="uaccess"
+KERNEL=="js*", SUBSYSTEMS=="usb", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65e", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="hid", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65e", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="hid", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65e", MODALIAS=="hid:b0003g*v0000044Fp0000B65E", RUN+="/bin/sh -c 'echo %k > /sys/bus/hid/drivers/tmff2/bind'"
+SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65e", RUN+="/usr/bin/evdev-joystick --evdev %E{DEVNAME} --deadzone 0"
+SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65e", RUN+="/usr/bin/jscal -s 6,1,1,32767,32767,16384,16384,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,3,448,574,1394469,1394469,1,0,0,0,536870912,536870912,1,0,0,0,536870912,536870912 /dev/input/js%n"
+
+# T500RS sysfs attributes permissions (for GUI and non-root access)
+# Set permissions on all sysfs attributes after device is bound to driver
+SUBSYSTEM=="hid", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b65e", RUN+="/bin/sh -c 'sleep 0.5; chmod 0666 /sys/bus/hid/devices/%k/gain /sys/bus/hid/devices/%k/range /sys/bus/hid/devices/%k/autocenter /sys/bus/hid/devices/%k/t500rs_* 2>/dev/null || true'"
