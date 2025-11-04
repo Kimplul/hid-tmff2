@@ -64,6 +64,12 @@ struct tmff2_device_entry {
 
 	spinlock_t lock;
 
+	/* Pending control changes to be applied from workqueue context */
+	uint16_t pending_gain_value;
+	uint16_t pending_autocenter_value;
+	int gain_pending;
+	int autocenter_pending;
+
 	int allow_scheduling;
 
 	/* fields relevant to each actual device (T300, T248...) */
@@ -92,6 +98,7 @@ struct tmff2_device_entry {
 	ssize_t (*alt_mode_show)(void *data, char *buf);
 	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
+
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
 
 	/* void pointers are dangerous, I know, but in this case likely the
@@ -100,6 +107,7 @@ struct tmff2_device_entry {
 
 /* external */
 int t300rs_populate_api(struct tmff2_device_entry *tmff2);
+int t500rs_populate_api(struct tmff2_device_entry *tmff2);
 int t248_populate_api(struct tmff2_device_entry *tmff2);
 int tx_populate_api(struct tmff2_device_entry *tmff2);
 int tsxw_populate_api(struct tmff2_device_entry *tmff2);
@@ -108,6 +116,8 @@ int tspc_populate_api(struct tmff2_device_entry *tmff2);
 #define TMT300RS_PS3_NORM_ID	0xb66e
 #define TMT300RS_PS3_ADV_ID	0xb66f
 #define TMT300RS_PS4_NORM_ID	0xb66d
+
+#define TMT500RS_PC_ID		0xb65e
 
 #define TMT248_PC_ID		0xb696
 

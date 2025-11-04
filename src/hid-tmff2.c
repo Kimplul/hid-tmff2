@@ -242,8 +242,31 @@ static ssize_t gain_store(struct device *dev,
 	}
 
 	gain = value;
-	if (tmff2->set_gain) /* if we can, update gain immediately */
-		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+
+	/* Rationale: two-level gain model
+	* - The input API's set_gain (pg) is the in-game gain (0..GAIN_MAX).
+	* - This driver also exposes a device/system gain via sysfs param `gain`.
+	* - The device callback receives the product: (pg * gain) / GAIN_MAX.
+	*   See worker at tmff2->set_gain(... (pg * gain) / GAIN_MAX ).
+	* When the sysfs `gain` changes, we trigger a recompute by pushing
+	* pending_gain_value = GAIN_MAX here so the effective device gain becomes
+	* exactly the sysfs value (GAIN_MAX * gain / GAIN_MAX == gain) and future
+	* in-game set_gain calls continue to multiply in.
+	*
+	* References:
+	* - docs/FFBEFFECTS.md: section "FF_GAIN" shows a dedicated device gain path.
+	* - docs/FFB_T500RS.md: Report glossary mentions 0x43 (gain), i.e., device-side
+	*   gain separate from per-effect magnitudes; drivers should expose both levels.
+	*/
+	if (tmff2->set_gain) {
+		unsigned long flags;
+		spin_lock_irqsave(&tmff2->lock, flags);
+		tmff2->pending_gain_value = GAIN_MAX;
+		tmff2->gain_pending = 1;
+		spin_unlock_irqrestore(&tmff2->lock, flags);
+		if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+			schedule_delayed_work(&tmff2->work, 0);
+	}
 
 	return count;
 }
@@ -258,6 +281,7 @@ static DEVICE_ATTR_RW(gain);
 static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+	unsigned long flags;
 
 	if (!tmff2)
 		return;
@@ -267,13 +291,20 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_gain(tmff2->data, (value * gain) / GAIN_MAX))
-		hid_warn(tmff2->hdev, "unable to set gain\n");
+	/* Defer to workqueue: store pending gain and schedule */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->pending_gain_value = value;
+	tmff2->gain_pending = 1;
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 }
 
 static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+	unsigned long flags;
 
 	if (!tmff2)
 		return;
@@ -283,8 +314,14 @@ static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_autocenter(tmff2->data, value))
-		hid_warn(tmff2->hdev, "unable to set autocenter\n");
+	/* Defer to workqueue: store pending autocenter and schedule */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->pending_autocenter_value = value;
+	tmff2->autocenter_pending = 1;
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 }
 
 static void tmff2_work_handler(struct work_struct *w)
@@ -301,6 +338,30 @@ static void tmff2_work_handler(struct work_struct *w)
 	if (!tmff2)
 		return;
 
+	/* Apply pending control changes (gain/autocenter) in process context */
+	{
+		unsigned long f2;
+		uint16_t pg = 0, pac = 0;
+		int do_gain = 0, do_ac = 0;
+		spin_lock_irqsave(&tmff2->lock, f2);
+		if (tmff2->gain_pending) {
+			pg = tmff2->pending_gain_value;
+			tmff2->gain_pending = 0;
+			do_gain = 1;
+		}
+		if (tmff2->autocenter_pending) {
+			pac = tmff2->pending_autocenter_value;
+			tmff2->autocenter_pending = 0;
+			do_ac = 1;
+		}
+		spin_unlock_irqrestore(&tmff2->lock, f2);
+
+		if (do_gain && tmff2->set_gain)
+			tmff2->set_gain(tmff2->data, (pg * gain) / GAIN_MAX);
+		if (do_ac && tmff2->set_autocenter)
+			tmff2->set_autocenter(tmff2->data, pac);
+	}
+
 	for (effect_id = 0; effect_id < tmff2->max_effects; ++effect_id) {
 		unsigned long actions = 0;
 		struct tmff2_effect_state effect;
@@ -315,14 +376,25 @@ static void tmff2_work_handler(struct work_struct *w)
 
 		effect_delay = state->effect.replay.delay;
 		effect_length = state->effect.replay.length;
+		/* If playing with a finite length, stop when (delay + length) elapses */
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && effect_length) {
 			if ((time_now - state->start_time) >=
 					(effect_delay + effect_length) * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
-
+				/* Request a STOP in process context */
+				__set_bit(FF_EFFECT_QUEUE_STOP, &actions);
 				state->count = 0;
 			}
+		}
+		/* Delay handling for start: only trigger START after replay.delay */
+		if (test_bit(FF_EFFECT_QUEUE_START, &state->flags)) {
+			if ((time_now - state->start_time) >= effect_delay) {
+				__set_bit(FF_EFFECT_QUEUE_START, &actions);
+				__clear_bit(FF_EFFECT_QUEUE_START, &state->flags);
+				/* effect is playing since we're starting it now */
+				__set_bit(FF_EFFECT_PLAYING, &state->flags);
+			} /* else: keep START pending until delay elapsed */
 		}
 
 		if (test_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags)) {
@@ -694,6 +766,11 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 				goto wheel_err;
 			break;
 
+		case TMT500RS_PC_ID:
+			if ((ret = t500rs_populate_api(tmff2)))
+				goto wheel_err;
+			break;
+
 		case TMT248_PC_ID:
 			if ((ret = t248_populate_api(tmff2)))
 				goto wheel_err;
@@ -806,6 +883,8 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
+	/* t500rs */
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT500RS_PC_ID)},
 	/* t248 PC*/
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
 	/* tx */
@@ -827,5 +906,11 @@ static struct hid_driver tmff2_driver = {
 	.report_fixup = tmff2_report_fixup,
 };
 module_hid_driver(tmff2_driver);
+
+
+#ifndef TMFF2_DRIVER_VERSION
+#define TMFF2_DRIVER_VERSION "dev"
+#endif
+MODULE_VERSION(TMFF2_DRIVER_VERSION);
 
 MODULE_LICENSE("GPL");

@@ -5,4 +5,8 @@ hid-tmff-new-y := \
 		src/tmt248/hid-tmt248.o \
 		src/tmtx/hid-tmtx.o \
 		src/tmtsxw/hid-tmtsxw.o \
-		src/tmtspc/hid-tmtspc.o
+		src/tmtspc/hid-tmtspc.o \
+		src/tmt500rs/hid-tmt500rs.o
+
+# Pass through the global TMFF2 version define from Makefile
+ccflags-y += $(TMFF2_VERSION_DEF)
