@@ -289,6 +289,16 @@ magnitude + envelope + duration + offset:
 
 ### Notes
 
+Ramp is not really an effect supported by the hardware in the wheel itself,
+rather it gets emulated by using a single period of a long sawtooth periodic
+wave. It's probably still worth documenting here due to it having to be handled
+separately from a 'generic' periodic effect.
+
+In particular, note how the duration of the effect is specified twice in the
+packet. Interpreted as a packet for a sawtooth wave, the first duration is the
+period of the wave, while the second is the 'actual' duration of the effect.
+This encodes that only a single 'ramp' is played.
+
 #### Invert
 
 There is a bug in the Windows driver during the Ramp effect update.
@@ -340,7 +350,7 @@ Valid:
     f6 7f - fade_level***
     04 - invert (going "down", 05, going "up", 04)
     4f
-    f7 17 - time again?
+    f7 17 - time again
     00 00
     00 00 - offset
     00 ff ff - end of init
