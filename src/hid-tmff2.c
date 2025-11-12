@@ -6,20 +6,6 @@
 #include "hid-tmff2.h"
 
 
-/* Known vendor/opcode IDs managed by the driver (TX side) */
-static inline int tmff2_is_known_vendor_id(unsigned char id)
-{
-	switch (id) {
-	case 0x01: case 0x02: case 0x03: case 0x04: case 0x05:
-	case 0x40: case 0x41: case 0x42: case 0x43:
-	case 0x0a:
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-
 int open_mode = 1;
 module_param(open_mode, int, 0660);
 MODULE_PARM_DESC(open_mode,
@@ -256,6 +242,22 @@ static ssize_t gain_store(struct device *dev,
 	}
 
 	gain = value;
+
+	/* Rationale: two-level gain model
+	* - The input API's set_gain (pg) is the in-game gain (0..GAIN_MAX).
+	* - This driver also exposes a device/system gain via sysfs param `gain`.
+	* - The device callback receives the product: (pg * gain) / GAIN_MAX.
+	*   See worker at tmff2->set_gain(... (pg * gain) / GAIN_MAX ).
+	* When the sysfs `gain` changes, we trigger a recompute by pushing
+	* pending_gain_value = GAIN_MAX here so the effective device gain becomes
+	* exactly the sysfs value (GAIN_MAX * gain / GAIN_MAX == gain) and future
+	* in-game set_gain calls continue to multiply in.
+	*
+	* References:
+	* - docs/FFBEFFECTS.md: section "FF_GAIN" shows a dedicated device gain path.
+	* - docs/FFB_T500RS.md: Report glossary mentions 0x43 (gain), i.e., device-side
+	*   gain separate from per-effect magnitudes; drivers should expose both levels.
+	*/
 	if (tmff2->set_gain) {
 		unsigned long flags;
 		spin_lock_irqsave(&tmff2->lock, flags);
@@ -376,7 +378,7 @@ static void tmff2_work_handler(struct work_struct *w)
 		effect_length = state->effect.replay.length;
 		/* If playing with a finite length, stop when (delay + length) elapses */
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && effect_length) {
-			if ((time_now - state->start_time) >= 
+			if ((time_now - state->start_time) >=
 					(effect_delay + effect_length) * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
@@ -853,7 +855,6 @@ static void tmff2_remove(struct hid_device *hdev)
 	if (tmff2->params & PARAM_DAMPER_LEVEL)
 		device_remove_file(dev, &dev_attr_damper_level);
 
-
 	if (tmff2->params & PARAM_SPRING_LEVEL)
 		device_remove_file(dev, &dev_attr_spring_level);
 
@@ -889,6 +890,7 @@ static const struct hid_device_id tmff2_devices[] = {
 
 	{}
 };
+MODULE_DEVICE_TABLE(hid, tmff2_devices);
 
 static struct hid_driver tmff2_driver = {
 	.name = "tmff2",
