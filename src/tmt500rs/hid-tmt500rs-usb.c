@@ -17,16 +17,6 @@
 
 #include "../hid-tmff2.h"
 
-/* Build-time injected version (from Makefile/Kbuild) */
-#ifndef T500RS_DRIVER_VERSION
-#ifdef T500RS_DRIVER_VERSION_STR
-#define __T500_STR_HELPER(x) #x
-#define __T500_STR(x) __T500_STR_HELPER(x)
-#define T500RS_DRIVER_VERSION __T500_STR(T500RS_DRIVER_VERSION_STR)
-#else
-#define T500RS_DRIVER_VERSION "0.1-local"
-#endif
-#endif
 
 /* T500RS Constants */
 #define T500RS_MAX_EFFECTS 16
@@ -39,12 +29,70 @@
 /* Gain scaling */
 #define GAIN_MAX 65535
 
-/* Logging verbosity (0=minimal, 1=verbose) */
-int t500rs_log_level;
-module_param(t500rs_log_level, int, 0644);
-MODULE_PARM_DESC(t500rs_log_level,
-                 "Log level: 0=minimal, 1=verbose, 2=usb-dump TX, 3=usb-dump "
-                 "UNKNOWN only (TX+RX)");
+
+/* Packet structs (packed) to reduce magic bytes on T500RS protocol */
+struct t500rs_r02_envelope {
+  u8 id;       /* 0x02 */
+  u8 subtype;  /* 0x1c */
+  u8 zero;     /* 0x00 */
+  __le16 attack_len;
+  u8 attack_lvl;   /* 0..255 */
+  __le16 fade_len;
+  u8 fade_lvl;     /* 0..255 */
+} __packed;
+
+struct t500rs_r03_const {
+  u8 id;     /* 0x03 */
+  u8 code;   /* 0x0e */
+  u8 zero;   /* 0x00 */
+  s8 level;  /* -127..127 */
+} __packed;
+
+struct t500rs_r04_periodic {
+  u8 id;      /* 0x04 */
+  u8 code;    /* 0x0e */
+  u8 zero;    /* 0x00 */
+  u8 magnitude;   /* 0..127 */
+  u8 offset;      /* 0 */
+  u8 phase;       /* 0 */
+  __le16 period;  /* ms */
+} __packed;
+
+struct t500rs_r04_ramp {
+  u8 id;      /* 0x04 */
+  u8 code;    /* 0x0e */
+  __le16 start;
+  __le16 cur_val;   /* same as start */
+  __le16 duration;  /* ms */
+  u8 zero;          /* 0 */
+} __packed;
+
+struct t500rs_r41_cmd {
+  u8 id;        /* 0x41 */
+  u8 effect_id; /* usually 0 on T500RS */
+  u8 command;   /* 0x41 START, 0x00 STOP, 0x00 clear in init */
+  u8 arg;       /* 0x01 */
+} __packed;
+
+/* Generic 0x01 main upload (15 bytes) — keep fields generic while unknown) */
+struct t500rs_r01_main {
+  u8 id;        /* 0x01 */
+  u8 effect_id; /* see ID semantics note */
+  u8 type;      /* 0x00 constant, 0x20..0x24 periodic/ramp */
+  u8 b3;
+  u8 b4;
+  u8 b5;
+  u8 b6;
+  u8 b7;
+  u8 b8;
+  u8 b9;
+  u8 b10;
+  u8 b11;
+  u8 b12;
+  u8 b13;
+  u8 b14;
+} __packed;
+
 
 /* Helper: classify whether a TX buffer is a known/managed report
  * Known first bytes (report IDs / opcodes) we intentionally emit:
@@ -85,13 +133,56 @@ static inline int t500rs_is_known_tx(const unsigned char *data, size_t len) {
   }
 }
 
+/* Scale envelope level (0..32767) to device 8-bit (0..255) */
+static inline u8 t500rs_scale_env_level(u16 level)
+{
+  if (level > 32767)
+    level = 32767;
+  return (u8)((level * 255) / 32767);
+}
+
+/* Scale constant level (-32767..32767) to signed 8-bit (-127..127) */
+static inline s8 t500rs_scale_const_level_s8(int level)
+{
+  if (level > 32767) level = 32767;
+  if (level < -32767) level = -32767;
+  return (s8)((level * 127) / 32767);
+}
+
+/* Scale magnitude (0..32767 or signed) to 7-bit (0..127) */
+static inline u8 t500rs_scale_mag_u7(int magnitude)
+{
+  if (magnitude < 0) magnitude = -magnitude;
+  if (magnitude > 32767) magnitude = 32767;
+  return (u8)((magnitude * 127) / 32767);
+}
+
+/* Fill Report 0x02 (envelope) buffer for T500RS: 9 bytes total
+ * buf[0]=0x02, buf[1]=0x1c, buf[2]=0x00,
+ * buf[3..4]=attack_length (le16), buf[5]=attack_level (u8 0..255),
+ * buf[6..7]=fade_length (le16),   buf[8]=fade_level (u8 0..255)
+ */
+static inline void t500rs_fill_envelope_u02(u8 *buf, const struct ff_envelope *env)
+{
+  u16 a_len = env ? env->attack_length : 0;
+  u16 f_len = env ? env->fade_length : 0;
+  u8 a_lvl = env ? t500rs_scale_env_level(env->attack_level) : 0;
+  u8 f_lvl = env ? t500rs_scale_env_level(env->fade_level)  : 0;
+
+  struct t500rs_r02_envelope *r = (struct t500rs_r02_envelope *)buf;
+  memset(r, 0, sizeof(*r));
+  r->id = 0x02;
+  r->subtype = 0x1c;
+  r->zero = 0x00;
+  r->attack_len = cpu_to_le16(a_len);
+  r->attack_lvl = a_lvl;
+  r->fade_len = cpu_to_le16(f_len);
+  r->fade_lvl = f_lvl;
+}
+
+
 /* Debug logging helper (requires local variable named 't500rs') */
-#define T500RS_DBG(fmt, ...)                                                   \
-  do {                                                                         \
-    /* Suppress normal debug at level 3 (unknown-only mode) */                 \
-    if (t500rs_log_level > 0 && t500rs_log_level < 3)                          \
-      hid_info(t500rs->hdev, fmt, ##__VA_ARGS__);                              \
-  } while (0)
+#define T500RS_DBG(fmt, ...) hid_dbg(t500rs->hdev, fmt, ##__VA_ARGS__)
 
 /* T500RS device data */
 struct t500rs_device_entry {
@@ -104,12 +195,6 @@ struct t500rs_device_entry {
 
   u8 *send_buffer;
   size_t buffer_length;
-
-  /* Per-effect levels (0-100) from base driver's sysfs callbacks */
-  u8 spring_gain;
-  u8 damper_gain;
-  u8 friction_gain;
-  u8 inertia_gain;
 
   /* Current wheel range for smooth transitions */
   u16 current_range; /* Current rotation range in degrees */
@@ -162,18 +247,6 @@ static int t500rs_send_usb(struct t500rs_device_entry *t500rs, const u8 *data,
   int ret, transferred;
   if (!t500rs || !data || len == 0 || len > T500RS_BUFFER_LENGTH)
     return -EINVAL;
-  if (t500rs_log_level > 1) {
-    char hex[3 * T500RS_BUFFER_LENGTH + 1];
-    size_t i, off = 0;
-    for (i = 0; i < len && off + 3 < sizeof(hex); i++)
-      off += scnprintf(hex + off, sizeof(hex) - off, "%02x ", data[i]);
-    if (t500rs_log_level == 2) {
-      hid_info(t500rs->hdev, "USB TX [%zu]: %s\n", len, hex);
-    } else if (t500rs_log_level >= 3) {
-      if (!t500rs_is_known_tx(data, len))
-        hid_info(t500rs->hdev, "USB TX UNKNOWN [%zu]: %s\n", len, hex);
-    }
-  }
 
   ret = usb_interrupt_msg(t500rs->usbdev,
                           usb_sndintpipe(t500rs->usbdev, t500rs->ep_out),
@@ -195,40 +268,50 @@ static int t500rs_upload_constant(struct t500rs_device_entry *t500rs,
 
   T500RS_DBG("Upload constant: id=%d, level=%d\n", effect->id, level);
 
-  /* NO DEADZONE - Send all forces exactly as requested, matching Windows
-   * behavior */
-
   /* Report 0x02 - Envelope (attack/fade) */
-  memset(buf, 0, 15);
-  buf[0] = 0x02;
-  buf[1] = 0x1c; /* Subtype 0x1c */
-  buf[2] = 0x00;
-  T500RS_DBG("Sending Report 0x02 (envelope)...\n");
+  t500rs_fill_envelope_u02(buf, &effect->u.constant.envelope);
+  T500RS_DBG("Sending Report 0x02 (envelope): a_len=%u a_lvl=%u f_len=%u f_lvl=%u\n",
+             effect->u.constant.envelope.attack_length,
+             t500rs_scale_env_level(effect->u.constant.envelope.attack_level),
+             effect->u.constant.envelope.fade_length,
+             t500rs_scale_env_level(effect->u.constant.envelope.fade_level));
   ret = t500rs_send_usb(t500rs, buf, 9);
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x02: %d\n", ret);
     return ret;
   }
 
+  /*
+   * IMPORTANT: T500RS Effect ID (buf[1]) semantics
+   * - All Report 0x01 "main effect upload" messages MUST use EffectID=0x00.
+   *   Using per-effect IDs here breaks playback (e.g., constant force).
+   * - Report 0x41 START/STOP also requires EffectID=0x00, except special
+   *   cases like stopping autocenter by its fixed ID during init.
+   * This matches behavior observed from the Windows driver and on-device tests.
+   */
+
   /* Report 0x01 - Main effect upload - MATCH WINDOWS DRIVER EXACTLY! */
-  memset(buf, 0, 15);
-  buf[0] = 0x01;
-  buf[1] = 0x00; /* Effect ID 0 (Windows uses 0, not effect->id) */
-  buf[2] = 0x00; /* Constant force type */
-  buf[3] = 0x40;
-  buf[4] = 0xff; /* Windows uses 0xff (was 0x69) */
-  buf[5] = 0xff; /* Windows uses 0xff (was 0x23) */
-  buf[6] = 0x00;
-  buf[7] = 0xff;
-  buf[8] = 0xff;
-  buf[9] = 0x0e; /* Parameter subtype reference */
-  buf[10] = 0x00;
-  buf[11] = 0x1c; /* Envelope subtype reference */
-  buf[12] = 0x00;
-  buf[13] = 0x00;
-  buf[14] = 0x00;
+  {
+    struct t500rs_r01_main *m = (struct t500rs_r01_main *)buf;
+    memset(m, 0, sizeof(*m));
+    m->id = 0x01;
+    m->effect_id = 0x00; /* Device expects Effect ID 0 for 0x01 on T500RS */
+    m->type = 0x00;      /* Constant force type */
+    m->b3 = 0x40;
+    m->b4 = 0xff; /* Windows uses 0xff (was 0x69) */
+    m->b5 = 0xff; /* Windows uses 0xff (was 0x23) */
+    m->b6 = 0x00;
+    m->b7 = 0xff;
+    m->b8 = 0xff;
+    m->b9 = 0x0e; /* Parameter subtype reference */
+    m->b10 = 0x00;
+    m->b11 = 0x1c; /* Envelope subtype reference */
+    m->b12 = 0x00;
+    m->b13 = 0x00;
+    m->b14 = 0x00;
+  }
   T500RS_DBG("Sending Report 0x01 (duration/control)...\n");
-  ret = t500rs_send_usb(t500rs, buf, 15);
+  ret = t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r01_main));
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x01: %d\n", ret);
     return ret;
@@ -246,11 +329,7 @@ static int t500rs_upload_constant(struct t500rs_device_entry *t500rs,
    */
   {
     s8 signed_level;
-    s32 scaled;
-
-    /* Simple linear scaling from -32767..32767 to -127..127 */
-    scaled = (level * 127) / 32767;
-    signed_level = (s8)scaled;
+    signed_level = t500rs_scale_const_level_s8(level);
 
     T500RS_DBG("Upload constant: id=%d, level=%d -> %d (0x%02x)\n", effect->id,
                level, signed_level, (u8)signed_level);
@@ -273,19 +352,19 @@ static int t500rs_upload_condition(struct t500rs_device_entry *t500rs,
   switch (effect->type) {
   case FF_SPRING:
     effect_type = 0x40;
-    effect_gain = t500rs->spring_gain;
+    effect_gain = spring_level;
     break;
   case FF_DAMPER:
     effect_type = 0x41;
-    effect_gain = t500rs->damper_gain;
+    effect_gain = damper_level;
     break;
   case FF_FRICTION:
     effect_type = 0x41;
-    effect_gain = t500rs->friction_gain;
+    effect_gain = friction_level;
     break;
   case FF_INERTIA:
     effect_type = 0x41;
-    effect_gain = t500rs->inertia_gain;
+    effect_gain = 100;
     break;
   default:
     return -EINVAL;
@@ -342,24 +421,29 @@ static int t500rs_upload_condition(struct t500rs_device_entry *t500rs,
   if (ret)
     return ret;
 
+  /* NOTE: On T500RS, Report 0x01 MUST use EffectID=0x00; enforce it here. */
+
   /* Report 0x01 - Main effect upload */
-  memset(buf, 0, 15);
-  buf[0] = 0x01;
-  buf[1] = effect->id;
-  buf[2] = effect_type;
-  buf[3] = 0x40;
-  buf[4] = 0x17;
-  buf[5] = 0x25;
-  buf[6] = 0x00;
-  buf[7] = 0xff;
-  buf[8] = 0xff;
-  buf[9] = 0x0e;
-  buf[10] = 0x00;
-  buf[11] = 0x1c;
-  buf[12] = 0x00;
-  buf[13] = 0x00;
-  buf[14] = 0x00;
-  ret = t500rs_send_usb(t500rs, buf, 15);
+  {
+    struct t500rs_r01_main *m = (struct t500rs_r01_main *)buf;
+    memset(m, 0, sizeof(*m));
+    m->id = 0x01;
+    m->effect_id = 0x00;
+    m->type = effect_type;
+    m->b3 = 0x40;
+    m->b4 = 0x17;
+    m->b5 = 0x25;
+    m->b6 = 0x00;
+    m->b7 = 0xff;
+    m->b8 = 0xff;
+    m->b9 = 0x0e;
+    m->b10 = 0x00;
+    m->b11 = 0x1c;
+    m->b12 = 0x00;
+    m->b13 = 0x00;
+    m->b14 = 0x00;
+  }
+  ret = t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r01_main));
   if (ret)
     return ret;
 
@@ -409,8 +493,8 @@ static int t500rs_upload_periodic(struct t500rs_device_entry *t500rs,
     return -EINVAL;
   }
 
-  /* Magnitude - scale to 0-127 */
-  mag = (abs(magnitude) * 127) / 32767;
+  /* Magnitude - scale to 0-127 with saturation */
+  mag = t500rs_scale_mag_u7(magnitude);
 
   /* Period (frequency) - default to 100ms = 10 Hz if not set */
   if (period == 0) {
@@ -421,34 +505,36 @@ static int t500rs_upload_periodic(struct t500rs_device_entry *t500rs,
              type_name, effect->id, magnitude, mag, period);
 
   /* Report 0x02 - Envelope */
-  memset(buf, 0, 15);
-  buf[0] = 0x02;
-  buf[1] = 0x1c;
-  buf[2] = 0x00;
+  t500rs_fill_envelope_u02(buf, &effect->u.periodic.envelope);
   ret = t500rs_send_usb(t500rs, buf, 9);
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x02: %d\n", ret);
     return ret;
   }
 
+  /* NOTE: Device requires EffectID=0 for 0x01 uploads; see ID semantics above. */
+
   /* Report 0x01 - Main effect upload for periodic (set waveform/type) */
-  memset(buf, 0, 15);
-  buf[0] = 0x01;
-  buf[1] = 0x00;        /* Effect ID 0 */
-  buf[2] = effect_type; /* Waveform type (0x20..0x24) */
-  buf[3] = 0x40;
-  buf[4] = 0xff;
-  buf[5] = 0xff;
-  buf[6] = 0x00;
-  buf[7] = 0xff;
-  buf[8] = 0xff;
-  buf[9] = 0x0e; /* Parameter subtype reference */
-  buf[10] = 0x00;
-  buf[11] = 0x1c; /* Envelope subtype reference */
-  buf[12] = 0x00;
-  buf[13] = 0x00;
-  buf[14] = 0x00;
-  ret = t500rs_send_usb(t500rs, buf, 15);
+  {
+    struct t500rs_r01_main *m = (struct t500rs_r01_main *)buf;
+    memset(m, 0, sizeof(*m));
+    m->id = 0x01;
+    m->effect_id = 0x00;        /* Effect ID 0 required for T500RS 0x01 reports */
+    m->type = effect_type; /* Waveform type (0x20..0x24) */
+    m->b3 = 0x40;
+    m->b4 = 0xff;
+    m->b5 = 0xff;
+    m->b6 = 0x00;
+    m->b7 = 0xff;
+    m->b8 = 0xff;
+    m->b9 = 0x0e; /* Parameter subtype reference */
+    m->b10 = 0x00;
+    m->b11 = 0x1c; /* Envelope subtype reference */
+    m->b12 = 0x00;
+    m->b13 = 0x00;
+    m->b14 = 0x00;
+  }
+  ret = t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r01_main));
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x01 (periodic main): %d\n",
             ret);
@@ -456,39 +542,46 @@ static int t500rs_upload_periodic(struct t500rs_device_entry *t500rs,
   }
 
   /* Report 0x04 - Periodic parameters */
-  memset(buf, 0, 15);
-  buf[0] = 0x04;
-  buf[1] = 0x0e;
-  buf[2] = 0x00;
-  buf[3] = mag;                  /* Magnitude */
-  buf[4] = 0x00;                 /* Offset */
-  buf[5] = 0x00;                 /* Phase */
-  buf[6] = period & 0xff;        /* Period low byte */
-  buf[7] = (period >> 8) & 0xff; /* Period high byte */
-  ret = t500rs_send_usb(t500rs, buf, 8);
+  {
+    struct t500rs_r04_periodic *p = (struct t500rs_r04_periodic *)buf;
+    memset(p, 0, sizeof(*p));
+    p->id = 0x04;
+    p->code = 0x0e;
+    p->zero = 0x00;
+    p->magnitude = mag;
+    p->offset = 0x00;
+    p->phase = 0x00;
+    p->period = cpu_to_le16(period);
+  }
+  ret = t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r04_periodic));
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x04: %d\n", ret);
     return ret;
   }
 
+  /* NOTE: On T500RS, all 0x01 uploads MUST use EffectID=0x00; enforce consistently. */
+
   /* Report 0x01 - Main effect upload */
-  memset(buf, 0, 15);
-  buf[0] = 0x01;
-  buf[1] = effect->id;
-  buf[2] = effect_type; /* Waveform type */
-  buf[3] = 0x40;
-  buf[4] = 0x17;
-  buf[5] = 0x25;
-  buf[6] = 0x00;
-  buf[7] = 0xff;
-  buf[8] = 0xff;
-  buf[9] = 0x0e;
-  buf[10] = 0x00;
-  buf[11] = 0x1c;
-  buf[12] = 0x00;
-  buf[13] = 0x00;
-  buf[14] = 0x00;
-  ret = t500rs_send_usb(t500rs, buf, 15);
+  {
+    struct t500rs_r01_main *m = (struct t500rs_r01_main *)buf;
+    memset(m, 0, sizeof(*m));
+    m->id = 0x01;
+    m->effect_id = 0x00;
+    m->type = effect_type; /* Waveform type */
+    m->b3 = 0x40;
+    m->b4 = 0x17;
+    m->b5 = 0x25;
+    m->b6 = 0x00;
+    m->b7 = 0xff;
+    m->b8 = 0xff;
+    m->b9 = 0x0e;
+    m->b10 = 0x00;
+    m->b11 = 0x1c;
+    m->b12 = 0x00;
+    m->b13 = 0x00;
+    m->b14 = 0x00;
+  }
+  ret = t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r01_main));
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x01: %d\n", ret);
     return ret;
@@ -516,10 +609,7 @@ static int t500rs_upload_ramp(struct t500rs_device_entry *t500rs,
              effect->id, start_level, end_level, duration_ms);
 
   /* Report 0x02 - Envelope */
-  memset(buf, 0, 15);
-  buf[0] = 0x02;
-  buf[1] = 0x1c;
-  buf[2] = 0x00;
+  t500rs_fill_envelope_u02(buf, &effect->u.ramp.envelope);
   ret = t500rs_send_usb(t500rs, buf, 9);
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x02: %d\n", ret);
@@ -528,40 +618,45 @@ static int t500rs_upload_ramp(struct t500rs_device_entry *t500rs,
 
   /* Report 0x04 - Ramp parameters */
   /* NOTE: T500RS doesn't support native ramp - just holds start level */
-  memset(buf, 0, 15);
-  buf[0] = 0x04;
-  buf[1] = 0x0e;
-  buf[2] = start_scaled & 0xff;        /* Start level low byte */
-  buf[3] = (start_scaled >> 8) & 0xff; /* Start level high byte */
-  buf[4] = start_scaled & 0xff;        /* Current level (same as start) */
-  buf[5] = (start_scaled >> 8) & 0xff; /* Current level high byte */
-  buf[6] = duration_ms & 0xff;         /* Duration low byte */
-  buf[7] = (duration_ms >> 8) & 0xff;  /* Duration high byte */
-  buf[8] = 0x00;
-  ret = t500rs_send_usb(t500rs, buf, 9);
+  {
+    struct t500rs_r04_ramp *rr = (struct t500rs_r04_ramp *)buf;
+    memset(rr, 0, sizeof(*rr));
+    rr->id = 0x04;
+    rr->code = 0x0e;
+    rr->start = cpu_to_le16(start_scaled);
+    rr->cur_val = cpu_to_le16(start_scaled);
+    rr->duration = cpu_to_le16(duration_ms);
+    rr->zero = 0x00;
+  }
+  ret = t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r04_ramp));
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x04: %d\n", ret);
     return ret;
   }
 
+  /* NOTE: On T500RS, Report 0x01 MUST use EffectID=0x00; enforce it here. */
+
   /* Report 0x01 - Main effect upload */
-  memset(buf, 0, 15);
-  buf[0] = 0x01;
-  buf[1] = effect->id;
-  buf[2] = 0x24; /* Ramp type (0x24 = sawtooth down / ramp) */
-  buf[3] = 0x40;
-  buf[4] = duration_ms & 0xff;        /* Duration low byte */
-  buf[5] = (duration_ms >> 8) & 0xff; /* Duration high byte */
-  buf[6] = 0x00;
-  buf[7] = 0xff;
-  buf[8] = 0xff;
-  buf[9] = 0x0e;
-  buf[10] = 0x00;
-  buf[11] = 0x1c;
-  buf[12] = 0x00;
-  buf[13] = 0x00;
-  buf[14] = 0x00;
-  ret = t500rs_send_usb(t500rs, buf, 15);
+  {
+    struct t500rs_r01_main *m = (struct t500rs_r01_main *)buf;
+    memset(m, 0, sizeof(*m));
+    m->id = 0x01;
+    m->effect_id = 0x00;
+    m->type = 0x24; /* Ramp type (0x24 = sawtooth down / ramp) */
+    m->b3 = 0x40;
+    m->b4 = duration_ms & 0xff;        /* Duration low byte */
+    m->b5 = (duration_ms >> 8) & 0xff; /* Duration high byte */
+    m->b6 = 0x00;
+    m->b7 = 0xff;
+    m->b8 = 0xff;
+    m->b9 = 0x0e;
+    m->b10 = 0x00;
+    m->b11 = 0x1c;
+    m->b12 = 0x00;
+    m->b13 = 0x00;
+    m->b14 = 0x00;
+  }
+  ret = t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r01_main));
   if (ret) {
     hid_err(t500rs->hdev, "Failed to send Report 0x01: %d\n", ret);
     return ret;
@@ -615,44 +710,49 @@ static int t500rs_play_effect(void *data,
   if (effect->type == FF_CONSTANT) {
     int level = effect->u.constant.level;
     s8 signed_level;
-    s32 scaled;
-
-    /* Simple linear scaling from -32767..32767 to -127..127 */
-    scaled = (level * 127) / 32767;
-    signed_level = (s8)scaled;
+    signed_level = t500rs_scale_const_level_s8(level);
 
     T500RS_DBG("Constant force: level=%d -> %d (0x%02x)\n", level, signed_level,
                (u8)signed_level);
 
     /* Send Report 0x03 (force level) */
-    buf[0] = 0x03;
-    buf[1] = 0x0e;
-    buf[2] = 0x00;
-    buf[3] = (u8)signed_level;
-    ret = t500rs_send_usb(t500rs, buf, 4);
+    {
+      struct t500rs_r03_const *r3 = (struct t500rs_r03_const *)buf;
+      r3->id = 0x03;
+      r3->code = 0x0e;
+      r3->zero = 0x00;
+      r3->level = signed_level;
+      ret = t500rs_send_usb(t500rs, (u8 *)r3, sizeof(*r3));
+    }
     if (ret) {
       hid_err(t500rs->hdev, "Failed to send Report 0x03: %d\n", ret);
       return ret;
     }
 
     /* Send Report 0x41 START */
-    buf[0] = 0x41;
-    buf[1] = 0x00; /* Effect ID 0 */
-    buf[2] = 0x41; /* START */
-    buf[3] = 0x01;
-    return t500rs_send_usb(t500rs, buf, 4);
+    {
+      struct t500rs_r41_cmd *r41 = (struct t500rs_r41_cmd *)buf;
+      r41->id = 0x41;
+      r41->effect_id = 0x00;
+      r41->command = 0x41;
+      r41->arg = 0x01;
+    }
+    return t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r41_cmd));
   }
 
   /* For other effect types, send start command - Report 0x41
    * T500RS expects EffectID=0 for 0x41 commands as well.
    */
-  buf[0] = 0x41;
-  buf[1] = 0x00; /* Effect ID 0 to match device expectations */
-  buf[2] = 0x41; /* START command */
-  buf[3] = 0x01;
+  {
+    struct t500rs_r41_cmd *r41 = (struct t500rs_r41_cmd *)buf;
+    r41->id = 0x41;
+    r41->effect_id = 0x00;
+    r41->command = 0x41;
+    r41->arg = 0x01;
+  }
 
   T500RS_DBG("Sending START command (EffectID=0) for effect %d\n", effect->id);
-  return t500rs_send_usb(t500rs, buf, 4);
+  return t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r41_cmd));
 }
 
 /* Stop effect */
@@ -678,22 +778,28 @@ static int t500rs_stop_effect(void *data,
 
   /* For constant force: Windows-style STOP (0x41 00 00 01) */
   if (state->effect.type == FF_CONSTANT) {
-    buf[0] = 0x41;
-    buf[1] = 0x00;
-    buf[2] = 0x00; /* STOP */
-    buf[3] = 0x01;
-    return t500rs_send_usb(t500rs, buf, 4);
+    {
+      struct t500rs_r41_cmd *r41 = (struct t500rs_r41_cmd *)buf;
+      r41->id = 0x41;
+      r41->effect_id = 0x00;
+      r41->command = 0x00;
+      r41->arg = 0x01;
+    }
+    return t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r41_cmd));
   }
 
   /* For other effect types, send stop command - Report 0x41
    * Use EffectID=0 to match device expectations for 0x41.
    */
-  buf[0] = 0x41;
-  buf[1] = 0x00; /* Effect ID 0 */
-  buf[2] = 0x00; /* STOP command */
-  buf[3] = 0x01;
+  {
+    struct t500rs_r41_cmd *r41 = (struct t500rs_r41_cmd *)buf;
+    r41->id = 0x41;
+    r41->effect_id = 0x00;
+    r41->command = 0x00;
+    r41->arg = 0x01;
+  }
 
-  ret = t500rs_send_usb(t500rs, buf, 4);
+  ret = t500rs_send_usb(t500rs, buf, sizeof(struct t500rs_r41_cmd));
   T500RS_DBG("Stop effect (non-constant) returned: %d\n", ret);
   return ret;
 }
@@ -715,21 +821,22 @@ static int t500rs_update_effect(void *data,
   if (effect->type == FF_CONSTANT) {
     int level = effect->u.constant.level;
     s8 signed_level;
-    s32 scaled;
     u8 *buf3;
 
     buf3 = t500rs->send_buffer;
     if (!buf3)
       return -ENOMEM;
 
-    scaled = (level * 127) / 32767;
-    signed_level = (s8)scaled;
+    signed_level = t500rs_scale_const_level_s8(level);
 
-    buf3[0] = 0x03;
-    buf3[1] = 0x0e;
-    buf3[2] = 0x00;
-    buf3[3] = (u8)signed_level;
-    return t500rs_send_usb(t500rs, buf3, 4);
+    {
+      struct t500rs_r03_const *r3 = (struct t500rs_r03_const *)buf3;
+      r3->id = 0x03;
+      r3->code = 0x0e;
+      r3->zero = 0x00;
+      r3->level = signed_level;
+    }
+    return t500rs_send_usb(t500rs, buf3, sizeof(struct t500rs_r03_const));
   }
 
   return 0;
@@ -891,68 +998,6 @@ static int t500rs_set_range(void *data, u16 range) {
   return 0;
 }
 
-/* Set spring level (0-100) - called from sysfs */
-static int t500rs_set_spring_level(void *data, u8 level) {
-  struct t500rs_device_entry *t500rs = data;
-
-  if (!t500rs)
-    return -ENODEV;
-
-  /* Clamp to valid range */
-  if (level > 100)
-    level = 100;
-
-  /* Update the spring gain setting */
-  t500rs->spring_gain = level;
-
-  T500RS_DBG("Spring level set to %u%%\n", level);
-
-  /* Note: The new level will be applied when the next spring effect is
-   * uploaded/updated */
-  return 0;
-}
-
-/* Set damper level (0-100) - called from sysfs */
-static int t500rs_set_damper_level(void *data, u8 level) {
-  struct t500rs_device_entry *t500rs = data;
-
-  if (!t500rs)
-    return -ENODEV;
-
-  /* Clamp to valid range */
-  if (level > 100)
-    level = 100;
-
-  /* Update the damper gain setting */
-  t500rs->damper_gain = level;
-
-  T500RS_DBG("Damper level set to %u%%\n", level);
-
-  /* Note: The new level will be applied when the next damper effect is
-   * uploaded/updated */
-  return 0;
-}
-
-/* Set friction level (0-100) - called from sysfs */
-static int t500rs_set_friction_level(void *data, u8 level) {
-  struct t500rs_device_entry *t500rs = data;
-
-  if (!t500rs)
-    return -ENODEV;
-
-  /* Clamp to valid range */
-  if (level > 100)
-    level = 100;
-
-  /* Update the friction gain setting */
-  t500rs->friction_gain = level;
-
-  T500RS_DBG("Friction level set to %u%%\n", level);
-
-  /* Note: The new level will be applied when the next friction effect is
-   * uploaded/updated */
-  return 0;
-}
 
 /* Initialize T500RS device */
 static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
@@ -969,7 +1014,6 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   }
 
   hid_dbg(tmff2->hdev, "T500RS: Initializing USB INTERRUPT mode\n");
-  hid_info(tmff2->hdev, "T500RS driver version %s\n", T500RS_DRIVER_VERSION);
 
   /* Allocate device data */
   t500rs = kzalloc(sizeof(*t500rs), GFP_KERNEL);
@@ -1021,12 +1065,6 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
     ret = -ENOMEM;
     goto err_buffer;
   }
-
-  /* Initialize per-effect levels to 100% (0-100 range) */
-  t500rs->spring_gain = 100;
-  t500rs->damper_gain = 100;
-  t500rs->friction_gain = 100;
-  t500rs->inertia_gain = 100;
 
   /* Initialize current range to default (900°) for smooth transitions */
   t500rs->current_range = 900;
@@ -1124,12 +1162,14 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   }
 
   /* Report 0x41 - Clear effects (4 bytes) */
-  memset(init_buf, 0, 4);
-  init_buf[0] = 0x41;
-  init_buf[1] = 0x00;
-  init_buf[2] = 0x00;
-  init_buf[3] = 0x00;
-  ret = t500rs_send_usb(t500rs, init_buf, 4);
+  {
+    struct t500rs_r41_cmd *r41 = (struct t500rs_r41_cmd *)init_buf;
+    r41->id = 0x41;
+    r41->effect_id = 0x00;
+    r41->command = 0x00; /* CLEAR */
+    r41->arg = 0x00;
+  }
+  ret = t500rs_send_usb(t500rs, init_buf, sizeof(struct t500rs_r41_cmd));
   if (ret) {
     hid_warn(t500rs->hdev, "Init command 9 (0x41 clear) failed: %d\n", ret);
   }
@@ -1186,12 +1226,14 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   }
 
   /* Stop autocenter effect (effect ID 15) */
-  memset(init_buf, 0, 4);
-  init_buf[0] = 0x41;
-  init_buf[1] = 15;   /* Autocenter effect ID */
-  init_buf[2] = 0x00; /* STOP */
-  init_buf[3] = 0x01;
-  ret = t500rs_send_usb(t500rs, init_buf, 4);
+  {
+    struct t500rs_r41_cmd *r41 = (struct t500rs_r41_cmd *)init_buf;
+    r41->id = 0x41;
+    r41->effect_id = 15;   /* Autocenter effect ID */
+    r41->command = 0x00;   /* STOP */
+    r41->arg = 0x01;
+  }
+  ret = t500rs_send_usb(t500rs, init_buf, sizeof(struct t500rs_r41_cmd));
   if (ret) {
     hid_warn(t500rs->hdev, "Stop autocenter effect failed: %d\n", ret);
   } else {
@@ -1241,9 +1283,6 @@ int t500rs_populate_api(struct tmff2_device_entry *tmff2) {
   tmff2->set_gain = t500rs_set_gain;
   tmff2->set_autocenter = t500rs_set_autocenter;
   tmff2->set_range = t500rs_set_range;
-  tmff2->set_spring_level = t500rs_set_spring_level;
-  tmff2->set_damper_level = t500rs_set_damper_level;
-  tmff2->set_friction_level = t500rs_set_friction_level;
 
   tmff2->wheel_init = t500rs_wheel_init;
   tmff2->wheel_destroy = t500rs_wheel_destroy;

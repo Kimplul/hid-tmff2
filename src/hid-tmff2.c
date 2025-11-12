@@ -5,8 +5,6 @@
 #include <linux/version.h>
 #include "hid-tmff2.h"
 
-/* Share t500rs_log_level across compilation units (level 3 = unknown-only) */
-extern int t500rs_log_level;
 
 /* Known vendor/opcode IDs managed by the driver (TX side) */
 static inline int tmff2_is_known_vendor_id(unsigned char id)
@@ -376,14 +374,25 @@ static void tmff2_work_handler(struct work_struct *w)
 
 		effect_delay = state->effect.replay.delay;
 		effect_length = state->effect.replay.length;
+		/* If playing with a finite length, stop when (delay + length) elapses */
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && effect_length) {
-			if ((time_now - state->start_time) >=
+			if ((time_now - state->start_time) >= 
 					(effect_delay + effect_length) * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
-
+				/* Request a STOP in process context */
+				__set_bit(FF_EFFECT_QUEUE_STOP, &actions);
 				state->count = 0;
 			}
+		}
+		/* Delay handling for start: only trigger START after replay.delay */
+		if (test_bit(FF_EFFECT_QUEUE_START, &state->flags)) {
+			if ((time_now - state->start_time) >= effect_delay) {
+				__set_bit(FF_EFFECT_QUEUE_START, &actions);
+				__clear_bit(FF_EFFECT_QUEUE_START, &state->flags);
+				/* effect is playing since we're starting it now */
+				__set_bit(FF_EFFECT_PLAYING, &state->flags);
+			} /* else: keep START pending until delay elapsed */
 		}
 
 		if (test_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags)) {
@@ -809,7 +818,6 @@ oom_err:
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 static __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
-
 		unsigned int *rsize)
 #else
 static const __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
@@ -881,35 +889,6 @@ static const struct hid_device_id tmff2_devices[] = {
 
 	{}
 };
-MODULE_DEVICE_TABLE(hid, tmff2_devices);
-static int tmff2_raw_event(struct hid_device *hdev, struct hid_report *report,
-				 __u8 *data, int size)
-{
-	/* At level 3: ignore normal input reports (axes/buttons) and idless reports;
-	 * only dump vendor/feature-like unknowns. */
-	if (t500rs_log_level >= 3 && report && data && size > 0) {
-		/* Skip input traffic entirely (these are the steering updates you saw). */
-		if (report->type == HID_INPUT_REPORT)
-			return 0;
-
-		/* Use the real Report ID, not data[0] (id==0 means no Report ID). */
-		if (report->id == 0)
-			return 0;
-
-		if (!tmff2_is_known_vendor_id((unsigned char)report->id)) {
-			char hex[3 * 64 + 4];
-			int i, off = 0, max = size > 64 ? 64 : size;
-			for (i = 0; i < max && off + 3 < sizeof(hex); i++)
-				off += scnprintf(hex + off, sizeof(hex) - off, "%02x ", data[i]);
-			if (size > max)
-				scnprintf(hex + off, sizeof(hex) - off, "...");
-			hid_info(hdev, "HID RX UNKNOWN [type=%d id=0x%02x len=%d]: %s\n",
-				report->type, report->id, size, hex);
-		}
-	}
-	return 0; /* always pass through */
-}
-
 
 static struct hid_driver tmff2_driver = {
 	.name = "tmff2",
@@ -917,8 +896,13 @@ static struct hid_driver tmff2_driver = {
 	.probe = tmff2_probe,
 	.remove = tmff2_remove,
 	.report_fixup = tmff2_report_fixup,
-	.raw_event = tmff2_raw_event,
 };
 module_hid_driver(tmff2_driver);
+
+
+#ifndef TMFF2_DRIVER_VERSION
+#define TMFF2_DRIVER_VERSION "dev"
+#endif
+MODULE_VERSION(TMFF2_DRIVER_VERSION);
 
 MODULE_LICENSE("GPL");

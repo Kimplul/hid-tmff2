@@ -98,9 +98,6 @@ struct tmff2_device_entry {
 	ssize_t (*alt_mode_show)(void *data, char *buf);
 	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
-		int (*set_spring_level)(void *data, u8 level);
-		int (*set_damper_level)(void *data, u8 level);
-		int (*set_friction_level)(void *data, u8 level);
 
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
 
@@ -119,7 +116,6 @@ int tsxw_populate_api(struct tmff2_device_entry *tmff2);
 #define TMT300RS_PS3_ADV_ID	0xb66f
 #define TMT300RS_PS4_NORM_ID	0xb66d
 
-#define TMT500RS_INIT_ID	0xb65d
 #define TMT500RS_PC_ID		0xb65e
 
 #define TMT248_PC_ID		0xb696
