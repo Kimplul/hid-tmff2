@@ -1302,7 +1302,7 @@ int t300rs_open(void *data, int open_mode)
 int t300rs_close(void *data, int open_mode)
 {
 	struct t300rs_device_entry *t300rs = data;
-	int ret;
+	int ret = 0;
 
 	if (!t300rs)
 		return -ENODEV;
