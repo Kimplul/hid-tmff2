@@ -25,7 +25,7 @@ This is the result of the deep analysis of captures made using ffbsdl tool on wi
 
 ## Subtype System and Effect Indexing
 
-On this wheel the last six bytes of the 0x01 main upload (bytes 9–14) do **not** contain envelope timings/levels directly. Instead they carry two 16‑bit "subtype" values that act as per‑effect indices:
+On this wheel the last six bytes of the 0x01 main upload (bytes 9–14) do **not** contain envelope timings/levels directly compared to the T300RS. Instead they carry two 16‑bit "subtype" values that act as per‑effect indices:
 
 - Bytes 9–10  → `parameter_subtype`
 - Bytes 11–12 → `envelope_subtype`
@@ -357,12 +357,12 @@ Offset | Size | Field          | Description
 
 | Scenario | Description | Effect IDs Used | Packet Sequence |
 |----------|-------------|-----------------|-----------------|
-| **Constant → Sine** | Constant 1500ms, then Sine 1500ms | 0x0000, then 0x0021 | Effect 1 (ID=0x00): Upload→Envelope→Constant→START→[wait]→STOP<br>Effect 2 (ID=0x21): Upload→Envelope→Periodic→START→[wait]→STOP |
-| **Sine → Triangle** | Sine 3000ms, then Triangle 3000ms | 0x0000, then 0x0022 | Effect 1 (ID=0x00): Upload→Envelope→Periodic→START→[wait]→STOP<br>Effect 2 (ID=0x22): Upload→Envelope→Periodic→START→[wait]→STOP |
+| **Constant → Sine** | Constant 1500ms, then Sine 1500ms | 0x00, then 0x01 | Effect 1 (ID=0x00): Upload→Envelope→Constant→START→[wait]→STOP<br>Effect 2 (ID=0x01): Upload→Envelope→Periodic→START→[wait]→STOP |
+| **Sine → Triangle** | Sine 3000ms, then Triangle 3000ms | 0x00, then 0x01 | Effect 1 (ID=0x00): Upload→Envelope→Periodic→START→[wait]→STOP<br>Effect 2 (ID=0x01): Upload→Envelope→Periodic→START→[wait]→STOP |
 
 **Sequential Effect Notes:**
 - Each effect gets full upload sequence with unique effect ID
-- Windows driver uses non-sequential IDs: 0x00, 0x21, 0x22, 0x40, 0x41
+- Effect IDs are hardware slot numbers in the range 0-15 (0x00-0x0F)
 - Previous effect must be stopped before starting next
 - Gap between effects depends on timing in test
 
@@ -370,15 +370,14 @@ Offset | Size | Field          | Description
 
 | Scenario | Description | Effect IDs Used | Packet Sequence |
 |----------|-------------|-----------------|-----------------|
-| **Sine + Triangle Overlap** | Sine starts, Triangle joins after 1s, both run for 2s | 0x0040, 0x0041 | Effect 1 (ID=0x40): Upload→Envelope→Periodic→START<br>[wait 1s]<br>Effect 2 (ID=0x41): Upload→Envelope→Periodic→START<br>[wait 2s]<br>Effect 1 (ID=0x40): STOP<br>Effect 2 (ID=0x41): STOP |
+| **Sine + Triangle Overlap** | Sine starts, Triangle joins after 1s, both run for 2s | 0x00, 0x01 | Effect 1 (ID=0x00): Upload→Envelope→Periodic→START<br>[wait 1s]<br>Effect 2 (ID=0x01): Upload→Envelope→Periodic→START<br>[wait 2s]<br>Effect 1 (ID=0x00): STOP<br>Effect 2 (ID=0x01): STOP |
 
 **Overlapping Effect Notes:**
 - T500RS supports up to 16 simultaneous effects (hardware capability)
-- Windows driver assigns unique effect IDs to each concurrent effect
+- Effect IDs are hardware slot numbers (0x00-0x0F, i.e., 0-15)
 - Effects are uploaded and started independently with different IDs
 - Device mixes/sums the forces internally
-- Effect IDs observed: 0x0000, 0x0021, 0x0022, 0x0040, 0x0041 (non-sequential pattern)
-- Driver can use simple sequential assignment (0x00, 0x01, 0x02, etc.) instead
+- Driver uses sequential assignment (0x00, 0x01, 0x02, etc.) for simplicity
 
 #### Rapid Sequential Effects
 
@@ -471,193 +470,3 @@ Offset | Size | Field          | Description
   - SDL 16000 → Device 12
   - SDL 24000 → Device 18
   - SDL 32767 → Device 255
-
----
-
-## Important implementation facts
-
-### 1. Packet Code Discrepancy - 
-**FIXED:** Driver updated to use correct packet codes (0x2a instead of 0x0e) for periodic/conditional effects.
-
-**Original Issue:** Windows captures consistently show code **0x2a** in 0x04 periodic packets and 0x05 conditional packets, but the original driver used **0x0e**.
-
-**Resolution Applied:**
-- ✅ Updated `struct t500rs_pkt_r04_periodic_ramp` to use variable code from 0x01 packet
-- ✅ Implemented `struct t500rs_pkt_r05_condition` with two packets (codes 0x2a and 0x38)
-- ✅ Updated 0x01 packet bytes 9-10 to use 0x002a for periodic/conditional effects
-- ✅ Updated 0x01 packet bytes 11-12 to use 0x0038 for conditional effects
-- ✅ All packet codes dynamically determined from 0x01 packet bytes 9-12
-
-### 2. Period Encoding
-**IMPORTANT:** Keep period in **milliseconds**, do NOT convert to Hz×100!
-- Windows captures confirm: period values match milliseconds directly
-
-### 3. Effect ID and Slot Management - 
-**IMPLEMENTED:** Driver uses unique hardware IDs for concurrent effects to prevent slot collision.
-
-**Hardware Capability:** T500RS supports up to 16 simultaneous effects with internal mixing.
-- **Single Effect:** Windows driver uses effect_id = 0x0000 for isolated testing
-- **Multi-Effect:** Driver assigns unique effect IDs for concurrent effects (0-15 range)
-- **Hardware Behavior:** Device maintains 16 effect slots internally with automatic force mixing
-
-**Driver Implementation Applied:**
-- ✅ Hardware ID allocation system (0-15) prevents slot collision
-- ✅ Unique effect_ids assigned to concurrent effects
-- ✅ START/STOP commands use matching effect_id from 0x01 packet
-- ✅ Spinlock protection for thread-safe hardware ID operations
-
-**Resolution Details:**
-- Constant effects: effect_id = hw_id (0-15) with subtypes 0x0e/0x1c
-- Conditional effects: effect_id = hw_id (0-15) with subtypes 0x2a/0x38
-- Periodic effects: effect_id = hw_id (0-15) with subtypes 0x2a/0x38
-- Hardware ID bitmap tracks occupied slots to prevent overwrites
-
-### 4. Envelope Flag
-- 0x01 packet byte 11-12: 0x001c when envelope is present
-- 0x0000 when no envelope
-- Envelope packet (0x02) should always be sent, even if all zeros
-
-### 5. Telemetry Packets (0x07)
-- High frequency position feedback from device
-- 15 bytes: `07 [pos_lo] [pos_hi] 03 ff 03 ff 03 00 00 00 00 00 0f`
-- Position appears to be 16-bit value in bytes 1-2
-- Not required for effect upload, but useful for force feedback tuning
-
-### 6. Polling Packets (0x49)
-- Device sends these frequently during operation
-- Two formats seen:
-  - Short: `49 00 00 00 00 10 00` (7 bytes)
-  - Long: `49 00 00 00 01 00 02 00 03 00 00 00 02 02 00 00` (16 bytes)
-- Appear to be status/heartbeat packets
-- Driver should handle/ignore these gracefully
-
-### 7. Wine Compatibility Considerations
-- **Autocenter Hack:** Some games under Wine (e.g., Live for Speed) set autocenter to 100% permanently, which overpowers other force feedback effects and forces centered wheel all the time the game is started. The Linux driver includes a compatibility hack that ignores 100% autocenter requests while allowing 0-99% values to work normally.
-- **Effect Behavior:** Wine applications may exhibit different force feedback behavior due to DirectInput vs SDL2 differences, but the underlying USB protocol remains the same.
-
----
-
-## Driver Implementation Sequence
-
-### For Constant Force Effect:
-1. Build 0x01 packet (direction, duration, effect_code=0x0e, envelope_flag=0x1c)
-2. Build 0x02 packet (attack/fade parameters, scaled to 0-255)
-3. Build 0x03 packet (force level, scaled to -127..+127)
-4. Send packets in order: 0x01 → 0x02 → 0x03
-5. Build 0x41 packet (START command)
-6. Send 0x41 packet
-7. [Effect runs]
-8. Build 0x41 packet (STOP command, byte 2 = 0x00)
-9. Send 0x41 packet
-
-### For Periodic Effect (Sine/Triangle/Sawtooth):
-1. Build 0x01 packet (direction, duration, effect_code=0x0e, envelope_flag=0x1c)
-2. Build 0x02 packet (attack/fade parameters, scaled to 0-255)
-3. Build 0x04 packet (magnitude, offset, phase, period - **use code 0x2a!**)
-4. Send packets in order: 0x01 → 0x02 → 0x04
-5. Build 0x41 packet (START command)
-6. Send 0x41 packet
-7. [Effect runs]
-8. Build 0x41 packet (STOP command, byte 2 = 0x00)
-9. Send 0x41 packet
-
-### For Ramp Effect:
-1. Same as periodic effect (uses 0x04 packet)
-2. Encode start/end levels in magnitude/offset fields
-3. Period field may control ramp rate
-
----
-
-## Protocol Analysis Summary
-
-### Confirmed Protocol Features
-
-1. **Variable Packet Codes:**
-   - Bytes 9-12 of 0x01 packet specify codes for subsequent packets
-   - NOT fixed values - varies between captures (0x2a/0x38, 0xb6/0xc4, 0x46/0x54, etc.)
-   - Driver must use the codes specified in the 0x01 packet
-
-2. **Conditional Effect Structure:**
-   - TWO 0x05 packets required per conditional effect
-   - First packet uses code from bytes 9-10 of 0x01 (X-axis parameters)
-   - Second packet uses code from bytes 11-12 of 0x01 (Y-axis parameters)
-   - **⚠️ CRITICAL:** Both packets must have ZERO coefficients/deadband/center - only saturation is set
-   - Sending non-zero coefficients causes EPROTO errors and device rejection
-
-3. **Effect Slot Management:**
-   - Hardware supports 16 concurrent effect slots
-   - Windows driver uses non-sequential IDs: 0x0000, 0x0040, 0x0041, 0x0021, 0x0022
-   - Effect IDs observed in range 0x00-0xff
-   - Device handles internal mixing of concurrent effects
-
-4. **Period Encoding:**
-   - Period is in MILLISECONDS (not Hz×100)
-   - No conversion needed - pass through directly
-
-5. **Gain Handling:**
-   - In-game gain (SDL2/DirectInput) is applied BEFORE sending to driver
-   - USB packets contain already-scaled values
-   - Device gain (sysfs) is separate and applied by hardware
-   - No gain parameter in USB protocol
-
-6. **Square Wave:**
-   - NOT SUPPORTED by T500RS hardware (as per captures)
-   - No 0x04 packets generated for square wave effect type
-   - SDL2 square wave requests produce no USB traffic
-
-### 📊 Parameter Scaling (Confirmed from captures)
-
-**Constant Force:**
-- SDL2 level (0-65535) → Device level (-127 to +127)
-- Formula: `device_level = (sdl_level * 255 / 65535) - 127`
-
-**Periodic Effects:**
-- Magnitude (0-32767) → Device magnitude (0-127)
-- Formula: `device_mag = sdl_mag * 127 / 32767`
-- Phase (0-35999, 0.01° units) → Device phase (0-255)
-- Formula: `device_phase = (sdl_phase * 256 / 36000) & 0xff`
-
-**Envelope:**
-- Attack/Fade level (0-32767) → Device level (0-255)
-- Formula: `device_level = sdl_level * 255 / 32767`
-
-**Conditional Effects:**
-- Saturation values observed: 0x54 (spring), 0x64 (damper)
-- **⚠️ CRITICAL:** Coefficient, deadband, and center must be sent as ZEROS
-- The device firmware rejects 0x05 packets with non-zero coefficients
-- Effect behavior is controlled solely through saturation values (0-100 range)
-
-### ⚠️ Areas Needing More Data
-
-1. **Conditional Parameter Scaling:**
-   - Exact formulas for coefficient, deadband, center encoding
-   - Most test captures show zero values for these parameters
-   - Need captures with varied conditional parameters
-
-2. **Ramp Effect Encoding:**
-   - How ramp_start and ramp_end map to 0x04 packet fields
-   - All ramp captures show identical packets
-   - Test application may not be passing ramp parameters correctly
-
-3. **Inertia and Friction Effects:**
-   - Limited packet examples for these effect types
-   - Assumed to use same 0x05 structure as spring/damper
-   - Need verification with actual captures
-
-### Optional Improvements
-
-1. **Conditional Parameter Scaling:**
-   - Implement best-guess scaling for coefficient, deadband, center
-   - Test with real hardware to verify behavior
-   - Adjust formulas based on testing results
-
-2. **Ramp Effect Support:**
-   - Implement ramp using 0x04 packet
-   - Map start/end to magnitude/offset fields
-   - Verify behavior on hardware
-
-3. **Multi-Effect Testing:**
-   - Test concurrent effect playback
-   - Verify effect mixing behavior
-   - Test effect ID reuse after stopping
-

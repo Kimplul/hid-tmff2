@@ -6,8 +6,8 @@
  * for the Thrustmaster T500RS racing wheel force feedback implementation.
  */
 
-#ifndef __T500RS_PROTOCOL_H
-#define __T500RS_PROTOCOL_H
+#ifndef __T500RS_H
+#define __T500RS_H
 
 #include <linux/types.h>
 
@@ -90,8 +90,7 @@ enum t500rs_seq_packet {
  */
 /* Sequence templates are now static in the implementation file */
 
-/* Supported parameters and effects */
-extern const unsigned long t500rs_params;
+/* Supported effects */
 extern const signed short t500rs_effects[];
 
 /*
@@ -184,10 +183,10 @@ struct t500rs_pkt_r04_periodic_ramp {
 struct t500rs_pkt_r05_condition {
    u8 id;   /* T500RS_PKT_CONDITIONAL */
    u8 code; /* from 0x01 code1/code2 (T500RS_CODE_*) */
-   __le16 right_coeff;  /* MUST BE ZERO */
-   __le16 left_coeff;   /* MUST BE ZERO */
-   __le16 deadband;     /* MUST BE ZERO */
-   u8 center;           /* MUST BE ZERO */
+   __le16 right_coeff;  /* Currently zero - needs capture verification */
+   __le16 left_coeff;   /* Currently zero - needs capture verification */
+   __le16 deadband;     /* Experimental: scaled from ff_condition_effect.deadband */
+   u8 center;           /* Experimental: scaled from ff_condition_effect.center */
    u8 right_sat;        /* 0-100: controls effect strength */
    u8 left_sat;         /* 0-100: controls effect strength */
 } __packed;
