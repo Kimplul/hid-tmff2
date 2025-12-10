@@ -243,6 +243,9 @@ static ssize_t gain_store(struct device *dev,
 
 	gain = value;
 
+	if (!tmff2->set_gain) 
+		return count;
+
 	/* Rationale: two-level gain model
 	* - The input API's set_gain (pg) is the in-game gain (0..GAIN_MAX).
 	* - This driver also exposes a device/system gain via sysfs param `gain`.
@@ -255,19 +258,17 @@ static ssize_t gain_store(struct device *dev,
 	*
 	* References:
 	* - docs/FFBEFFECTS.md: section "FF_GAIN" shows a dedicated device gain path.
-	* - docs/FFB_T500RS.md: Report glossary mentions 0x43 (gain), i.e., device-side
-	*   gain separate from per-effect magnitudes; drivers should expose both levels.
+	* - docs/T500RS_USB_Protocol_Analysis.md: Report glossary mentions 0x43 (gain), 
+	*   i.e., device-side gain separate from per-effect magnitudes; drivers should 
+	*   expose both levels.
 	*/
-	if (tmff2->set_gain) {
-		unsigned long flags;
-		spin_lock_irqsave(&tmff2->lock, flags);
-		tmff2->pending_gain_value = GAIN_MAX;
-		tmff2->gain_pending = 1;
-		spin_unlock_irqrestore(&tmff2->lock, flags);
-		if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
-			schedule_delayed_work(&tmff2->work, 0);
-	}
-
+	unsigned long flags;
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->pending_gain_value = GAIN_MAX;
+	__set_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 	return count;
 }
 
@@ -294,7 +295,7 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 	/* Defer to workqueue: store pending gain and schedule */
 	spin_lock_irqsave(&tmff2->lock, flags);
 	tmff2->pending_gain_value = value;
-	tmff2->gain_pending = 1;
+	__set_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
 	spin_unlock_irqrestore(&tmff2->lock, flags);
 
 	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
@@ -317,7 +318,7 @@ static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 	/* Defer to workqueue: store pending autocenter and schedule */
 	spin_lock_irqsave(&tmff2->lock, flags);
 	tmff2->pending_autocenter_value = value;
-	tmff2->autocenter_pending = 1;
+	__set_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
 	spin_unlock_irqrestore(&tmff2->lock, flags);
 
 	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
@@ -344,14 +345,14 @@ static void tmff2_work_handler(struct work_struct *w)
 		uint16_t pg = 0, pac = 0;
 		int do_gain = 0, do_ac = 0;
 		spin_lock_irqsave(&tmff2->lock, f2);
-		if (tmff2->gain_pending) {
+		if (test_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags)) {
 			pg = tmff2->pending_gain_value;
-			tmff2->gain_pending = 0;
+			__clear_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
 			do_gain = 1;
 		}
-		if (tmff2->autocenter_pending) {
+		if (test_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags)) {
 			pac = tmff2->pending_autocenter_value;
-			tmff2->autocenter_pending = 0;
+			__clear_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
 			do_ac = 1;
 		}
 		spin_unlock_irqrestore(&tmff2->lock, f2);
@@ -376,25 +377,13 @@ static void tmff2_work_handler(struct work_struct *w)
 
 		effect_delay = state->effect.replay.delay;
 		effect_length = state->effect.replay.length;
-		/* If playing with a finite length, stop when (delay + length) elapses */
 		if (test_bit(FF_EFFECT_PLAYING, &state->flags) && effect_length) {
 			if ((time_now - state->start_time) >=
 					(effect_delay + effect_length) * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
-				/* Request a STOP in process context */
-				__set_bit(FF_EFFECT_QUEUE_STOP, &actions);
 				state->count = 0;
 			}
-		}
-		/* Delay handling for start: only trigger START after replay.delay */
-		if (test_bit(FF_EFFECT_QUEUE_START, &state->flags)) {
-			if ((time_now - state->start_time) >= effect_delay) {
-				__set_bit(FF_EFFECT_QUEUE_START, &actions);
-				__clear_bit(FF_EFFECT_QUEUE_START, &state->flags);
-				/* effect is playing since we're starting it now */
-				__set_bit(FF_EFFECT_PLAYING, &state->flags);
-			} /* else: keep START pending until delay elapsed */
 		}
 
 		if (test_bit(FF_EFFECT_QUEUE_UPLOAD, &state->flags)) {

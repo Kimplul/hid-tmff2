@@ -29,6 +29,8 @@ extern int alt_mode;
 #define FF_EFFECT_QUEUE_STOP	2
 #define FF_EFFECT_QUEUE_UPDATE	3
 #define FF_EFFECT_PLAYING	4
+#define FF_EFFECT_QUEUE_GAIN	5
+#define FF_EFFECT_QUEUE_AUTOCENTER	6
 
 #define PARAM_SPRING_LEVEL	(1 << 0)
 #define PARAM_DAMPER_LEVEL	(1 << 1)
@@ -67,8 +69,7 @@ struct tmff2_device_entry {
 	/* Pending control changes to be applied from workqueue context */
 	uint16_t pending_gain_value;
 	uint16_t pending_autocenter_value;
-	int gain_pending;
-	int autocenter_pending;
+	unsigned long pending_flags;
 
 	int allow_scheduling;
 
