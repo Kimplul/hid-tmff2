@@ -185,6 +185,7 @@ static int t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
   /* Validate effect_type against known constants */
   switch (effect_type) {
   case T500RS_EFFECT_CONSTANT:
+  case T500RS_EFFECT_SQUARE:
   case T500RS_EFFECT_SINE:
   case T500RS_EFFECT_TRIANGLE:
   case T500RS_EFFECT_SAW_UP:
@@ -497,21 +498,13 @@ static unsigned long t500rs_params = PARAM_SPRING_LEVEL | PARAM_DAMPER_LEVEL |
                                     PARAM_FRICTION_LEVEL | PARAM_GAIN |
                                     PARAM_RANGE;
 
-/*
- * Supported effects.
- *
- * NOTE: FF_SQUARE is intentionally OMITTED. The tool used to generate 
- * the Square effect was not supporting it at the time of the captures.
- * Another pass of implementation will be done after that tool will support it
- * and new captures are done for this effect.
- */
+/* Supported effects. */
 const signed short t500rs_effects[] = {
     FF_CONSTANT, FF_SPRING, FF_DAMPER,     FF_FRICTION, FF_INERTIA,
-    FF_PERIODIC, FF_SINE,   FF_TRIANGLE,   FF_SAW_UP,   FF_SAW_DOWN,
-    FF_RAMP,     FF_GAIN,   FF_AUTOCENTER, -1};
+    FF_PERIODIC, FF_SQUARE, FF_SINE,       FF_TRIANGLE, FF_SAW_UP,
+    FF_SAW_DOWN, FF_RAMP,   FF_GAIN,       FF_AUTOCENTER, -1};
 
-/* Forward declarations to avoid implicit declarations before worker uses them
- */
+/* Forward declarations to avoid implicit declarations before worker uses them */
 static int t500rs_send_hid(struct t500rs_device_entry *t500rs, const u8 *data,
                            size_t len);
 static inline int t500rs_send_stop(struct t500rs_device_entry *t500rs,
@@ -693,6 +686,9 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
         break;
       case FF_PERIODIC:
         switch (effect->u.periodic.waveform) {
+        case FF_SQUARE:
+          effect_type = T500RS_EFFECT_SQUARE;
+          break;
         case FF_SINE:
           effect_type = T500RS_EFFECT_SINE;
           break;
@@ -952,18 +948,20 @@ static int t500rs_upload_periodic(struct t500rs_device_entry *t500rs,
    * Determine waveform name and effect_type for 0x01 packet.
    *
    * Per Windows captures, waveform type IS encoded in the 0x01 packet's
-   * effect_type field (byte 2). We only support the waveforms observed in
-   * captures.
+   * effect_type field (byte 2).
    *
-   * FF_SQUARE is rejected because it's not in our supported effects list.
-   *
-   * Per Windows captures, effect_type values for periodic:
-   * - 0x21 = Triangle (inferred from protocol pattern)
-   * - 0x22 = Sine (confirmed from analysis.json)
-   * - 0x23 = Sawtooth Up (inferred)
-   * - 0x24 = Sawtooth Down (inferred)
+   * Effect type values for periodic waveforms:
+   * - 0x20 = Square
+   * - 0x21 = Triangle
+   * - 0x22 = Sine
+   * - 0x23 = Sawtooth Up
+   * - 0x24 = Sawtooth Down
    */
   switch (effect->u.periodic.waveform) {
+  case FF_SQUARE:
+    type_name = "square";
+    effect_type = T500RS_EFFECT_SQUARE;
+    break;
   case FF_TRIANGLE:
     type_name = "triangle";
     effect_type = T500RS_EFFECT_TRIANGLE;
@@ -981,7 +979,6 @@ static int t500rs_upload_periodic(struct t500rs_device_entry *t500rs,
     effect_type = T500RS_EFFECT_SAW_DOWN;
     break;
   default:
-    /* FF_SQUARE and other unsupported waveforms */
     hid_err(t500rs->hdev, "Unsupported periodic waveform: %d\n",
             effect->u.periodic.waveform);
     return -EINVAL;
@@ -1131,6 +1128,7 @@ static int t500rs_upload_effect(void *data,
     ret = t500rs_upload_condition(t500rs, state);
     break;
   case FF_PERIODIC:
+  case FF_SQUARE:
   case FF_SINE:
   case FF_TRIANGLE:
   case FF_SAW_UP:
