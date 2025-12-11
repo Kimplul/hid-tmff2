@@ -329,7 +329,7 @@ static inline s8 t500rs_scale_periodic_offset(s16 os_ffb_offset) {
  * 0x04 packet structure as periodic effects. The encoding is:
  * - magnitude: scaled from start/end levels (midpoint or average)
  * - offset: difference between start and end (direction of ramp)
- * - phase: typically 0 for ramp
+ * - phase: encodes ramp direction (0x7f = up, 0x00 = down)
  * - period_ms: ramp duration in milliseconds
  *
  * Note: exact mapping of start/end to magnitude/offset is uncertain;
@@ -342,6 +342,7 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
   int avg_level;
   u8 magnitude;
   s8 offset;
+  u8 phase;
 
   memset(p, 0, sizeof(*p));
 
@@ -353,50 +354,62 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
   /* Simple approximation: (end - start) / 512 to fit in s8 range */
   offset = (s8)((end_level - start_level) / 512);
 
-  /* Byte order per Windows USB captures: b0=id, b1=code, b2=reserved1, b3=mag,
+  /*
+   * Phase encodes ramp direction per FFEdit captures:
+   * - Positive ramp (start < end): phase = 0x7f (127)
+   * - Negative ramp (start > end): phase = 0x00
+   * - Equal levels: treat as positive (neutral case)
+   *
+   * Example captures:
+   * - 049a0000007f0000 - phase 0x7f = positive/up direction
+   * - 049a000c00000000 - phase 0x00 = negative/down direction
+   */
+  phase = (start_level < end_level) ? 0x7f : 0x00;
+
+  /* Byte order per USB captures: b0=id, b1=code, b2=reserved1, b3=mag,
    * b4=offset, b5=phase, b6-b7=period */
   p->id = 0x04;                            /* b0 */
   p->code = code;                          /* b1 */
   p->reserved1 = 0;                        /* b2: always 0x00 */
   p->magnitude = magnitude;                /* b3 */
   p->offset = (u8)offset;                  /* b4 */
-  p->phase = 0;                            /* b5: Ramp doesn't use phase */
+  p->phase = phase;                        /* b5: direction (0x7f=up, 0x00=down) */
   p->period_ms = cpu_to_le16(duration_ms); /* b6-b7 */
 }
 
 /*
  * Build a 0x05 conditional effect packet.
  *
- * Per Windows captures (T500RS_USB_Protocol_Analysis.md):
- * - Two 0x05 packets required per conditional effect (X-axis and Y-axis)
- * - Coefficients are currently sent as zero (needs more capture verification)
- * - Deadband and center are now experimental - some captures show non-zero values:
- *   - Spring Deadband test: deadband=500 -> 0x0007, deadband=5000 -> 0x0099
- *   - This suggests scaling: device_deadband = (os_ffb_deadband * 255) / 65535
+ * Per captures (T500RS_USB_Protocol_Analysis.md):
+ * - packet structure with u8 coefficients and proper field layout
+ * - Coefficients are sent as 0-10 scale (not zero)
+ * - Center and deadband are scaled from Linux FFB ranges
  *
  * Parameters:
  * - code: From 0x01 packet bytes 9-10 (first packet) or 11-12 (second packet)
- * - saturation: Scaled saturation value (0-100) for both right/left channels
- * - deadband: Raw deadband from ff_condition_effect (0-65535)
- * - center: Raw center from ff_condition_effect (-32767 to +32767)
+ * - right_coeff: Right/positive coefficient from ff_condition_effect (0-32767)
+ * - left_coeff: Left/negative coefficient from ff_condition_effect (0-32767)
+ * - saturation: Saturation value (0-100) for both right/left channels
+ * - deadband: Deadband from ff_condition_effect (0-65535)
+ * - center: Center offset from ff_condition_effect (-32767 to +32767)
  */
 static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
-                                       u8 code, u8 saturation,
-                                       u16 deadband, s16 center) {
+                                       u8 code, s16 right_coeff, s16 left_coeff,
+                                       u8 saturation, u16 deadband, s16 center) {
   memset(p, 0, sizeof(*p));
   p->id = T500RS_PKT_CONDITIONAL;
   p->code = code;
+  p->reserved = 0x00;
 
-  /* Coefficients: keep zero for now (needs capture verification) */
-  p->right_coeff = 0;
-  p->left_coeff = 0;
+  /* Scale coefficients from Linux 0-32767 range to device 0-10 u8 scale */
+  p->right_coeff = (u8)((right_coeff * 10) / 32767);
+  p->left_coeff = (u8)((left_coeff * 10) / 32767);
 
-  /*
-   * Experimental deadband/center support
-   * Center: scale from -32767..+32767 to 0..255 (128 = center)
-   */
-  p->deadband = cpu_to_le16((deadband * 255) / 65535);
-  p->center = (u8)(((center + 32767) * 255) / 65535);
+  /* Scale center from Linux ±32767 range to device s16 LE (approx ±500) */
+  p->center = cpu_to_le16((s16)(center / 65));
+
+  /* Scale deadband from Linux 0-65535 range to device u16 LE (0-1008) */
+  p->deadband = cpu_to_le16((u16)(deadband / 65));
 
   p->right_sat = saturation;
   p->left_sat = saturation;
@@ -633,8 +646,9 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
       }
       struct t500rs_pkt_r05_condition *p =
           (struct t500rs_pkt_r05_condition *)buf;
-      t500rs_build_r05_condition(p, (u8)(param_sub), saturation,
-                                 cond->deadband, cond->center);
+      t500rs_build_r05_condition(p, (u8)(param_sub), cond->right_coeff,
+                                 cond->left_coeff, saturation, cond->deadband,
+                                 cond->center);
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r05_condition));
     }
       break;
@@ -661,8 +675,9 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
       }
       struct t500rs_pkt_r05_condition *p =
           (struct t500rs_pkt_r05_condition *)buf;
-      t500rs_build_r05_condition(p, (u8)(env_sub & 0xff), saturation,
-                                 cond->deadband, cond->center);
+      t500rs_build_r05_condition(p, (u8)(env_sub & 0xff), cond->right_coeff,
+                                 cond->left_coeff, saturation, cond->deadband,
+                                 cond->center);
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r05_condition));
     }
       break;
@@ -1328,8 +1343,9 @@ static int t500rs_update_effect(void *data,
       break;
     }
     struct t500rs_pkt_r05_condition *p = (struct t500rs_pkt_r05_condition *)buf;
-    t500rs_build_r05_condition(p, (u8)(param_sub & 0xff), saturation,
-                               cond->deadband, cond->center);
+    t500rs_build_r05_condition(p, (u8)(param_sub & 0xff), cond->right_coeff,
+                               cond->left_coeff, saturation, cond->deadband,
+                               cond->center);
     return t500rs_send_hid(t500rs, buf, sizeof(*p));
   }
   default:
