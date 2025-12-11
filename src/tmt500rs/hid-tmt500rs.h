@@ -141,7 +141,7 @@ struct t500rs_pkt_r01_main {
  * Used for both periodic effects (sine, triangle, sawtooth) and ramp effects.
  * Code field must match the subtype specified in 0x01 packet bytes 9-10.
  *
- * Packet format (verified against Windows captures):
+ * Packet format:
  * - b0: packet type (0x04)
  * - b1: subtype code (from 0x01 packet_code_1, typically 0x2a)
  * - b2: reserved (0x00)
@@ -163,33 +163,35 @@ struct t500rs_pkt_r04_periodic_ramp {
 } __packed;
 
 /*
- * 0x05 - Conditional parameters (11 bytes)
+ * 0x05 - Conditional Effect Packet (11 bytes)
  *
- * CRITICAL: Windows captures show that conditional effects require TWO 0x05 packets,
- * but coefficients/deadband/center MUST be zero. Only saturation values control behavior.
- *
- * Packet format (verified against Windows captures):
+ * Packet format:
  * - b0: packet type (0x05)
- * - b1: subtype code (from 0x01 packet_code_1 or packet_code_2)
- * - b2-b3: right coefficient (LE) - MUST BE ZERO
- * - b4-b5: left coefficient (LE) - MUST BE ZERO
- * - b6-b7: deadband (LE) - MUST BE ZERO
- * - b8: center - MUST BE ZERO
- * - b9: right saturation (0-100, controls spring/damper strength)
- * - b10: left saturation (0-100, controls spring/damper strength)
+ * - b1: code (from 0x01 packet_code_1 or packet_code_2)
+ * - b2: reserved (always 0x00)
+ * - b3: right coefficient (u8, 0-10 scale)
+ * - b4: left coefficient (u8, 0-10 scale)
+ * - b5-b6: center/offset (s16 LE, scaled from Linux ±32767 range)
+ * - b7-b8: deadband (u16 LE, scaled from Linux 0-65535 range)
+ * - b9: right saturation (0-100, controls effect strength)
+ * - b10: left saturation (0-100, controls effect strength)
  *
- * Firmware rejects packets with non-zero coefficients, causing EPROTO errors.
- * Effect behavior is controlled solely through saturation values.
+ * Scaling (from Linux FFB to device):
+ * - Coefficients: (value * 10) / 32767 → 0-10 u8
+ * - Center: value / 65 → s16 LE (approx ±500 range)
+ * - Deadband: value / 65 → u16 LE (0-1008 range)
+ * - Saturation: 0-100 (no scaling)
  */
 struct t500rs_pkt_r05_condition {
-   u8 id;   /* T500RS_PKT_CONDITIONAL */
-   u8 code; /* from 0x01 code1/code2 (T500RS_CODE_*) */
-   __le16 right_coeff;  /* Currently zero - needs capture verification */
-   __le16 left_coeff;   /* Currently zero - needs capture verification */
-   __le16 deadband;     /* Experimental: scaled from ff_condition_effect.deadband */
-   u8 center;           /* Experimental: scaled from ff_condition_effect.center */
-   u8 right_sat;        /* 0-100: controls effect strength */
-   u8 left_sat;         /* 0-100: controls effect strength */
+   u8 id;               /* T500RS_PKT_CONDITIONAL */
+   u8 code;             /* from 0x01 code1/code2 */
+   u8 reserved;         /* Always 0x00 */
+   u8 right_coeff;      /* Right/positive coefficient (0-10 scale) */
+   u8 left_coeff;       /* Left/negative coefficient (0-10 scale) */
+   __le16 center;       /* Center offset (s16 LE, scaled by /65) */
+   __le16 deadband;     /* Deadband width (u16 LE, scaled by /65) */
+   u8 right_sat;        /* Right saturation (0-100) */
+   u8 left_sat;         /* Left saturation (0-100) */
 } __packed;
 
 /* 0x03 - Constant force level (4 bytes) */

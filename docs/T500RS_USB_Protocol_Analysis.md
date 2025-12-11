@@ -71,7 +71,7 @@ Offset | Size | Field          | Description
 -------|------|----------------|----------------------------------
  0      | 1    | packet_type    | 0x01
  1      | 1    | effect_id      | Hardware effect slot ID (0-15, assigned by driver)
- 2      | 1    | effect_type    | Effect type (0x00=constant, 0x22=sine, 0x40=conditional)
+ 2      | 1    | effect_type    | Effect type (see table below)
  3      | 1    | control        | Always 0x40
  4      | 2    | duration_ms    | Duration in milliseconds, little-endian
  6      | 2    | delay_ms       | Delay before start, little-endian
@@ -82,6 +82,20 @@ Offset | Size | Field          | Description
 ```
 
 **Driver Implementation Note:** effect_id must be unique for concurrent effects to prevent slot collision. Use hardware ID allocation (0-15) instead of always 0x00.
+
+**Effect Type Codes (byte 2):**
+| Code | Effect Type | Source |
+|------|-------------|--------|
+| 0x00 | Constant | Windows driver captures |
+| 0x20 | Square | FFEdit captures (December 2025) |
+| 0x21 | Triangle | Windows driver captures |
+| 0x22 | Sine | Windows driver captures |
+| 0x23 | Sawtooth Up | Inferred from pattern |
+| 0x24 | Sawtooth Down | Inferred from pattern |
+| 0x40 | Spring | Windows driver captures |
+| 0x41 | Damper/Friction/Inertia | Windows driver + FFEdit captures |
+
+**Note:** Square wave (0x20) was discovered in FFEdit captures. The Windows driver may not expose this effect type through the standard API.
 
 **IMPORTANT:** Bytes 9-12 specify the packet codes used in subsequent packets. These are NOT fixed values!
 
@@ -179,49 +193,35 @@ Offset | Size | Field          | Description
 
 **IMPORTANT:** Conditional effects (spring, damper, inertia, friction) require TWO 0x05 packets!
 
-**First Packet (X-axis parameters):**
+**Packet Structure:**
 ```
 Offset | Size | Field          | Description
 -------|------|----------------|----------------------------------
 0      | 1    | packet_type    | 0x05
-1      | 1    | code           | Variable (from 0x01 packet bytes 9-10, e.g. 0x2a or 0xb6)
-2      | 2    | right_coeff    | Right coefficient, little-endian
-4      | 2    | left_coeff     | Left coefficient, little-endian
-6      | 2    | deadband       | Deadband, little-endian
-8      | 1    | center         | Center offset
-9      | 1    | right_sat      | Right saturation
-10     | 1    | left_sat       | Left saturation
+1      | 1    | code           | Variable (from 0x01 packet, e.g. 0x0e, 0x1c, 0x2a, 0x38)
+2      | 1    | reserved       | Always 0x00
+3      | 1    | right_coeff    | Right/positive coefficient (0-10 scale, u8)
+4      | 1    | left_coeff     | Left/negative coefficient (0-10 scale, u8)
+5-6    | 2    | center         | Center offset (s16 LE, scaled: device = input/20)
+7-8    | 2    | deadband       | Deadband width (u16 LE, scaled: device = input/10)
+9      | 1    | right_sat      | Right saturation (0-100)
+10     | 1    | left_sat       | Left saturation (0-100)
 ```
 
-**Second Packet (Y-axis parameters):**
-```
-Offset | Size | Field          | Description
--------|------|----------------|----------------------------------
-0      | 1    | packet_type    | 0x05
-1      | 1    | code           | Variable (from 0x01 packet bytes 11-12, e.g. 0x38 or 0xc4)
-2-10   | 9    | parameters     | Same structure as first packet
-```
+**Second Packet (Y-axis):** Same structure with second code from 0x01 packet.
 
-**NOTE:** T500RS is single-axis, so the second packet typically contains zeros.
+**NOTE:** T500RS is single-axis, so Y-axis packet typically contains zeros.
 
-**⚠️ CRITICAL FINDING :** Windows sends **zero coefficients, deadband, and center** in ALL 0x05 packets!
-- The device firmware appears to reject 0x05 packets with non-zero coefficients
-- Only saturation values (bytes 9-10) should be non-zero
-- Sending non-zero coefficients causes EPROTO (-71) errors on subsequent packets
-- The conditional effect behavior is determined by saturation values, not coefficients
+**Parameter Scaling (Linux FFB → Device):**
+- **Coefficients:** 0-10000 → Device 0-10 (divide by 1000)
+- **Center/Offset:** -10000 to +10000 → Device s16 LE (divide by 20)
+- **Deadband:** 0-10000 → Device u16 LE (divide by 10)
+- **Saturation:** 0-100 percentage
 
-**Examples (correct - zeros for coefficients):**
-- First packet: `05 2a 00 00 00 00 00 00 00 54 54` - Code 0x2a, all zeros, saturation 0x54
-- Second packet: `05 38 00 00 00 00 00 00 00 54 54` - Code 0x38, all zeros, saturation 0x54
-
-**Example (INCORRECT - will cause device rejection):**
-- `05 2a 7f 00 7f 00 00 00 7f 64 64` - Non-zero coefficients cause Y-axis packet to fail
-
-**Parameter Scaling:** (Based on limited data, needs verification)
-- Coefficients: SDL2 value (0-32767) → device value (scaling TBD)
-- Deadband: SDL2 value (0-65535) → device value (scaling TBD)
-- Center: SDL2 value (-32767 to +32767) → device value (0-255?)
-- Saturation: SDL2 value (0-32767) → device value (0-255, observed: 0x54, 0x64)
+**Examples from Captures:**
+- `05 0e 00 0a 0a 00 00 00 00 64 64` - Coeffs=10,10, center=0, deadband=0, sat=100
+- `05 0e 00 06 04 fa 00 00 00 64 64` - Coeffs=6,4, center=250 (5000/20), deadband=0
+- `05 0e 00 0a 0a 8c fe c2 01 64 64` - Coeffs=10,10, center=-372 (-7439/20), deadband=450
 
 ### 0x41 - Command Packet (4 bytes)
 ```
@@ -335,12 +335,36 @@ Offset | Size | Field          | Description
 
 ### 10. CONDITIONAL EFFECTS - INERTIA
 
-**Status:** Limited capture data available. Assumed to use same 0x05 packet structure as spring/damper.
+**Capture Example:**
+- Input: Axis0 coefficient=10000, offset=-7439; Axis1 coefficient=10000, offset=0
+- Main packet: `01 04 41 40 7a 09 00 ff ff 42 01 50 01 00 00`
+  - effect_type = 0x41 (same as damper)
+  - duration = 0x097a (2426ms)
+  - codes: 0x0142, 0x0150
+
+- First 0x05 packet (X-axis): `05 42 01 0a 0a 8c fe 00 00 64 64`
+  - code = 0x42
+  - right_coeff = 0x0a01 (2561) - **NON-ZERO!**
+  - left_coeff = 0x8c0a (35850 or -29686 signed) - **NON-ZERO!**
+  - deadband = 0x00fe (254)
+  - center = 0x00
+  - saturation = 0x64 (100)
+
+- Second 0x05 packet (Y-axis): `05 50 01 00 00 00 00 00 00 64 64`
+  - code = 0x50
+  - right_coeff = 0x0001 (1)
+  - left_coeff = 0x0000 (0)
+  - deadband = 0x0000 (0)
+  - center = 0x00
+  - saturation = 0x64 (100)
+
+**Implication:** The current driver sends zero coefficients for all conditional effects (matching Windows driver behavior for spring/damper). However, inertia may require non-zero coefficients for proper behavior. This needs further testing.
 
 **Expected Structure:**
 - Two 0x05 packets with codes from 0x01 bytes 9-12
 - Same parameter layout: right_coeff, left_coeff, deadband, center, saturation
-- Saturation value may differ from spring/damper
+- Saturation value: 0x64 (100) - same as damper
+- Coefficients: May need to be non-zero for proper inertia feel
 
 ### 11. CONDITIONAL EFFECTS - FRICTION
 
@@ -349,7 +373,8 @@ Offset | Size | Field          | Description
 **Expected Structure:**
 - Two 0x05 packets with codes from 0x01 bytes 9-12
 - Same parameter layout: right_coeff, left_coeff, deadband, center, saturation
-- Saturation value may differ from spring/damper
+- Saturation value: 0x64 (100) - same as damper
+- Coefficients: May need to be non-zero (similar to inertia) - needs verification
 
 ### 12. MULTI-EFFECT SCENARIOS
 
@@ -470,3 +495,80 @@ Offset | Size | Field          | Description
   - SDL 16000 → Device 12
   - SDL 24000 → Device 18
   - SDL 32767 → Device 255
+
+---
+
+## FFEdit Capture Analysis (December 2025)
+
+New captures from FFEdit (Force Feedback Editor) tool provide comprehensive protocol understanding.
+
+### Capture Files Analyzed
+
+**Initial Captures:**
+- `inertia_Axis0_10000_offset_-7439_axis1_10000_offset_0.pcapng`
+- `square_medium.pcapng`, `square_max.pcapng`
+- `Ramp.pcapng`
+
+**Systematic Conditional Effect Captures (Dec 11, 2025):**
+- **Damper:** 8 captures with varying coefficients, offsets, deadbands
+- **Friction:** 5 captures with varying positive/negative coefficients
+- **Inertia:** 8 captures with varying coefficients and offsets
+
+### Key Findings
+
+#### 1. Square Wave Effect Type (0x20) ✅ IMPLEMENTED
+FFEdit confirms square wave uses effect type **0x20**:
+- Example: `01 04 20 40 1d 10 00 ff ff 42 01 50 01 00 00`
+- Uses same 0x04 packet structure as other periodic effects
+
+#### 2. Corrected 0x05 Packet Structure
+Previous understanding was incorrect. FFEdit analysis reveals:
+- **Coefficients are u8 (not u16!)** - scaled 0-10 for 0-10000 FFEdit range
+- **Center/offset is s16 LE** at bytes 5-6 (not single byte at position 8)
+- **Deadband is u16 LE** at bytes 7-8
+
+**Verified Examples:**
+| FFEdit Parameters | 0x05 Packet | Decoded |
+|-------------------|-------------|---------|
+| friction P=10000,N=10000 | `050e000a0a000000006464` | coeff=10,10 |
+| friction P=7500,N=5000 | `050e000805000000006464` | coeff=8,5 (rounded) |
+| damper PC=6000,NC=4000,O=5000 | `0546000604fa00000064 64` | coeff=6,4, center=250 |
+| damper O=-7439,D=4500 | `05460a0a8cfec2016464` | center=-372, deadband=450 |
+| inertia P=6000,N=4000,O=-4000 | `052a00060438ff00006464` | coeff=6,4, center=-200 |
+
+#### 3. Coefficient Scaling Formula
+```
+device_coeff = ffb_coeff / 1000   (for 0-10000 range) → 0-10 u8
+device_coeff = ffb_coeff / 3277   (for 0-32767 Linux range) → 0-10 u8
+```
+
+#### 4. Center/Offset Scaling Formula
+```
+device_center = ffb_center / 20   (for ±10000 FFEdit range) → s16 LE
+device_center = ffb_center / 65   (for ±32767 Linux range) → approx ±500
+```
+
+#### 5. Deadband Scaling Formula
+```
+device_deadband = ffb_deadband / 10   (for 0-10000 range) → u16 LE
+device_deadband = ffb_deadband / 65   (for 0-65535 Linux range) → 0-1008
+```
+
+#### 6. Windows vs FFEdit Behavior
+- **Windows driver:** Sends zeros for coefficients/center/deadband, relies on saturation only
+- **FFEdit:** Sends actual coefficient values; device accepts both approaches
+- **Conclusion:** Coefficients are optional for basic functionality but enable finer control
+
+#### 7. Ramp Effect Phase Field (✅ IMPLEMENTED)
+Ramp captures confirm phase encodes ramp direction:
+- `049a0000007f0000` - phase 0x7f (127) = positive/up ramp (start < end)
+- `049a000c00000000` - phase 0x00 = negative/down ramp (start > end)
+
+**Implementation:**
+```c
+/* Phase encodes ramp direction:
+ * - Positive ramp (start < end): phase = 0x7f
+ * - Negative ramp (start > end): phase = 0x00
+ */
+phase = (start_level < end_level) ? 0x7f : 0x00;
+```
