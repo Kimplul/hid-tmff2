@@ -36,6 +36,7 @@
 
 /* Effect type constants */
 #define T500RS_EFFECT_CONSTANT 0x00
+#define T500RS_EFFECT_SQUARE 0x20   /* Discovered from FFEdit captures (Dec 2025) */
 #define T500RS_EFFECT_SINE 0x22
 #define T500RS_EFFECT_TRIANGLE 0x21
 #define T500RS_EFFECT_SAW_UP 0x23
