@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later */
+// SPDX-License-Identifier: GPL-2.0-or-later  
 /*
- * T500RS Force Feedback Protocol Constants and Structures
+ *  T500RS Force Feedback Protocol Constants and Structures for
+ *  Thrustmaster T500RS wheel base.
  *
- * This header defines all protocol-specific constants and packet structures
- * for the Thrustmaster T500RS racing wheel force feedback implementation.
+ *  Protocol documentation: docs/T500RS_USB_Protocol_Analysis.md
+ *  This header defines all protocol-specific constants and packet structures
+ *  for the Thrustmaster T500RS racing wheel force feedback implementation.
+ *
+ *  Copyright (c) 2025 Casimir Bonnet <casimir.bonnet@gmail.com>
  */
 
 #ifndef __T500RS_H
@@ -82,14 +86,6 @@ enum t500rs_seq_packet {
   T500RS_SEQ_CONDITION_Y,
   T500RS_SEQ_MAIN,
 };
-
-/*
- * Packet Sequence Templates
- *
- * These arrays define the packet sequences for different effect types.
- * Used by the packet sequencing abstraction system.
- */
-/* Sequence templates are now static in the implementation file */
 
 /* Supported effects */
 extern const signed short t500rs_effects[];
@@ -221,4 +217,4 @@ struct t500rs_pkt_r02_envelope {
   u8 reserved;       /* 0x00 */
 } __packed;
 
-#endif /* __T500RS_PROTOCOL_H */
+#endif /* __HID_TMT500RS_H */
