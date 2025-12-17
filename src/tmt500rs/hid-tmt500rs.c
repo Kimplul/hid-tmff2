@@ -1,24 +1,10 @@
-
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later  
 /*
- * Force feedback support for Thrustmaster T500RS
+ *  HID driver for Thrustmaster T500RS wheel base that provides Force feedback
  *
- * HID implementation using HID output reports for all communication.
- *
- * Protocol documentation: docs/T500RS_USB_Protocol_Analysis.md
- *
- * Key protocol details (verified against Windows USB captures):
- * - 0x01 packet: Main upload (15 bytes) - effect_id, direction, duration,
- * delay, code1/2
- * - 0x02 packet: Envelope (9 bytes) - attack/fade levels and times
- * - 0x03 packet: Constant force level (4 bytes)
- * - 0x04 packet: Periodic/Ramp parameters (8 bytes) - code 0x2a, period in ms
- * - 0x05 packet: Conditional parameters (11 bytes) - two packets per effect
- * (X/Y)
- * - 0x41 packet: START/STOP command (4 bytes) - per-effect hw_id
- *
- * Hardware supports 16 concurrent effects with internal mixing.
- * Protocol analysis based on 70+ test captures from Windows driver.
+ *  Protocol documentation: docs/T500RS_USB_Protocol_Analysis.md
+ * 
+ *  Copyright (c) 2025 Casimir Bonnet <casimir.bonnet@gmail.com>
  */
 
 #include "../hid-tmff2.h"
@@ -27,6 +13,7 @@
 #include <linux/input.h>
 #include <linux/usb.h>
 #include <linux/delay.h>
+#include <linux/errno.h>
 
 static int t500rs_request_normal_mode(struct hid_device *hdev)
 {
@@ -50,7 +37,7 @@ static int t500rs_request_normal_mode(struct hid_device *hdev)
 		 hdev->product);
 
 	/*
-	 * Observed Windows boot->normal sequence (USBPcap):
+	 * Observed Windows boot->normal sequence:
 	 *  - Vendor IN requests (bmRequestType=0xc1, recipient=interface)
 	 *      0x49 wLength=16 (polled)
 	 *      0x56/0x42/0x4e wLength=8 (one-time probes)
@@ -224,11 +211,11 @@ struct t500rs_device_entry {
  * Scale direction from Linux ff_effect format to T500RS protocol format.
  *
  * Linux ff_effect.direction: 0-65535 (0 = forward, 16384 = right, 32768 = back,
- * 49152 = left) T500RS protocol: 0-35999 in 0.01 degree units (0 = 0°, 9000 =
- * 90°, 18000 = 180°, etc.)
+ * 49152 = left) T500RS protocol: 0-35999 in 0.01 degree units (0 = 0 degrees, 9000 =
+ * 90 degrees, 18000 = 180 degrees, etc.)
  *
  * Conversion: device_dir = (os_ffb_dir * 36000) / 65536
- * This maps 0-65535 → 0-35999 (approximately, since 65535 → 35999.45)
+ * This maps 0-65535 -> 0-35999 (approximately, since 65535 -> 35999.45)
  */
 static inline u16 t500rs_scale_direction(u16 os_ffb_dir) {
   /* Use 32-bit arithmetic to avoid overflow */
@@ -312,7 +299,7 @@ static int t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
  * 0x0e!)
  * - magnitude: 0..127 (scaled from 0..32767)
  * - offset: signed DC offset (scaled from -32768..32767 to device range)
- * - phase: 0..255 (256 steps for 360°, scaled from 0..35999)
+ * - phase: 0..255 (256 steps for 360 degrees, scaled from 0..35999)
  * - period_ms: period in MILLISECONDS (no Hz*100 conversion!)
  * - reserved: always 0
  *
@@ -347,11 +334,11 @@ static void t500rs_build_r04_periodic(struct t500rs_pkt_r04_periodic_ramp *p,
  *
  * When the projected magnitude is negative, we:
  * 1. Take the absolute value (wheel only supports positive magnitudes)
- * 2. Add 180° to the phase to maintain correct force direction
+ * 2. Add 180 degrees to the phase to maintain correct force direction
  *
  * Linux FFB magnitude: 0..32767 (unsigned)
  * Linux FFB direction: 0..65535 (0=forward, 16384=right, 32768=back, 49152=left)
- * Linux FFB phase: 0..65535 (0..360° in 1/65536 units)
+ * Linux FFB phase: 0..65535 (0..360 degrees in 1/65536 units)
  * Device magnitude: 0..127
  *
  * @param os_ffb_mag: Original magnitude from Linux FFB (0..32767)
@@ -371,8 +358,8 @@ static inline u8 t500rs_scale_periodic_with_direction(int os_ffb_mag,
     /* Wheel handles positive magnitudes only */
     projected = -projected;
 
-    /* Add 180° to phase to maintain correct force direction.
-     * Phase is in 0..65535 range (Linux FFB), 180° = 0x8000 */
+    /* Add 180 degrees to phase to maintain correct force direction.
+     * Phase is in 0..65535 range (Linux FFB), 180 degrees = 0x8000 */
     if (phase_ptr)
       *phase_ptr = (*phase_ptr + 0x8000) % 0x10000;
   }
@@ -387,8 +374,8 @@ static inline u8 t500rs_scale_periodic_with_direction(int os_ffb_mag,
 
 /*
  * Scale periodic phase from Linux FFB subsystem format to device format.
- * Linux FFB: 0..35999 (0.01 degree units, 0-359.99°)
- * Device: 0..255 (256 steps for 360°)
+ * Linux FFB: 0..35999 (0.01 degree units, 0-359.99 degrees)
+ * Device: 0..255 (256 steps for 360 degrees)
  */
 static inline u8 t500rs_scale_periodic_phase(u16 os_ffb_phase) {
   /* Clamp to valid range just in case */
@@ -509,9 +496,9 @@ static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
  * - Formula: device_level = (os_ffb_level * 255 / 65535) - 127
  *
  * This maps:
- *   Linux FFB 0     → Device -127 (max negative)
- *   Linux FFB 32767 → Device 0 (neutral)
- *   Linux FFB 65535 → Device +127 (max positive)
+ *   Linux FFB 0     -> Device -127 (max negative)
+ *   Linux FFB 32767 -> Device 0 (neutral)
+ *   Linux FFB 65535 -> Device +127 (max positive)
  */
 static inline s8 t500rs_scale_constant_level(u16 os_ffb_level) {
   s32 tmp = ((s32)os_ffb_level * 255) / 65535;
@@ -669,46 +656,46 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
 
       t500rs_build_r02_envelope(env, (u8)(env_sub & 0xff), envelope, allow_envelope);
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r02_envelope));
-    }
       break;
+    }
     case T500RS_SEQ_CONSTANT: {
       s8 level = t500rs_scale_const_with_direction(effect->u.constant.level,
                                                    effect->direction);
       struct t500rs_r03_const *r3 = (struct t500rs_r03_const *)buf;
       t500rs_build_r03_constant(r3, (u8)(param_sub & 0xff), level);
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_r03_const));
-    }
       break;
+    }
     case T500RS_SEQ_PERIODIC_RAMP: {
-        if (effect->type == FF_RAMP) {
-          struct t500rs_pkt_r04_periodic_ramp *p =
-              (struct t500rs_pkt_r04_periodic_ramp *)buf;
-          t500rs_build_r04_ramp(p, (u8)(param_sub & 0xff),
-                                effect->u.ramp.start_level,
-                                effect->u.ramp.end_level, effect->replay.length);
-        } else {
-          /* Apply direction projection to magnitude and adjust phase if needed */
-          u16 phase_raw = effect->u.periodic.phase;
-          u8 mag = t500rs_scale_periodic_with_direction(
-              effect->u.periodic.magnitude, effect->direction, &phase_raw);
-          u8 phase = t500rs_scale_periodic_phase(phase_raw);
-          s8 offset = t500rs_scale_periodic_offset(effect->u.periodic.offset);
-          u16 period_ms = effect->u.periodic.period;
-          if (period_ms == 0) {
-            hid_err(t500rs->hdev, "Periodic effect period cannot be zero\n");
-            return -EINVAL;
-          }
-          struct t500rs_pkt_r04_periodic_ramp *p =
-              (struct t500rs_pkt_r04_periodic_ramp *)buf;
-          t500rs_build_r04_periodic(p, (u8)(param_sub & 0xff), mag, offset, phase,
-                                    period_ms);
+      if (effect->type == FF_RAMP) {
+        struct t500rs_pkt_r04_periodic_ramp *p =
+            (struct t500rs_pkt_r04_periodic_ramp *)buf;
+        t500rs_build_r04_ramp(p, (u8)(param_sub & 0xff),
+                              effect->u.ramp.start_level,
+                              effect->u.ramp.end_level, effect->replay.length);
+      } else {
+        /* Apply direction projection to magnitude and adjust phase if needed */
+        u16 phase_raw = effect->u.periodic.phase;
+        u8 mag = t500rs_scale_periodic_with_direction(
+            effect->u.periodic.magnitude, effect->direction, &phase_raw);
+        u8 phase = t500rs_scale_periodic_phase(phase_raw);
+        s8 offset = t500rs_scale_periodic_offset(effect->u.periodic.offset);
+        u16 period_ms = effect->u.periodic.period;
+        if (period_ms == 0) {
+          hid_err(t500rs->hdev, "Periodic effect period cannot be zero\n");
+          return -EINVAL;
         }
-        ret = t500rs_send_hid(t500rs, buf,
-                              sizeof(struct t500rs_pkt_r04_periodic_ramp));
-        if (ret)
-          break;
+        struct t500rs_pkt_r04_periodic_ramp *p =
+            (struct t500rs_pkt_r04_periodic_ramp *)buf;
+        t500rs_build_r04_periodic(p, (u8)(param_sub & 0xff), mag, offset, phase,
+                                  period_ms);
       }
+      ret = t500rs_send_hid(t500rs, buf,
+                            sizeof(struct t500rs_pkt_r04_periodic_ramp));
+      if (ret)
         break;
+      break;
+    }
     case T500RS_SEQ_CONDITION_X: {
       u8 saturation = 0;
       const struct ff_condition_effect *cond = &effect->u.condition[0];
@@ -735,8 +722,8 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
                                  cond->left_coeff, saturation, cond->deadband,
                                  cond->center);
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r05_condition));
-    }
       break;
+    }
     case T500RS_SEQ_CONDITION_Y: {
       u8 saturation = 0;
       /* Y-axis: use condition[1] if available, else zeros */
@@ -764,8 +751,8 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
                                  cond->left_coeff, saturation, cond->deadband,
                                  cond->center);
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r05_condition));
-    }
       break;
+    }
     case T500RS_SEQ_MAIN: {
       u8 effect_type = 0;
       switch (effect->type) {
@@ -786,25 +773,25 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
         break;
       case FF_PERIODIC:
         switch (effect->u.periodic.waveform) {
-        case FF_SQUARE:
-          effect_type = T500RS_EFFECT_SQUARE;
+          case FF_SQUARE:
+            effect_type = T500RS_EFFECT_SQUARE;
+            break;
+          case FF_SINE:
+            effect_type = T500RS_EFFECT_SINE;
+            break;
+          case FF_TRIANGLE:
+            effect_type = T500RS_EFFECT_TRIANGLE;
+            break;
+          case FF_SAW_UP:
+            effect_type = T500RS_EFFECT_SAW_UP;
+            break;
+          case FF_SAW_DOWN:
+            effect_type = T500RS_EFFECT_SAW_DOWN;
+            break;
+          default:
+            return -EINVAL;
+          }
           break;
-        case FF_SINE:
-          effect_type = T500RS_EFFECT_SINE;
-          break;
-        case FF_TRIANGLE:
-          effect_type = T500RS_EFFECT_TRIANGLE;
-          break;
-        case FF_SAW_UP:
-          effect_type = T500RS_EFFECT_SAW_UP;
-          break;
-        case FF_SAW_DOWN:
-          effect_type = T500RS_EFFECT_SAW_DOWN;
-          break;
-        default:
-          return -EINVAL;
-        }
-        break;
       case FF_RAMP:
         effect_type = T500RS_EFFECT_SAW_DOWN;
         break;
@@ -819,8 +806,8 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
       if (ret)
         break;
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r01_main));
-    }
       break;
+    }
     default:
       ret = -EINVAL;
     }
