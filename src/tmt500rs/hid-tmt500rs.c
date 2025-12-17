@@ -25,6 +25,91 @@
 #include "hid-tmt500rs.h"
 #include <linux/hid.h>
 #include <linux/input.h>
+#include <linux/usb.h>
+#include <linux/delay.h>
+
+static int t500rs_request_normal_mode(struct hid_device *hdev)
+{
+	struct usb_device *udev;
+	u8 *buf;
+	int ret, i;
+
+	/* HID over USB: hdev->dev.parent is usb_interface->dev */
+	if (!hdev->dev.parent || !hdev->dev.parent->parent)
+		return -ENODEV;
+
+	udev = to_usb_device(hdev->dev.parent->parent);
+	if (!udev)
+		return -ENODEV;
+
+	buf = kmalloc(16, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	hid_info(hdev, "T500RS detected in boot mode (0x%04x); requesting switch to normal mode...\n",
+		 hdev->product);
+
+	/*
+	 * Observed Windows boot->normal sequence (USBPcap):
+	 *  - Vendor IN requests (bmRequestType=0xc1, recipient=interface)
+	 *      0x49 wLength=16 (polled)
+	 *      0x56/0x42/0x4e wLength=8 (one-time probes)
+	 *  - Vendor OUT request (bmRequestType=0x41):
+	 *      bRequest=0x53, wValue=0x0002, wLength=0
+	 *    which causes the device to reset and re-enumerate as 0xb65e.
+	 *
+	 * The device may STALL the 0x53 request while performing the reset.
+	 */
+	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x49, 0xc1, 0, 0,
+			     buf, sizeof(buf), USB_CTRL_GET_TIMEOUT);
+	if (ret < 0)
+		hid_dbg(hdev, "boot-mode probe 0x49 failed: %d\n", ret);
+
+	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x56, 0xc1, 0, 0,
+			     buf, 8, USB_CTRL_GET_TIMEOUT);
+	if (ret < 0)
+		hid_dbg(hdev, "boot-mode probe 0x56 failed: %d\n", ret);
+
+	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x42, 0xc1, 0, 0,
+			     buf, 8, USB_CTRL_GET_TIMEOUT);
+	if (ret < 0)
+		hid_dbg(hdev, "boot-mode probe 0x42 failed: %d\n", ret);
+
+	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x4e, 0xc1, 0, 0,
+			     buf, 8, USB_CTRL_GET_TIMEOUT);
+	if (ret < 0)
+		hid_dbg(hdev, "boot-mode probe 0x4e failed: %d\n", ret);
+
+	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x56, 0xc1, 0, 0,
+			     buf, 8, USB_CTRL_GET_TIMEOUT);
+	if (ret < 0)
+		hid_dbg(hdev, "boot-mode probe 0x56 (2) failed: %d\n", ret);
+
+	/* Poll 0x49 briefly (Windows issues multiple times at ~15ms cadence) */
+	for (i = 0; i < 16; i++) {
+		ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x49, 0xc1, 0, 0,
+				     buf, sizeof(buf), USB_CTRL_GET_TIMEOUT);
+		if (ret >= 0)
+			break;
+		msleep(15);
+	}
+
+	ret = usb_control_msg(udev, usb_sndctrlpipe(udev, 0), 0x53, 0x41, 0x0002, 0,
+			     NULL, 0, USB_CTRL_SET_TIMEOUT);
+	if (ret < 0) {
+		/* A STALL here is expected on some firmware revisions during reset. */
+		if (ret == -EPIPE || ret == -EPROTO || ret == -EIO)
+			ret = 0;
+		else
+			hid_warn(hdev, "boot->normal request failed: %d\n", ret);
+	}
+
+	/* Give the device a moment to tear down and re-enumerate */
+	msleep(50);
+
+	kfree(buf);
+	return ret;
+}
 
 /* Packet sequence templates for each effect type */
 static const enum t500rs_seq_packet t500rs_seq_constant[] = {
@@ -1478,7 +1563,22 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   }
 
   hid_dbg(tmff2->hdev, "T500RS: Initializing HID mode\n");
-
+ 
+  if (tmff2->hdev->product == TMT500RS_PC_BOOT_ID) {
+  	int ret = t500rs_request_normal_mode(tmff2->hdev);
+  	if (ret == 0) {
+  		hid_info(tmff2->hdev, "Boot mode switch initiated, device should re-enumerate as normal mode\n");
+      /* Special code for boot mode switch. We return "resource temporarily unavailable"
+       * c.f. https://en.wikipedia.org/wiki/Errno.h
+       */
+  		return -EAGAIN; 
+  	} else {
+  		hid_err(tmff2->hdev, "Boot mode switch failed: %d, stopping\n", ret);
+  		/* return " 	Protocol not supported " */
+      return -EPROTONOSUPPORT;
+  	}
+  }
+ 
   /* Allocate device data */
   t500rs = kzalloc(sizeof(*t500rs), GFP_KERNEL);
   if (!t500rs) {
@@ -1596,12 +1696,12 @@ err_alloc:
 
 /* Cleanup T500RS device */
 static int t500rs_wheel_destroy(void *data) {
-  struct t500rs_device_entry *t500rs = data;
+   struct t500rs_device_entry *t500rs = data;
 
-  if (!t500rs) {
-    pr_warn("t500rs_wheel_destroy: NULL data pointer\n");
-    return 0;
-  }
+   if (!t500rs) {
+     /* Expected for boot mode devices that return -ENODEV before allocation */
+     return 0;
+   }
 
   T500RS_DBG(t500rs, "T500RS: Cleaning up\n");
 

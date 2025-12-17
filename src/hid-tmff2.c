@@ -756,6 +756,7 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			break;
 
 		case TMT500RS_PC_ID:
+		case TMT500RS_PC_BOOT_ID:
 			if ((ret = t500rs_populate_api(tmff2)))
 				goto wheel_err;
 			break;
@@ -795,8 +796,11 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	tmff2->input_dev = list_entry(hdev->inputs.next, struct hid_input, list)->input;
 
 	if ((ret = tmff2_wheel_init(tmff2))) {
-		hid_err(hdev, "init failed\n");
-		goto init_err;
+		/* For all errors but -EAGAIN (boot mode switch for T500RS for instance), we throw init error */
+		if (ret != -EAGAIN) {
+			hid_err(hdev, "init failed\n");
+			goto init_err;
+		}
 	}
 
 	return 0;
@@ -873,6 +877,7 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
 	/* t500rs */
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT500RS_PC_BOOT_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT500RS_PC_ID)},
 	/* t248 PC*/
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},

@@ -118,6 +118,7 @@ int tspc_populate_api(struct tmff2_device_entry *tmff2);
 #define TMT300RS_PS3_ADV_ID	0xb66f
 #define TMT300RS_PS4_NORM_ID	0xb66d
 
+#define TMT500RS_PC_BOOT_ID	0xb65d
 #define TMT500RS_PC_ID		0xb65e
 
 #define TMT248_PC_ID		0xb696
