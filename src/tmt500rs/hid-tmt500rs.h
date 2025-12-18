@@ -57,8 +57,13 @@
 #define T500RS_SAT_INERTIA 100
 
 /* Hardware limits */
-#define T500RS_MAX_EFFECTS 16
-#define T500RS_MAX_HW_EFFECTS T500RS_MAX_EFFECTS
+/* Advertise 15 logical effect slots to the framework (logical IDs 0..14).
+ * The device/hardware ID space remains 0..15 (16 entries), but we avoid using
+ * the hardware slot 0 (driver maps logical -> hw as logical+1). This prevents
+ * producing invalid hw_id == 16 when logical IDs of 0..15 are allowed.
+ */
+#define T500RS_MAX_EFFECTS 15
+#define T500RS_MAX_HW_EFFECTS 16
 #define T500RS_BUFFER_LENGTH 32 /* HID report max packet size */
 #define T500RS_HID_TIMEOUT 1000 /* 1 second */
 
