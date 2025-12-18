@@ -1107,11 +1107,12 @@ static int t500rs_upload_effect(void *data,
   }
 
   /* Validate common parameters */
-  if (effect->direction > 35999) {
-    hid_err(t500rs->hdev, "Direction %u exceeds maximum 35999\n",
-            effect->direction);
-    return -EINVAL;
-  }
+  /* Direction is provided by the Linux FF subsystem as 0..65535 (u16).
+   * The device expects 0..35999 (0.01° units); scaling is done by
+   * t500rs_scale_direction() when sending packets. Accept the full u16
+   * range here instead of rejecting values >35999 (e.g. 49152).
+   */
+  /* no validation needed here */
   if (effect->replay.delay > 65535) {
     hid_err(t500rs->hdev, "Delay %u exceeds maximum 65535\n",
             effect->replay.delay);
