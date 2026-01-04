@@ -197,17 +197,15 @@ static int tspc_send_open(struct t300rs_device_entry *tspc)
 	return 0;
 }
 
-static int tspc_open(void *data, int open_mode)
+static void tspc_open(void *data, int open_mode)
 {
 	struct t300rs_device_entry *tspc = data;
 
 	if (!tspc)
-		return -ENODEV;
+		return;
 
 	if (open_mode)
 		tspc_send_open(tspc);
-
-	return tspc->open(tspc->input_dev);
 }
 
 static int tspc_send_close(struct t300rs_device_entry *tspc)
@@ -226,18 +224,15 @@ static int tspc_send_close(struct t300rs_device_entry *tspc)
 	return 0;
 }
 
-static int tspc_close(void *data, int open_mode)
+static void tspc_close(void *data, int open_mode)
 {
 	struct t300rs_device_entry *tspc = data;
 
 	if (!tspc)
-		return -ENODEV;
+		return;
 
 	if (open_mode)
 		tspc_send_close(tspc);
-
-	tspc->close(tspc->input_dev);
-	return 0;
 }
 
 static int tspc_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
@@ -267,9 +262,6 @@ static int tspc_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	report_list = &tspc->hdev->report_enum[HID_OUTPUT_REPORT].report_list;
 	tspc->report = list_entry(report_list->next, struct hid_report, list);
 	tspc->ff_field = tspc->report->field[0];
-
-	tspc->open = tspc->input_dev->open;
-	tspc->close = tspc->input_dev->close;
 
 	if ((ret = tspc_interrupts(tspc)))
 		goto interrupt_err;
