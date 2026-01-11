@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: GPL-2.0-or-later  
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *  HID driver for Thrustmaster T500RS wheel base that provides Force feedback
  *
- *  Protocol documentation: docs/T500RS_USB_Protocol_Analysis.md
- * 
+ *  Protocol documentation: docs/T500RS_FFBEFFECTS.md
+ *
  *  Copyright (c) 2025 Casimir Bonnet <casimir.bonnet@gmail.com>
  */
 
@@ -70,7 +70,7 @@ static inline u8 t500rs_scale_mag_u7(int magnitude) {
   if (magnitude > 32767)
     magnitude = 32767;
 
-  /* Use 32-bit arithmetic to prevent overflow */
+  /* Use long long arithmetic to prevent overflow */
   return (u8)((magnitude * 127LL) / 32767);
 }
 
@@ -227,7 +227,7 @@ static void t500rs_build_r04_periodic(struct t500rs_pkt_r04_periodic_ramp *p,
                                       u8 code, u8 magnitude, s8 offset,
                                       u8 phase, u16 period_ms) {
   /* Byte order per Windows USB captures (example: 04 2a 00 06 00 3f 0a 00):
-   *   b0=T500RS_PKT_PERIODIC, b1=code, b2=reserved1, b3=mag, b4=offset,
+   * b0=T500RS_PKT_PERIODIC, b1=code, b2=reserved1, b3=mag, b4=offset,
    * b5=phase, b6-b7=period
    */
   memset(p, 0, sizeof(*p));
@@ -366,7 +366,7 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
 /*
  * Build a 0x05 conditional effect packet.
  *
- * Per captures (T500RS_USB_Protocol_Analysis.md):
+ * Per captures (T500RS_FFBEFFECTS.md):
  * - packet structure with u8 coefficients and proper field layout
  * - Coefficients are sent as 0-10 scale (not zero)
  * - Center and deadband are scaled from Linux FFB ranges
@@ -391,7 +391,7 @@ static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
   p->right_coeff = (u8)((right_coeff * 10) / 32767);
   p->left_coeff = (u8)((left_coeff * 10) / 32767);
 
-  /* Scale center from Linux ±32767 range to device s16 LE (approx ±500) */
+  /* Scale center from Linux +-32767 range to device s16 LE (approx +-500) */
   p->center = cpu_to_le16((s16)(center / 65));
 
   /* Scale deadband from Linux 0-65535 range to device u16 LE (0-1008) */
@@ -446,7 +446,7 @@ static inline u8 t500rs_scale_envelope_level(u16 os_ffb_level) {
   if (os_ffb_level > 32767)
     os_ffb_level = 32767;
 
-  /* Use 32-bit arithmetic to prevent overflow */
+  /* Use long long arithmetic to prevent overflow */
   return (u8)((os_ffb_level * 255LL) / 32767);
 }
 
@@ -470,8 +470,7 @@ static void t500rs_build_r02_envelope(struct t500rs_pkt_r02_envelope *p,
   p->subtype = subtype;
 
   /*
-   * CRITICAL FIRMWARE BUG WORKAROUND:
-   * Per T500RS_USB_Protocol_Analysis.md, the device firmware rejects
+   * Per T500RS_EFFECTS.md, the device firmware rejects
    * non-zero envelope values for periodic and constant effects with
    * EPROTO (-71). Only ramp effects can safely use envelopes.
    *
@@ -504,18 +503,25 @@ const signed short t500rs_effects[] = {
     FF_SAW_DOWN, FF_RAMP,   FF_GAIN,       FF_AUTOCENTER, -1};
 
 /* Forward declarations to avoid implicit declarations before worker uses them */
-static int t500rs_send_hid(struct t500rs_device_entry *t500rs, const u8 *data,
+static int t500rs_send_hid(struct t500rs_device_entry *t500rs, u8 *data,
                            size_t len);
+
 static inline int t500rs_send_stop(struct t500rs_device_entry *t500rs,
                                    u8 hw_effect_id);
+
 static int t500rs_set_autocenter(void *data, u16 autocenter);
+
 static int t500rs_set_range(void *data, u16 range);
+
 static int t500rs_upload_effect(void *data,
                                 const struct tmff2_effect_state *state);
+
 static int t500rs_update_effect(void *data,
                                 const struct tmff2_effect_state *state);
+
 static int t500rs_play_effect(void *data,
                               const struct tmff2_effect_state *state);
+
 static int t500rs_stop_effect(void *data,
                               const struct tmff2_effect_state *state);
 
@@ -544,16 +550,19 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
     case T500RS_SEQ_STOP:
       ret = t500rs_send_stop(t500rs, hw_id);
       break;
+
     case T500RS_SEQ_SYNC_42_05:
       buf[0] = 0x42;
       buf[1] = 0x05;
       ret = t500rs_send_hid(t500rs, buf, 2);
       break;
+
     case T500RS_SEQ_SYNC_42_04:
       buf[0] = 0x42;
       buf[1] = 0x04;
       ret = t500rs_send_hid(t500rs, buf, 2);
       break;
+
     case T500RS_SEQ_ENVELOPE: {
       struct t500rs_pkt_r02_envelope *env =
           (struct t500rs_pkt_r02_envelope *)buf;
@@ -572,6 +581,7 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r02_envelope));
       break;
     }
+
     case T500RS_SEQ_CONSTANT: {
       s8 level = t500rs_scale_const_with_direction(effect->u.constant.level,
                                                    effect->direction);
@@ -580,6 +590,7 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_r03_const));
       break;
     }
+
     case T500RS_SEQ_PERIODIC_RAMP: {
       if (effect->type == FF_RAMP) {
         struct t500rs_pkt_r04_periodic_ramp *p =
@@ -610,6 +621,7 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
         break;
       break;
     }
+
     case T500RS_SEQ_CONDITION_X: {
       u8 saturation = 0;
       const struct ff_condition_effect *cond = &effect->u.condition[0];
@@ -638,6 +650,7 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r05_condition));
       break;
     }
+
     case T500RS_SEQ_CONDITION_Y: {
       u8 saturation = 0;
       /* Y-axis: use condition[1] if available, else zeros */
@@ -667,6 +680,7 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r05_condition));
       break;
     }
+
     case T500RS_SEQ_MAIN: {
       u8 effect_type = 0;
       switch (effect->type) {
@@ -712,19 +726,24 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
       default:
         return -EINVAL;
       }
+
       u16 duration_ms = effect->replay.length ? effect->replay.length : 0xffff;
       u16 delay_ms = effect->replay.delay;
+
       struct t500rs_pkt_r01_main *m = (struct t500rs_pkt_r01_main *)buf;
       ret = t500rs_build_r01_main(m, hw_id, effect_type, duration_ms, delay_ms,
                                   param_sub, env_sub);
       if (ret)
         break;
+
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r01_main));
       break;
     }
+
     default:
       ret = -EINVAL;
     }
+
     if (ret) {
       hid_err(t500rs->hdev,
               "Sequence failed at step %zu/%zu (packet type 0x%02x): %d\n",
@@ -756,7 +775,6 @@ static int t500rs_set_gain(void *data, u16 gain) {
   hid_info(t500rs->hdev, "FFB: set_gain %u -> device %u\n", gain,
            device_gain_byte);
 
-  /* Safe buffer access with bounds checking */
   buf[0] = T500RS_PKT_GAIN;
   buf[1] = device_gain_byte;
 
@@ -769,7 +787,7 @@ static int t500rs_set_gain(void *data, u16 gain) {
 }
 
 /* Send data via HID output report (blocking) */
-static int t500rs_send_hid(struct t500rs_device_entry *t500rs, const u8 *data,
+static int t500rs_send_hid(struct t500rs_device_entry *t500rs, u8 *data,
                            size_t len) {
   int ret;
 
@@ -780,16 +798,18 @@ static int t500rs_send_hid(struct t500rs_device_entry *t500rs, const u8 *data,
     return -EINVAL;
   }
 
-  ret = hid_hw_output_report(t500rs->hdev, (u8 *)data, len);
+  ret = hid_hw_output_report(t500rs->hdev, data, len);
   if (ret < 0) {
     hid_err(t500rs->hdev, "HID output report failed: %d\n", ret);
     return ret;
   }
+
   if (ret != len) {
     hid_err(t500rs->hdev,
             "HID output report truncated: sent %d, expected %zu\n", ret, len);
     return -EIO;
   }
+
   return 0;
 }
 
@@ -801,19 +821,19 @@ static int t500rs_send_hid(struct t500rs_device_entry *t500rs, const u8 *data,
  */
 static inline int t500rs_send_stop(struct t500rs_device_entry *t500rs,
                                    u8 hw_effect_id) {
-  u8 *buf;
   struct t500rs_r41_cmd *r41;
   if (!t500rs)
     return -ENODEV;
-  buf = t500rs->send_buffer;
-  if (!buf)
+
+  r41 = (struct t500rs_r41_cmd *)t500rs->send_buffer;
+  if (!r41)
     return -ENOMEM;
-  r41 = (struct t500rs_r41_cmd *)buf;
+
   r41->id = 0x41;
   r41->effect_id = hw_effect_id;
   r41->command = 0x00; /* STOP */
   r41->arg = 0x01;
-  return t500rs_send_hid(t500rs, buf, sizeof(*r41));
+  return t500rs_send_hid(t500rs, (u8 *)r41, sizeof(*r41));
 }
 
 /*
@@ -821,18 +841,19 @@ static inline int t500rs_send_stop(struct t500rs_device_entry *t500rs,
  */
 static inline int t500rs_send_start(struct t500rs_device_entry *t500rs,
                                     u8 hw_effect_id) {
-  u8 *buf;
   struct t500rs_r41_cmd *r41;
   if (!t500rs)
     return -ENODEV;
 
-  buf = t500rs->send_buffer;
-  r41 = (struct t500rs_r41_cmd *)buf;
+  r41 = (struct t500rs_r41_cmd *)t500rs->send_buffer;
+  if (!r41)
+    return -ENOMEM;
+
   r41->id = 0x41;
   r41->effect_id = hw_effect_id;
   r41->command = 0x41; /* START */
   r41->arg = 0x01;
-  return t500rs_send_hid(t500rs, buf, sizeof(*r41));
+  return t500rs_send_hid(t500rs, (u8 *)r41, sizeof(*r41));
 }
 
 /* Upload constant force effect */
@@ -866,7 +887,7 @@ static int t500rs_upload_constant(struct t500rs_device_entry *t500rs,
 /*
  * Upload spring/damper/friction/inertia effect.
  *
- * Per Windows captures (T500RS_USB_Protocol_Analysis.md):
+ * Per Windows captures (T500RS_FFBEFFECTS.md):
  * - 0x01 packet: direction=0x4000, code1=0x002a, code2=0x0038
  * - Two 0x05 packets: X-axis (code 0x2a) and Y-axis (code 0x38)
  * - Saturation values 0x54 (84) for spring, 0x64 (100) for damper/friction
@@ -926,7 +947,7 @@ static int t500rs_upload_condition(struct t500rs_device_entry *t500rs,
 /*
  * Upload periodic effect (sine, square, triangle, saw).
  *
- * Per Windows captures (T500RS_USB_Protocol_Analysis.md):
+ * Per Windows captures (T500RS_FFBEFFECTS.md):
  * - Waveform type is NOT encoded in USB packets; determined by Linux FFB subsystem
  * - 0x01 packet: direction, duration, delay, code1=0x000e, code2=0x001c
  * - 0x02 packet: envelope with subtype 0x1c
@@ -1004,7 +1025,7 @@ static int t500rs_upload_periodic(struct t500rs_device_entry *t500rs,
 /*
  * Upload ramp effect.
  *
- * Per Windows captures (T500RS_USB_Protocol_Analysis.md):
+ * Per Windows captures (T500RS_FFBEFFECTS.md):
  * - Ramp uses same 0x04 packet structure as periodic (code 0x2a)
  * - Packet sequence: 0x01 + 0x02 + 0x04 + 0x41
  * - Start/end levels encoded in magnitude/offset fields
@@ -1108,7 +1129,7 @@ static int t500rs_upload_effect(void *data,
 
   /* Validate common parameters */
   /* Direction is provided by the Linux FF subsystem as 0..65535 (u16).
-   * The device expects 0..35999 (0.01° units); scaling is done by
+   * The device expects 0..35999 (0.01 degree units); scaling is done by
    * t500rs_scale_direction() when sending packets. Accept the full u16
    * range here instead of rejecting values >35999 (e.g. 49152).
    */
@@ -1254,6 +1275,7 @@ static int t500rs_update_effect(void *data,
     t500rs_build_r03_constant(r3, (u8)(param_sub & 0xff), signed_level);
     return t500rs_send_hid(t500rs, (u8 *)r3, sizeof(*r3));
   }
+
   case FF_PERIODIC: {
     /* Apply direction projection to magnitude and adjust phase if needed */
     u16 phase_raw = effect->u.periodic.phase;
@@ -1263,6 +1285,7 @@ static int t500rs_update_effect(void *data,
     u8 offset = t500rs_scale_periodic_offset(effect->u.periodic.offset);
     u16 period_ms = effect->u.periodic.period;
     u16 param_sub, env_sub;
+
     if (period_ms == 0) {
       hid_err(t500rs->hdev, "Periodic effect period cannot be zero\n");
       return -EINVAL;
@@ -1275,20 +1298,24 @@ static int t500rs_update_effect(void *data,
                               period_ms);
     return t500rs_send_hid(t500rs, buf, sizeof(*p));
   }
+
   case FF_RAMP: {
     u16 duration_ms = effect->replay.length;
     if (duration_ms == 0) {
       hid_err(t500rs->hdev, "Ramp effect duration cannot be zero\n");
       return -EINVAL;
     }
+
     u16 param_sub, env_sub;
     t500rs_index_to_subtypes(hw_id, &param_sub, &env_sub);
     struct t500rs_pkt_r04_periodic_ramp *p =
         (struct t500rs_pkt_r04_periodic_ramp *)buf;
     t500rs_build_r04_ramp(p, (u8)(param_sub & 0xff), effect->u.ramp.start_level,
                           effect->u.ramp.end_level, duration_ms);
+
     return t500rs_send_hid(t500rs, buf, sizeof(*p));
   }
+
   case FF_SPRING:
   case FF_DAMPER:
   case FF_FRICTION:
@@ -1329,12 +1356,14 @@ static int t500rs_update_effect(void *data,
       saturation = T500RS_SAT_DAMPER; /* Default to damper level */
       break;
     }
+
     struct t500rs_pkt_r05_condition *p = (struct t500rs_pkt_r05_condition *)buf;
     t500rs_build_r05_condition(p, (u8)(param_sub & 0xff), cond->right_coeff,
                                cond->left_coeff, saturation, cond->deadband,
                                cond->center);
     return t500rs_send_hid(t500rs, buf, sizeof(*p));
   }
+
   default:
     return 0;
   }
@@ -1403,14 +1432,13 @@ static int t500rs_set_range(void *data, u16 range) {
   u16 range_value;
 
   /* Validate range - minimum 40 degrees, maximum 1080 degrees */
-  if (range < T500RS_RANGE_MIN) {
+  if (range < T500RS_RANGE_MIN)
     range = T500RS_RANGE_MIN;
-  }
-  if (range > T500RS_RANGE_MAX) {
-    range = T500RS_RANGE_MAX;
-  }
 
-  /* Use DMA-safe preallocated buffer */
+  if (range > T500RS_RANGE_MAX)
+    range = T500RS_RANGE_MAX;
+
+  /* Use preallocated buffer */
   buf = t500rs->send_buffer;
 
   T500RS_DBG(t500rs, "Setting wheel range to %u degrees\n", range);
@@ -1448,8 +1476,9 @@ static int t500rs_set_range(void *data, u16 range) {
 /* Initialize T500RS device */
 static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   struct t500rs_device_entry *t500rs = NULL;
-  u8 *init_buf; /* Will use send_buffer for DMA-safe transfers */
+  u8 *init_buf; /* Will use send_buffer for transfers */
   int ret;
+
   /* Sanity check protocol main-upload packet size against documentation */
   BUILD_BUG_ON(sizeof(struct t500rs_pkt_r01_main) != 15);
 
@@ -1458,9 +1487,10 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
     pr_err("t500rs_wheel_init: NULL tmff2 structure\n");
     return -EINVAL;
   }
+
   if (!tmff2->hdev || !tmff2->input_dev) {
-    pr_err("t500rs_wheel_init: Invalid tmff2 structure (missing hdev or "
-           "input_dev)\n");
+    pr_err("t500rs_wheel_init: Invalid tmff2 structure"
+           " (missing hdev or input_dev)\n");
     return -EINVAL;
   }
 
@@ -1505,25 +1535,22 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   init_buf[0] = 0x42;
   init_buf[1] = 0x04;
   ret = t500rs_send_hid(t500rs, init_buf, 2);
-  if (ret) {
+  if (ret)
     hid_warn(t500rs->hdev, "Init command 0x42 0x04 failed: %d\n", ret);
-  }
 
   memset(init_buf, 0, 2);
   init_buf[0] = 0x42;
   init_buf[1] = 0x05;
   ret = t500rs_send_hid(t500rs, init_buf, 2);
-  if (ret) {
+  if (ret)
     hid_warn(t500rs->hdev, "Init command 0x42 0x05 failed: %d\n", ret);
-  }
 
   memset(init_buf, 0, 2);
   init_buf[0] = 0x42;
   init_buf[1] = 0x00;
   ret = t500rs_send_hid(t500rs, init_buf, 2);
-  if (ret) {
+  if (ret)
     hid_warn(t500rs->hdev, "Init command 0x42 0x00 failed: %d\n", ret);
-  }
 
   /* Report 0x40 - Enable FFB (4 bytes)
    * Magic value seen in captures that enables FFB on the base.
@@ -1534,9 +1561,8 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   init_buf[2] = 0x42;
   init_buf[3] = 0x7b;
   ret = t500rs_send_hid(t500rs, init_buf, 4);
-  if (ret) {
+  if (ret)
     hid_warn(t500rs->hdev, "Init command 2 (0x40 enable) failed: %d\n", ret);
-  }
 
   /* Report 0x40 - Disable built-in autocenter (4 bytes) */
   memset(init_buf, 0, 4);
@@ -1549,9 +1575,8 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   init_buf[2] = 0x00;
   init_buf[3] = 0x00;
   ret = t500rs_send_hid(t500rs, init_buf, 4);
-  if (ret) {
+  if (ret)
     hid_warn(t500rs->hdev, "Init command 3 (0x40 config) failed: %d\n", ret);
-  }
 
   /* Report 0x43 - Set global gain (2 bytes)
    * Start at maximum device gain; the FFB gain callback will adjust later.
@@ -1560,9 +1585,8 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   init_buf[0] = 0x43;
   init_buf[1] = 0xFF;
   ret = t500rs_send_hid(t500rs, init_buf, 2);
-  if (ret) {
+  if (ret)
     hid_warn(t500rs->hdev, "Init command 4 (0x43) failed: %d\n", ret);
-  }
 
   hid_info(t500rs->hdev, "T500RS initialized successfully (HID mode)\n");
   T500RS_DBG(t500rs, "Buffer: %zu bytes\n", t500rs->buffer_length);

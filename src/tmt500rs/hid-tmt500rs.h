@@ -1,17 +1,17 @@
-// SPDX-License-Identifier: GPL-2.0-or-later  
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *  T500RS Force Feedback Protocol Constants and Structures for
  *  Thrustmaster T500RS wheel base.
  *
- *  Protocol documentation: docs/T500RS_USB_Protocol_Analysis.md
+ *  Protocol documentation: docs/T500RS_FFBEFFECTS.md
  *  This header defines all protocol-specific constants and packet structures
  *  for the Thrustmaster T500RS racing wheel force feedback implementation.
  *
  *  Copyright (c) 2025 Casimir Bonnet <casimir.bonnet@gmail.com>
  */
 
-#ifndef __T500RS_H
-#define __T500RS_H
+#ifndef __HID_TMT500RS_H
+#define __HID_TMT500RS_H
 
 #include <linux/types.h>
 
@@ -113,7 +113,7 @@ extern const signed short t500rs_effects[];
  *
  * Packet format:
  * - b0: packet type (0x01)
- * - b1: hardware effect slot ID (0-15, assigned by driver)
+ * - b1: hardware effect slot ID (1-15, assigned by driver)
  * - b2: effect type (T500RS_EFFECT_* constants)
  * - b3: control flags (always 0x40)
  * - b4-b5: duration in milliseconds (LE)
@@ -125,7 +125,7 @@ extern const signed short t500rs_effects[];
  */
 struct t500rs_pkt_r01_main {
    u8 id;                /* b0: T500RS_PKT_MAIN */
-   u8 effect_id;         /* b1: hardware effect slot ID (0-15) */
+   u8 effect_id;         /* b1: hardware effect slot ID (1-15) */
    u8 effect_type;       /* b2: effect type (T500RS_EFFECT_*) */
    u8 control;           /* b3: always T500RS_CONTROL_DEFAULT (0x40) */
    __le16 duration_ms;   /* b4-b5: duration in ms (LE) */
@@ -148,10 +148,11 @@ struct t500rs_pkt_r01_main {
  * - b2: reserved (0x00)
  * - b3: magnitude (0-127, scaled from SDL 0-32767)
  * - b4: offset (signed -127 to +127, scaled from SDL -32768 to +32767)
- * - b5: phase (0-255 for 360°, scaled from SDL 0-35999)
+ * - b5: phase (0-255 for 360 degrees, scaled from SDL 0-35999)
  * - b6-b7: period in milliseconds (LE, no Hz conversion!)
  *
- * For ramp effects: phase=0, period=ramp duration, magnitude/offset encode start/end levels.
+ * For ramp effects: phase=0, period=ramp duration, magnitude/offset encode
+ * start/end levels.
  */
 struct t500rs_pkt_r04_periodic_ramp {
    u8 id;            /* b0: T500RS_PKT_PERIODIC */
@@ -172,15 +173,15 @@ struct t500rs_pkt_r04_periodic_ramp {
  * - b2: reserved (always 0x00)
  * - b3: right coefficient (u8, 0-10 scale)
  * - b4: left coefficient (u8, 0-10 scale)
- * - b5-b6: center/offset (s16 LE, scaled from Linux ±32767 range)
+ * - b5-b6: center/offset (s16 LE, scaled from Linux +-32767 range)
  * - b7-b8: deadband (u16 LE, scaled from Linux 0-65535 range)
  * - b9: right saturation (0-100, controls effect strength)
  * - b10: left saturation (0-100, controls effect strength)
  *
  * Scaling (from Linux FFB to device):
- * - Coefficients: (value * 10) / 32767 → 0-10 u8
- * - Center: value / 65 → s16 LE (approx ±500 range)
- * - Deadband: value / 65 → u16 LE (0-1008 range)
+ * - Coefficients: (value * 10) / 32767 -> 0-10 u8
+ * - Center: value / 65 -> s16 LE (approx +-500 range)
+ * - Deadband: value / 65 -> u16 LE (0-1008 range)
  * - Saturation: 0-100 (no scaling)
  */
 struct t500rs_pkt_r05_condition {
