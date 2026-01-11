@@ -67,8 +67,8 @@ struct tmff2_device_entry {
 	spinlock_t lock;
 
 	/* Pending control changes to be applied from workqueue context */
-	uint16_t pending_gain_value;
-	uint16_t pending_autocenter_value;
+	uint16_t pending_gain;
+	uint16_t pending_autocenter;
 	unsigned long pending_flags;
 
 	int allow_scheduling;

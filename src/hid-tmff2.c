@@ -243,30 +243,35 @@ static ssize_t gain_store(struct device *dev,
 
 	gain = value;
 
-	if (!tmff2->set_gain) 
+	if (!tmff2->set_gain)
 		return count;
 
 	/* Rationale: two-level gain model
-	* - The input API's set_gain (pg) is the in-game gain (0..GAIN_MAX).
+	* - The input API's set_gain (pending_gain) is the in-game gain (0..GAIN_MAX).
 	* - This driver also exposes a device/system gain via sysfs param `gain`.
 	* - The device callback receives the product: (pg * gain) / GAIN_MAX.
 	*   See worker at tmff2->set_gain(... (pg * gain) / GAIN_MAX ).
 	* When the sysfs `gain` changes, we trigger a recompute by pushing
-	* pending_gain_value = GAIN_MAX here so the effective device gain becomes
+	* pending_gain = GAIN_MAX here so the effective device gain becomes
 	* exactly the sysfs value (GAIN_MAX * gain / GAIN_MAX == gain) and future
 	* in-game set_gain calls continue to multiply in.
 	*
 	* References:
-	* - docs/FFBEFFECTS.md: section "FF_GAIN" shows a dedicated device gain path.
-	* - docs/T500RS_USB_Protocol_Analysis.md: Report glossary mentions 0x43 (gain), 
-	*   i.e., device-side gain separate from per-effect magnitudes; drivers should 
+	* - docs/T300RS_FFBEFFECTS.md: section "FF_GAIN" shows a dedicated
+	*   device gain path.
+	*
+	* - docs/T500RS_FFBEFFECTS.md: Report glossary mentions 0x43 (gain),
+	*   i.e. device-side gain separate from per-effect magnitudes; drivers should
 	*   expose both levels.
 	*/
 	unsigned long flags;
 	spin_lock_irqsave(&tmff2->lock, flags);
-	tmff2->pending_gain_value = GAIN_MAX;
+
+	tmff2->pending_gain = GAIN_MAX;
 	__set_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+
 	spin_unlock_irqrestore(&tmff2->lock, flags);
+
 	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
 		schedule_delayed_work(&tmff2->work, 0);
 	return count;
@@ -294,7 +299,7 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 
 	/* Defer to workqueue: store pending gain and schedule */
 	spin_lock_irqsave(&tmff2->lock, flags);
-	tmff2->pending_gain_value = value;
+	tmff2->pending_gain = value;
 	__set_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
 	spin_unlock_irqrestore(&tmff2->lock, flags);
 
@@ -317,7 +322,7 @@ static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 
 	/* Defer to workqueue: store pending autocenter and schedule */
 	spin_lock_irqsave(&tmff2->lock, flags);
-	tmff2->pending_autocenter_value = value;
+	tmff2->pending_autocenter = value;
 	__set_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
 	spin_unlock_irqrestore(&tmff2->lock, flags);
 
@@ -335,33 +340,34 @@ static void tmff2_work_handler(struct work_struct *w)
 	unsigned long time_now;
 	__u16 effect_delay, effect_length;
 
+	uint16_t pending_gain = 0, pending_autocenter = 0;
+	bool set_gain = 0, set_autocenter = 0;
 
 	if (!tmff2)
 		return;
 
 	/* Apply pending control changes (gain/autocenter) in process context */
-	{
-		unsigned long f2;
-		uint16_t pg = 0, pac = 0;
-		int do_gain = 0, do_ac = 0;
-		spin_lock_irqsave(&tmff2->lock, f2);
-		if (test_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags)) {
-			pg = tmff2->pending_gain_value;
-			__clear_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
-			do_gain = 1;
-		}
-		if (test_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags)) {
-			pac = tmff2->pending_autocenter_value;
-			__clear_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
-			do_ac = 1;
-		}
-		spin_unlock_irqrestore(&tmff2->lock, f2);
+	spin_lock_irqsave(&tmff2->lock, lock_flags);
 
-		if (do_gain && tmff2->set_gain)
-			tmff2->set_gain(tmff2->data, (pg * gain) / GAIN_MAX);
-		if (do_ac && tmff2->set_autocenter)
-			tmff2->set_autocenter(tmff2->data, pac);
+	if (test_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags)) {
+		pending_gain = tmff2->pending_gain;
+		__clear_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+		set_gain = 1;
 	}
+
+	if (test_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags)) {
+		pending_autocenter = tmff2->pending_autocenter;
+		__clear_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
+		set_autocenter = 1;
+	}
+
+	spin_unlock_irqrestore(&tmff2->lock, lock_flags);
+
+	if (set_gain && tmff2->set_gain)
+		tmff2->set_gain(tmff2->data, (pending_gain * gain) / GAIN_MAX);
+
+	if (set_gain && tmff2->set_autocenter)
+		tmff2->set_autocenter(tmff2->data, pending_autocenter);
 
 	for (effect_id = 0; effect_id < tmff2->max_effects; ++effect_id) {
 		unsigned long actions = 0;
