@@ -143,8 +143,8 @@ static inline u16 t500rs_scale_direction(u16 os_ffb_dir) {
  * - effect_id: 16-bit LE hardware effect slot (0..15 for now)
  * - duration_ms: duration in milliseconds
  * - delay_ms: delay before effect starts
- * - code1: parameter subtype (used by 0x03/0x04/0x05)
- * - code2: envelope subtype (used by 0x02), or second conditional subtype
+ * - param_sub: parameter subtype (used by 0x03/0x04/0x05)
+ * - envelope_sub: envelope subtype (used by 0x02), or second conditional subtype
  *
  * Per Windows captures, effect_type values are:
  * - 0x00 = Constant
@@ -160,7 +160,7 @@ static inline u16 t500rs_scale_direction(u16 os_ffb_dir) {
  */
 static int t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
                                  u8 effect_type, u16 duration_ms, u16 delay_ms,
-                                 u16 code1, u16 code2) {
+                                 u16 param_sub, u16 envelope_sub) {
   /* Validate effect_id */
   if (effect_id >= T500RS_MAX_HW_EFFECTS) {
     pr_err("t500rs: Invalid effect_id %u (max %d)\n",
@@ -185,9 +185,9 @@ static int t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
   }
 
   /* Validate packet codes are non-zero (0x0000 likely indicates bug) */
-  if (code1 == 0 || code2 == 0) {
-    pr_warn("t500rs: Suspicious packet codes: code1=0x%04x code2=0x%04x\n",
-            code1, code2);
+  if (param_sub == 0 || envelope_sub == 0) {
+    pr_warn("t500rs: Suspicious packet codes: param_sub=0x%04x envelope_sub=0x%04x\n",
+            param_sub, envelope_sub);
   }
 
   memset(p, 0, sizeof(*p));
@@ -198,8 +198,8 @@ static int t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
   p->duration_ms = cpu_to_le16(duration_ms);
   p->delay_ms = cpu_to_le16(delay_ms);
   p->reserved1 = 0;
-  p->packet_code_1 = cpu_to_le16(code1);
-  p->packet_code_2 = cpu_to_le16(code2);
+  p->packet_code_1 = cpu_to_le16(param_sub);
+  p->packet_code_2 = cpu_to_le16(envelope_sub);
   p->reserved2 = 0;
 
   return 0;
@@ -381,7 +381,7 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
  */
 static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
                                        u8 code, s16 right_coeff, s16 left_coeff,
-                                       u8 saturation, u16 deadband, s16 center) {
+                                       u8 right_sat, u8 left_sat, u16 deadband, s16 center) {
   memset(p, 0, sizeof(*p));
   p->id = T500RS_PKT_CONDITIONAL;
   p->code = code;
@@ -397,8 +397,8 @@ static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
   /* Scale deadband from Linux 0-65535 range to device u16 LE (0-1008) */
   p->deadband = cpu_to_le16((u16)(deadband / 65));
 
-  p->right_sat = saturation;
-  p->left_sat = saturation;
+  p->right_sat = right_sat;
+  p->left_sat = left_sat;
 }
 
 /*
@@ -623,59 +623,31 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
     }
 
     case T500RS_SEQ_CONDITION_X: {
-      u8 saturation = 0;
       const struct ff_condition_effect *cond = &effect->u.condition[0];
-      switch (effect->type) {
-      case FF_SPRING:
-        saturation = T500RS_SAT_SPRING;
-        break;
-      case FF_DAMPER:
-        saturation = T500RS_SAT_DAMPER;
-        break;
-      case FF_FRICTION:
-        saturation = T500RS_SAT_FRICTION;
-        break;
-      case FF_INERTIA:
-        saturation = T500RS_SAT_INERTIA;
-        break;
-      default:
-        saturation = T500RS_SAT_DAMPER;
-        break;
-      }
+      /* Scale saturation from Linux FFB range (0..65535) to device range (0..100) */
+      u8 right_sat = (cond->right_saturation * 100) / 65535;
+      u8 left_sat = (cond->left_saturation * 100) / 65535;
+      
       struct t500rs_pkt_r05_condition *p =
           (struct t500rs_pkt_r05_condition *)buf;
       t500rs_build_r05_condition(p, (u8)(param_sub), cond->right_coeff,
-                                 cond->left_coeff, saturation, cond->deadband,
+                                 cond->left_coeff, right_sat, left_sat, cond->deadband,
                                  cond->center);
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r05_condition));
       break;
     }
 
     case T500RS_SEQ_CONDITION_Y: {
-      u8 saturation = 0;
       /* Y-axis: use condition[1] if available, else zeros */
       const struct ff_condition_effect *cond = &effect->u.condition[1];
-      switch (effect->type) {
-      case FF_SPRING:
-        saturation = T500RS_SAT_SPRING;
-        break;
-      case FF_DAMPER:
-        saturation = T500RS_SAT_DAMPER;
-        break;
-      case FF_FRICTION:
-        saturation = T500RS_SAT_FRICTION;
-        break;
-      case FF_INERTIA:
-        saturation = T500RS_SAT_INERTIA;
-        break;
-      default:
-        saturation = T500RS_SAT_DAMPER;
-        break;
-      }
+      /* Scale saturation from Linux FFB range (0..65535) to device range (0..100) */
+      u8 right_sat = (cond->right_saturation * 100) / 65535;
+      u8 left_sat = (cond->left_saturation * 100) / 65535;
+      
       struct t500rs_pkt_r05_condition *p =
           (struct t500rs_pkt_r05_condition *)buf;
       t500rs_build_r05_condition(p, (u8)(env_sub & 0xff), cond->right_coeff,
-                                 cond->left_coeff, saturation, cond->deadband,
+                                 cond->left_coeff, right_sat, left_sat, cond->deadband,
                                  cond->center);
       ret = t500rs_send_hid(t500rs, buf, sizeof(struct t500rs_pkt_r05_condition));
       break;
@@ -888,7 +860,7 @@ static int t500rs_upload_constant(struct t500rs_device_entry *t500rs,
  * Upload spring/damper/friction/inertia effect.
  *
  * Per Windows captures (T500RS_FFBEFFECTS.md):
- * - 0x01 packet: direction=0x4000, code1=0x002a, code2=0x0038
+ * - 0x01 packet: direction=0x4000, param_sub=0x002a, envelope_sub=0x0038
  * - Two 0x05 packets: X-axis (code 0x2a) and Y-axis (code 0x38)
  * - Saturation values 0x54 (84) for spring, 0x64 (100) for damper/friction
  */
@@ -949,7 +921,7 @@ static int t500rs_upload_condition(struct t500rs_device_entry *t500rs,
  *
  * Per Windows captures (T500RS_FFBEFFECTS.md):
  * - Waveform type is NOT encoded in USB packets; determined by Linux FFB subsystem
- * - 0x01 packet: direction, duration, delay, code1=0x000e, code2=0x001c
+ * - 0x01 packet: direction, duration, delay, param_sub=0x000e, envelope_sub=0x001c
  * - 0x02 packet: envelope with subtype 0x1c
  * - 0x04 packet: code=0x2a (NOT 0x0e!), magnitude, offset, phase, period_ms
  * - Period is in MILLISECONDS (no Hz*100 conversion)
@@ -1242,9 +1214,17 @@ static int t500rs_stop_effect(void *data,
   return t500rs_send_stop(t500rs, (u8)hw_id);
 }
 
-/* Update effect - send parameter updates without re-uploading */
+/*
+ * Update effect - send parameter updates without re-uploading
+ *
+ * Note: Only parameter-specific packets (0x03, 0x04, 0x05) are updated.
+ * Duration and delay changes (from 0x01 packet) require full re-upload.
+ * This limitation is acceptable as duration/delay modifications are rare
+ * in gaming applications and the hardware may not support runtime updates
+ * of these fields.
+ */
 static int t500rs_update_effect(void *data,
-                                const struct tmff2_effect_state *state) {
+                                 const struct tmff2_effect_state *state) {
   struct t500rs_device_entry *t500rs = data;
   const struct ff_effect *effect = &state->effect;
   const struct ff_effect *old = &state->old;
@@ -1277,6 +1257,14 @@ static int t500rs_update_effect(void *data,
   }
 
   case FF_PERIODIC: {
+    /* Skip update if parameters unchanged */
+    if (effect->u.periodic.magnitude == old->u.periodic.magnitude &&
+        effect->u.periodic.offset == old->u.periodic.offset &&
+        effect->u.periodic.phase == old->u.periodic.phase &&
+        effect->u.periodic.period == old->u.periodic.period &&
+        effect->direction == old->direction)
+      return 0;
+
     /* Apply direction projection to magnitude and adjust phase if needed */
     u16 phase_raw = effect->u.periodic.phase;
     u8 mag = t500rs_scale_periodic_with_direction(effect->u.periodic.magnitude,
@@ -1300,6 +1288,12 @@ static int t500rs_update_effect(void *data,
   }
 
   case FF_RAMP: {
+    /* Skip update if parameters unchanged */
+    if (effect->u.ramp.start_level == old->u.ramp.start_level &&
+        effect->u.ramp.end_level == old->u.ramp.end_level &&
+        effect->replay.length == old->replay.length)
+      return 0;
+
     u16 duration_ms = effect->replay.length;
     if (duration_ms == 0) {
       hid_err(t500rs->hdev, "Ramp effect duration cannot be zero\n");
@@ -1337,35 +1331,19 @@ static int t500rs_update_effect(void *data,
       return 0;
 
     t500rs_index_to_subtypes(hw_id, &param_sub, &env_sub);
-    /* Calculate saturation value based on effect type */
-    u8 saturation;
-    switch (effect->type) {
-    case FF_SPRING:
-      saturation = T500RS_SAT_SPRING;
-      break;
-    case FF_DAMPER:
-      saturation = T500RS_SAT_DAMPER;
-      break;
-    case FF_FRICTION:
-      saturation = T500RS_SAT_FRICTION;
-      break;
-    case FF_INERTIA:
-      saturation = T500RS_SAT_INERTIA;
-      break;
-    default:
-      saturation = T500RS_SAT_DAMPER; /* Default to damper level */
-      break;
-    }
+    /* Scale saturation from Linux FFB range (0..65535) to device range (0..100) */
+    u8 right_sat = (cond->right_saturation * 100) / 65535;
+    u8 left_sat = (cond->left_saturation * 100) / 65535;
 
     struct t500rs_pkt_r05_condition *p = (struct t500rs_pkt_r05_condition *)buf;
     t500rs_build_r05_condition(p, (u8)(param_sub & 0xff), cond->right_coeff,
-                               cond->left_coeff, saturation, cond->deadband,
+                               cond->left_coeff, right_sat, left_sat, cond->deadband,
                                cond->center);
     return t500rs_send_hid(t500rs, buf, sizeof(*p));
   }
 
   default:
-    return 0;
+    return -EOPNOTSUPP;
   }
 }
 
@@ -1382,14 +1360,12 @@ static int t500rs_set_autocenter(void *data, u16 autocenter) {
   autocenter_percent = (u8)((autocenter * 100) / 65535);
 
   /* Wine compatibility: Some games (e.g., LFS under Wine) set autocenter to
-   * 100%% at startup and never release it. That leaves a permanent strong
-   * centering force which masks/overpowers other forces. To avoid this, ignore
-   * requests that try to set maximum autocenter (100%). Disabling (0) is still
-   * honored; lower values are allowed. */
+   * 100%% at startup. That leaves a permanent strong
+   * centering force which masks/overpowers other forces. To avoid this, message the
+   * requests for the user to revert the gain value to expected value. */
   if (autocenter_percent >= 100) {
     hid_warn(t500rs->hdev,
-             "Ignoring 100%% autocenter request (Wine/LFS compatibility)");
-    return 0;
+             "Game might have set autocenter to 100%%, you might want to set it back to expected value using oversteer (or keep oversteer open) or system gain.");
   }
 
   buf = t500rs->send_buffer;
@@ -1397,19 +1373,25 @@ static int t500rs_set_autocenter(void *data, u16 autocenter) {
     return -ENOMEM;
 
   /* Enable autocenter: Report 0x40 0x04 0x01 */
-  buf[0] = 0x40;
-  buf[1] = 0x04;
-  buf[2] = 0x01; /* Enable */
-  buf[3] = 0x00;
+  {
+    struct t500rs_pkt_r40_config *config = (struct t500rs_pkt_r40_config *)buf;
+    config->id = 0x40;
+    config->subcmd = 0x04;
+    config->data1 = 0x01; /* Enable */
+    config->data2 = 0x00;
+  }
   ret = t500rs_send_hid(t500rs, buf, 4);
   if (ret)
     return ret;
 
   /* Set autocenter strength: Report 0x40 0x03 [value] */
-  buf[0] = 0x40;
-  buf[1] = 0x03;
-  buf[2] = autocenter_percent; /* 0-100 percentage */
-  buf[3] = 0x00;
+  {
+    struct t500rs_pkt_r40_config *config = (struct t500rs_pkt_r40_config *)buf;
+    config->id = 0x40;
+    config->subcmd = 0x03;
+    config->data1 = autocenter_percent; /* 0-100 percentage */
+    config->data2 = 0x00;
+  }
   ret = t500rs_send_hid(t500rs, buf, 4);
   if (ret)
     return ret;
@@ -1447,10 +1429,13 @@ static int t500rs_set_range(void *data, u16 range) {
   range_value = range * 60;
 
   /* Send Report 0x40 0x11 [value_lo] [value_hi] to set range */
-  buf[0] = 0x40;
-  buf[1] = 0x11;
-  buf[2] = range_value & 0xFF;        /* Low byte first (little-endian) */
-  buf[3] = (range_value >> 8) & 0xFF; /* High byte second */
+  {
+    struct t500rs_pkt_r40_config *config = (struct t500rs_pkt_r40_config *)buf;
+    config->id = 0x40;
+    config->subcmd = 0x11;
+    config->data1 = range_value & 0xFF;        /* Low byte first (little-endian) */
+    config->data2 = (range_value >> 8) & 0xFF; /* High byte second */
+  }
 
   ret = t500rs_send_hid(t500rs, buf, 4);
   if (ret) {
@@ -1555,25 +1540,26 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode) {
   /* Report 0x40 - Enable FFB (4 bytes)
    * Magic value seen in captures that enables FFB on the base.
    */
-  memset(init_buf, 0, 4);
-  init_buf[0] = 0x40;
-  init_buf[1] = 0x11;
-  init_buf[2] = 0x42;
-  init_buf[3] = 0x7b;
+  {
+    struct t500rs_pkt_r40_config *config = (struct t500rs_pkt_r40_config *)init_buf;
+    config->id = 0x40;
+    config->subcmd = 0x11;
+    config->data1 = 0x42;
+    config->data2 = 0x7b;
+  }
   ret = t500rs_send_hid(t500rs, init_buf, 4);
   if (ret)
     hid_warn(t500rs->hdev, "Init command 2 (0x40 enable) failed: %d\n", ret);
 
   /* Report 0x40 - Disable built-in autocenter (4 bytes) */
-  memset(init_buf, 0, 4);
-  init_buf[0] = 0x40;
-  init_buf[1] = 0x04;
-  /* b2..b3 = 0x0000 -> disable autocenter.
-   * Keep explicit zeros even though memset() clears them, to document the
-   * wire image.
-   */
-  init_buf[2] = 0x00;
-  init_buf[3] = 0x00;
+  {
+    struct t500rs_pkt_r40_config *config = (struct t500rs_pkt_r40_config *)init_buf;
+    config->id = 0x40;
+    config->subcmd = 0x04;
+    // Keep explicit zeros even though memset() clears them.
+    config->data1 = 0x00;
+    config->data2 = 0x00;
+  }
   ret = t500rs_send_hid(t500rs, init_buf, 4);
   if (ret)
     hid_warn(t500rs->hdev, "Init command 3 (0x40 config) failed: %d\n", ret);
