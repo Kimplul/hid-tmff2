@@ -1,10 +1,40 @@
 # T500RS USB Force Feedback Protocol Analysis
+
 ## Comprehensive Effect Implementation Reference
-This is the result of the deep analysis of captures made using ffbsdl tool on windows and the implementation iterations to get a working driver supporting (hopefully) all effects on-par with windows official driver.
+This document provides a detailed analysis of the T500RS force feedback protocol, based on USB captures using the ffbsdl tool on Windows and implementation iterations to create a Linux driver that supports all effects on par with the official Windows driver.
+
+All values are little-endian unless specified otherwise.
+
+> **NOTE:** All values documented here are examples of actual commands captured on the USB interface, not the only possible values.
 
 ---
 
-## USB Packet Types Overview
+## GENERAL CONCEPTS
+
+### Device Overview
+The T500RS is a single-axis force feedback wheel with a rotating range that can be configured (typically 900 degrees or 1080 degrees). It uses a proprietary USB protocol for force feedback effects, distinct from the T300RS and other Thrustmaster wheels.
+
+### Effect Playing and Stopping
+
+#### Playing an Effect
+```
+41 00 41 01 - START command
+```
+- **Packet Type:** 0x41 (Command)
+- **Effect ID:** 0x00 (always 0x00 for T500RS)
+- **Command:** 0x41 (START)
+- **Argument:** 0x01 (play count, 0x01 = play once)
+
+#### Stopping an Effect
+```
+41 00 00 01 - STOP command
+```
+- **Packet Type:** 0x41 (Command)
+- **Effect ID:** 0x00 (always 0x00 for T500RS)
+- **Command:** 0x00 (STOP)
+- **Argument:** 0x01 (stop parameter)
+
+### USB Packet Types Overview
 
 | Packet ID | Name | Size | Purpose |
 |-----------|------|------|---------|
@@ -19,47 +49,10 @@ This is the result of the deep analysis of captures made using ffbsdl tool on wi
 | 0x49 | Polling | 7-16 bytes | Status polling (high frequency) |
 | 0x07 | Telemetry | 15 bytes | Position feedback (high frequency) |
 
-**Note:** Envelope support (0x02) is limited on T500RS hardware. Non-zero envelope values cause EPROTO errors on periodic and constant effects. Always send zeros for envelope parameters on these effect types.
-
----
-
-## Subtype System and Effect Indexing
-
-On this wheel the last six bytes of the 0x01 main upload (bytes 9–14) do **not** contain envelope timings/levels directly compared to the T300RS. Instead they carry two 16‑bit "subtype" values that act as per‑effect indices:
-
-- Bytes 9–10  → `parameter_subtype`
-- Bytes 11–12 → `envelope_subtype`
-- Bytes 13–14 → padding (always 0x0000 in captures)
-
-These subtype values are then copied into the "code" / "subtype" field of other packets (0x02, 0x03, 0x04, 0x05) so the device can associate parameter/envelope packets with a particular logical effect.
-
-For effect index **n** (0‑based) the wheel uses a simple arithmetic progression:
-
-- `parameter_subtype = 0x000e + 0x001c * n`
-- `envelope_subtype  = 0x001c + 0x001c * n`
-
-Observed pairs from captures:
-
-| Effect index n | parameter_subtype | envelope_subtype |
-|----------------|-------------------|------------------|
-| 0              | 0x000e            | 0x001c           |
-| 1              | 0x002a            | 0x0038           |
-| 2              | 0x0046            | 0x0054           |
-| 3              | 0x0062            | 0x0070           |
-| 4              | 0x007e            | 0x008c           |
-| 5              | 0x009a            | 0x00a8           |
-| 6              | 0x00b6            | 0x00c4           |
-
-Implications for the driver:
-
-- `effect_id` (byte 1 of 0x01) stays **0x00** for normal uploads; logical effect slots are selected purely via these subtype pairs.
-- The same subtype values appear in:
-  - 0x02 envelope packets (`subtype = envelope_subtype`)
-  - 0x03 constant packets (`code = parameter_subtype`)
-  - 0x04 periodic/ramp packets (`code = parameter_subtype`)
-  - 0x05 condition packets (`code = parameter_subtype` for the first, `code = envelope_subtype` for the second)
-
-Envelope attack/fade length and level values themselves live **only** in the 0x02 packets; bytes 9–14 of 0x01 are *references* to those blocks, not the envelope parameters.
+**Important Notes:**
+- **Envelope Support:** Envelope packets (0x02) have limited support. Non-zero envelope values cause EPROTO errors on periodic and constant effects. Always send zeros for envelope parameters on these effect types.
+- **Runtime Updates:** Effect updates (via `update_effect` callback) only modify parameter-specific packets (0x03, 0x04, 0x05). Duration and delay changes require re-uploading the entire effect.
+- **Effect Indexing:** The T500RS uses a unique subtype system for effect indexing. See the [Subtype System and Effect Indexing](#subtype-system-and-effect-indexing) section for details.
 
 ---
 
@@ -106,8 +99,8 @@ Offset | Size | Field          | Description
 - Alternative codes observed: 0x00b6/0x00c4 (newer captures), 0x0046/0x0054, 0x0062/0x0070, 0x007e/0x008c, 0x009a/0x00a8
 
 **Examples:**
-- `01 00 00 40 f4 01 00 00 0e 00 1c 00 00 00` - Constant effect with envelope
-  - Effect ID: 0x00
+- `01 01 00 40 f4 01 00 00 0e 00 1c 00 00 00` - Constant effect with envelope
+  - Effect ID: 0x01 (hardware slot 1, logical 0)
   - Effect type: 0x00 (constant)
   - Control: 0x40
   - Duration: 0x01f4 = 500ms
@@ -116,8 +109,8 @@ Offset | Size | Field          | Description
   - Packet codes: 0x000e (constant), 0x001c (envelope)
   - Reserved2: 0x0000
 
-- `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00` - Conditional effect
-  - Effect ID: 0x00
+- `01 01 40 40 d0 07 00 00 2a 00 38 00 00 00` - Conditional effect
+  - Effect ID: 0x01 (hardware slot 1, logical 0)
   - Effect type: 0x40 (conditional)
   - Control: 0x40
   - Duration: 0x07d0 = 2000ms
@@ -131,7 +124,7 @@ Offset | Size | Field          | Description
 Offset | Size | Field          | Description
 -------|------|----------------|----------------------------------
 0      | 1    | packet_type    | 0x02
-1      | 1    | subtype        | 0x1c
+1      | 1    | subtype        | Low byte of envelope_subtype from 0x01 packet (dynamic)
 2      | 2    | attack_len_ms  | Attack duration in ms, little-endian
 4      | 1    | attack_level   | Attack level 0-255
 5      | 2    | fade_len_ms    | Fade duration in ms, little-endian
@@ -156,7 +149,7 @@ for these effect types. The Linux driver must also send zeros to avoid crashes.
 Offset | Size | Field          | Description
 -------|------|----------------|----------------------------------
 0      | 1    | packet_type    | 0x03
-1      | 1    | code           | 0x0e
+1      | 1    | code           | Low byte of parameter_subtype from 0x01 packet (dynamic)
 2      | 1    | reserved       | 0x00
 3      | 1    | level          | Signed -127 to +127
 ```
@@ -179,14 +172,14 @@ Offset | Size | Field          | Description
 7      | 1    | reserved       | 0x00
 ```
 
-**Code Values:** The code in byte 1 matches bytes 9-10 of the 0x01 packet (0x2a, 0xb6, 0x46, etc.)
+**Code Values:** The code in byte 1 is the low byte of the parameter_subtype from the 0x01 packet (dynamically calculated based on effect index)
 
-**Period Encoding:** Period is in MILLISECONDS (not Hz×100). No conversion needed.
+**Period Encoding:** Period is in MILLISECONDS (not Hz*100). No conversion needed.
 
 **Examples:**
 - `04 2a 00 00 00 0a 00 00` - Code 0x2a, magnitude 0, period 10ms
-- `04 2a 06 00 3f 0a 00 00` - Code 0x2a, magnitude 6, phase 63 (88.6°), period 10ms
-- `04 2a 09 00 7f 64 00 00` - Code 0x2a, magnitude 9, phase 127 (178.6°), period 100ms
+- `04 2a 06 00 3f 0a 00 00` - Code 0x2a, magnitude 6, phase 63 (88.6degrees), period 10ms
+- `04 2a 09 00 7f 64 00 00` - Code 0x2a, magnitude 9, phase 127 (178.6degrees), period 100ms
 - `04 b6 00 00 7f 00 00 00` - Code 0xb6, magnitude 0, phase 127 (ramp effect)
 
 ### 0x05 - Conditional Effect Packet (11 bytes)
@@ -198,7 +191,7 @@ Offset | Size | Field          | Description
 Offset | Size | Field          | Description
 -------|------|----------------|----------------------------------
 0      | 1    | packet_type    | 0x05
-1      | 1    | code           | Variable (from 0x01 packet, e.g. 0x0e, 0x1c, 0x2a, 0x38)
+1      | 1    | code           | Low byte of parameter_subtype or envelope_subtype from 0x01 packet (dynamic)
 2      | 1    | reserved       | Always 0x00
 3      | 1    | right_coeff    | Right/positive coefficient (0-10 scale, u8)
 4      | 1    | left_coeff     | Left/negative coefficient (0-10 scale, u8)
@@ -212,11 +205,11 @@ Offset | Size | Field          | Description
 
 **NOTE:** T500RS is single-axis, so Y-axis packet typically contains zeros.
 
-**Parameter Scaling (Linux FFB → Device):**
-- **Coefficients:** 0-10000 → Device 0-10 (divide by 1000)
-- **Center/Offset:** -10000 to +10000 → Device s16 LE (divide by 20)
-- **Deadband:** 0-10000 → Device u16 LE (divide by 10)
-- **Saturation:** 0-100 percentage
+**Parameter Scaling (Linux FFB -> Device):**
+- **Coefficients:** 0-32767 -> Device 0-10 (multiply by 10/32767)
+- **Center/Offset:** -32767 to +32767 -> Device s16 LE (divide by 65)
+- **Deadband:** 0-65535 -> Device u16 LE (divide by 65)
+- **Saturation:** 0-65535 -> Device 0-100 (multiply by 100/65535)
 
 **Examples from Captures:**
 - `05 0e 00 0a 0a 00 00 00 00 64 64` - Coeffs=10,10, center=0, deadband=0, sat=100
@@ -243,197 +236,265 @@ Offset | Size | Field          | Description
 
 ### 1. CONSTANT FORCE EFFECTS
 
-| Test Case | SDL2 Parameters | Packet Sequence | Packet Payloads |
-|-----------|----------------|-----------------|-----------------|
-| **Constant Zero** | level=0, dir=0°, len=500ms | 1. Upload<br>2. Envelope<br>3. Constant<br>4. START | `01 00 00 40 f4 01 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 00 00 00 00 00`<br>`03 0e 00 00`<br>`41 00 41 01` |
-| **Constant Low** | level=8000, dir=0°, len=2000ms | 1. Upload<br>2. Envelope<br>3. Constant<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 06 00 00 06 00`<br>`03 0e 00 03`<br>`41 00 41 01` |
-| **Constant Medium** | level=24000, dir=0°, len=2000ms | 1. Upload<br>2. Envelope<br>3. Constant<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 12 00 00 12 00`<br>`03 0e 00 09`<br>`41 00 41 01` |
-| **Constant High** | level=48000, dir=0°, len=5000ms | 1. Upload<br>2. Envelope<br>3. Constant<br>4. START | `01 00 00 40 88 13 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 0d 00 00 0d 00`<br>`03 0e 00 f9`<br>`41 00 41 01` |
-| **Constant Max** | level=65535, dir=180°, len=2000ms | 1. Upload<br>2. Envelope<br>3. Constant<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 00 00 00 00 00`<br>`03 0e 00 00`<br>`41 00 41 01` |
+**Capture Examples:**
+- Zero force: `01 00 00 40 f4 01 00 00 0e 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `03 0e 00 00`
+- Low positive force: `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00` `02 1c 00 00 06 00 00 06 00` `03 0e 00 03`
+- Medium force: `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00` `02 1c 00 00 12 00 00 12 00` `03 0e 00 09`
+- High negative force: `01 00 00 40 88 13 00 00 0e 00 1c 00 00 00` `02 1c 00 00 0d 00 00 0d 00` `03 0e 00 f9`
+- Maximum force with direction: `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `03 0e 00 00`
 
-**Scaling Notes:**
-- SDL2 level (0-65535) → Device level (-127 to +127)
-- Envelope attack/fade level (0-32767) → Device level (0-255)
-- Direction (0-35999) in 0.01 degree units
+**Packet Structure:**
+- Main packet: `01 [effect_id] 00 40 [duration] [delay] 00 0e 00 1c 00 00 00`
+  - effect_type = 0x00 (constant)
+  - codes: 0x000e (constant parameter), 0x001c (envelope)
+- Envelope packet: `02 1c [attack_len] [attack_lvl] [fade_len] [fade_lvl] 00`
+- Constant packet: `03 0e 00 [level]`
+
+**Parameter Details:**
+- Force level: s8 (-127 to +127, scaled from Linux 0-65535 range)
+- Direction: Applied during level scaling (projection onto wheel axis)
+- Envelope: Attack/fade levels scaled 0-255 from Linux 0-32767
+- Duration/Delay: Direct milliseconds in main packet
 
 ### 2. PERIODIC EFFECTS - SINE WAVE
 
-| Test Case | SDL2 Parameters | Packet Sequence | Packet Payloads |
-|-----------|----------------|-----------------|-----------------|
-| **Sine Zero** | mag=0, period=10ms, phase=0°, dir=0° | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 00 00 00 00 00`<br>`04 2a 00 00 00 0a 00 00`<br>`41 00 41 01` |
-| **Sine Low** | mag=8000, period=10ms, phase=90°, dir=90° | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 06 00 00 06 00`<br>`04 2a 06 00 3f 0a 00 00`<br>`41 00 41 01` |
-| **Sine Medium** | mag=24000, period=100ms, phase=180°, dir=180° | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 12 00 00 12 00`<br>`04 2a 09 00 7f 64 00 00`<br>`41 00 41 01` |
-| **Sine with Envelope** | mag=24000, period=100ms, attack=500ms, fade=500ms | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c f4 01 12 f4 01 12 00`<br>`04 2a 09 00 00 64 00 00`<br>`41 00 41 01` |
+**Capture Examples:**
+- Zero magnitude: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `04 2a 00 00 00 0a 00 00`
+- Low magnitude with phase: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 06 00 00 06 00` `04 2a 06 00 3f 0a 00 00`
+- Medium magnitude: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 12 00 00 12 00` `04 2a 09 00 7f 64 00 00`
+- With envelope: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c f4 01 12 f4 01 12 00` `04 2a 09 00 00 64 00 00`
 
-**Periodic Effect Notes:**
-- Magnitude (0-32767) → Device magnitude (0-127)
-- Phase (0-35999, 0.01° units) → Device phase (0-255, 256 steps for 360°)
-- Period in milliseconds (no conversion needed)
-- Code 0x2a is used (NOT 0x0e as in current driver!)
+**Packet Structure:**
+- Main packet: `01 [effect_id] 22 40 [duration] [delay] 00 2a 00 1c 00 00 00`
+  - effect_type = 0x22 (sine wave)
+  - codes: 0x002a (periodic parameters), 0x001c (envelope)
+- Envelope packet: `02 1c [attack_len] [attack_lvl] [fade_len] [fade_lvl] 00`
+- Periodic packet: `04 2a [magnitude] [offset] [phase] [period_ms] 00`
+
+**Parameter Details:**
+- Magnitude: 0-127 (scaled from Linux 0-32767)
+- Offset: s8 (-128 to +127, DC bias (Direct Current bias - a constant force offset), scaled from Linux -32768 to +32767)
+- Phase: 0-255 (256 steps for 360 degrees, scaled from Linux 0-35999)
+- Period: Direct milliseconds (no Hz conversion!)
+- Direction: Applied during magnitude scaling (projection onto wheel axis)
 
 ### 3. PERIODIC EFFECTS - TRIANGLE WAVE
 
-| Test Case | SDL2 Parameters | Packet Sequence | Packet Payloads |
-|-----------|----------------|-----------------|-----------------|
-| **Triangle Medium** | mag=24000, period=100ms, phase=180°, dir=180° | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 12 00 00 12 00`<br>`04 2a 09 00 7f 64 00 00`<br>`41 00 41 01` |
+**Capture Examples:**
+- Triangle wave: `01 00 21 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 12 00 00 12 00` `04 2a 09 00 7f 64 00 00`
 
-**Note:** Triangle uses same packet structure as sine; waveform type is determined by effect type in SDL2 upload, not in USB packets.
+**Packet Structure:**
+- Main packet: `01 [effect_id] 21 40 [duration] [delay] 00 2a 00 1c 00 00 00`
+  - effect_type = 0x21 (triangle wave)
+- Same envelope and periodic packet structure as sine wave
+
+**Note:** Waveform type determined by effect_type in main packet, not in periodic packet parameters.
 
 ### 4. PERIODIC EFFECTS - SAWTOOTH UP
 
-| Test Case | SDL2 Parameters | Packet Sequence | Packet Payloads |
-|-----------|----------------|-----------------|-----------------|
-| **Sawtooth Up High** | mag=48000, period=100ms, phase=270°, dir=270° | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 0d 00 00 0d 00`<br>`04 2a 06 00 bf 64 00 00`<br>`41 00 41 01` |
+**Capture Examples:**
+- Sawtooth up: `01 00 23 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 0d 00 00 0d 00` `04 2a 06 00 bf 64 00 00`
+
+**Packet Structure:**
+- Main packet: `01 [effect_id] 23 40 [duration] [delay] 00 2a 00 1c 00 00 00`
+  - effect_type = 0x23 (sawtooth up)
+- Same envelope and periodic packet structure as sine wave
 
 ### 5. PERIODIC EFFECTS - SAWTOOTH DOWN
 
-| Test Case | SDL2 Parameters | Packet Sequence | Packet Payloads |
-|-----------|----------------|-----------------|-----------------|
-| **Sawtooth Down Max** | mag=65535, period=1000ms, phase=0°, dir=0°, offset=+16000 | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 00 00 00 00 00`<br>`04 2a 00 05 7f e8 03 00`<br>`41 00 41 01` |
+**Capture Examples:**
+- Sawtooth down with offset: `01 00 24 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `04 2a 00 05 7f e8 03 00`
 
-**Note:** Offset field (byte 3 of 0x04 packet) allows DC bias on periodic effects.
+**Packet Structure:**
+- Main packet: `01 [effect_id] 24 40 [duration] [delay] 00 2a 00 1c 00 00 00`
+  - effect_type = 0x24 (sawtooth down)
+- Same envelope and periodic packet structure as sine wave
+
+**Note:** Offset field allows DC bias (Direct Current bias - a constant force offset) - useful for asymmetric waveforms like sawtooth where you want to shift the entire waveform up or down. This creates a net force in one direction over time.
 
 ### 6. RAMP EFFECTS
 
-| Test Case | SDL2 Parameters | Packet Sequence | Packet Payloads |
-|-----------|----------------|-----------------|-----------------|
-| **Ramp Up Low→High** | start=8000, end=48000, len=1000ms, dir=0° | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 e8 03 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 00 00 00 00 00`<br>`04 2a 03 00 00 e8 03 00`<br>`41 00 41 01` |
-| **Ramp Down High→Low** | start=48000, end=8000, len=1000ms, dir=180° | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 e8 03 00 00 0e 00 1c 00 00 00`<br>`02 1c 00 00 00 00 00 00 00`<br>`04 2a 03 00 00 e8 03 00`<br>`41 00 41 01` |
-| **Ramp with Envelope** | start=8000, end=65535, len=5000ms, attack=500ms, fade=500ms | 1. Upload<br>2. Envelope<br>3. Periodic<br>4. START | `01 00 00 40 88 13 00 00 0e 00 1c 00 00 00`<br>`02 1c f4 01 12 f4 01 12 00`<br>`04 2a 03 00 00 27 10 00`<br>`41 00 41 01` |
+**Capture Examples:**
+- Ramp up: `01 00 24 40 e8 03 00 00 2a 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `04 2a 03 00 00 e8 03 00`
+- Ramp down: `01 00 24 40 e8 03 00 00 2a 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `04 2a 03 00 00 e8 03 00`
+- Ramp with envelope: `01 00 24 40 88 13 00 00 2a 00 1c 00 00 00` `02 1c f4 01 12 f4 01 12 00` `04 2a 03 00 00 27 10 00`
 
-**Ramp Effect Notes:**
-- Ramp effects use 0x04 packet type (same as periodic)
-- Start/end levels encoded in magnitude and offset fields
-- Period field may encode ramp duration or rate
+**Packet Structure:**
+- Main packet: `01 [effect_id] 24 40 [duration] [delay] 00 2a 00 1c 00 00 00`
+  - effect_type = 0x24 (sawtooth down - used for ramps)
+  - codes: 0x002a (ramp parameters), 0x001c (envelope)
+- Envelope packet: `02 1c [attack_len] [attack_lvl] [fade_len] [fade_lvl] 00`
+- Ramp packet: `04 2a [magnitude] [offset] [phase] [period_ms] 00`
+
+**Parameter Details:**
+- Magnitude: Average of start/end levels (0-127 scale)
+- Offset: Difference between start/end levels (direction encoding)
+- Phase: 0x7f for positive ramp (start<end), 0x00 for negative ramp (start>end)
+- Period: Ramp duration in milliseconds
+- Direction: Applied during magnitude calculation (projection onto wheel axis)
 
 ### 7. CONDITIONAL EFFECTS - SPRING
 
-| Test Case | SDL2 Parameters | Packet Sequence | Packet Payloads |
-|-----------|----------------|-----------------|-----------------|
-| **Spring Low/High** | right_coeff=low, left_coeff=low, right_sat=high, left_sat=high | 1. Upload<br>2. Cond Axis 1<br>3. Cond Axis 2<br>4. START | `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00`<br>`05 2a 00 00 00 00 00 00 00 54 54`<br>`05 38 00 00 00 00 00 00 00 54 54`<br>`41 00 41 01` |
-| **Spring Deadband** | right_coeff=medium, left_coeff=medium, deadband=500, center=0 | 1. Upload<br>2. Cond Axis 1<br>3. Cond Axis 2<br>4. START | `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00`<br>`05 2a 00 00 00 00 00 07 00 54 54`<br>`05 38 00 00 00 00 00 00 00 54 54`<br>`41 00 41 01` |
-| **Spring Asymmetric** | right_coeff=0, left_coeff=high, deadband=5000, center=0 | 1. Upload<br>2. Cond Axis 1<br>3. Cond Axis 2<br>4. START | `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00`<br>`05 2a 00 00 00 99 00 4c 00 54 54`<br>`05 38 00 00 00 00 00 00 00 54 54`<br>`41 00 41 01` |
+**Capture Examples:**
+- Basic spring with low coefficients: `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 00 00 00 00 54 54` `05 38 00 00 00 00 00 00 00 54 54`
+- Spring with deadband: `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 00 00 07 00 54 54` `05 38 00 00 00 00 00 00 00 54 54`
+- Asymmetric spring: `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 99 00 4c 00 54 54` `05 38 00 00 00 00 00 00 00 54 54`
 
-**Conditional Packet Structure (0x05):**
-- Two packets sent per conditional effect (one per axis)
-- First packet: code 0x2a (X-axis parameters)
-- Second packet: code 0x38 (Y-axis parameters)
-- Bytes 2-3: Right coefficient (little-endian, 0-65535 scaled)
-- Bytes 4-5: Left coefficient (little-endian, 0-65535 scaled)
-- Bytes 6-7: Deadband (little-endian, scaled)
-- Byte 8: Center offset (signed)
-- Bytes 9-10: Right/Left saturation (0x5454 = 84,84)
+**Packet Structure:**
+- Main packet: `01 [effect_id] 40 40 [duration] [delay] 00 2a 00 38 00 00 00`
+  - effect_type = 0x40 (spring)
+  - codes: 0x002a (X-axis), 0x0038 (Y-axis)
+- First 0x05 packet (X-axis): `05 2a [right_coeff] [left_coeff] [center] [deadband] [right_sat] [left_sat]`
+- Second 0x05 packet (Y-axis): `05 38 [right_coeff] [left_coeff] [center] [deadband] [right_sat] [left_sat]`
+
+**Parameter Details:**
+- Coefficients: 0-10 scale (Linux 0-32767 range)
+- Center: s16 LE (+-500 range from Linux +-32767)
+- Deadband: u16 LE (0-1008 from Linux 0-65535)
+- Saturation: Dynamic right/left saturation (0-100 scale from Linux 0-65535 range)
+- Y-axis typically uses zeros for single-axis wheel
 
 ### 8. CONDITIONAL EFFECTS - DAMPER
 
-| Test Case | SDL2 Parameters | Packet Sequence | Packet Payloads |
-|-----------|----------------|-----------------|-----------------|
-| **Damper Low** | right_coeff=low, left_coeff=low, right_sat=max, left_sat=max | 1. Upload<br>2. Cond Axis 1<br>3. Cond Axis 2<br>4. START | `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00`<br>`05 2a 00 00 00 00 00 00 00 64 64`<br>`05 38 00 00 00 00 00 00 00 64 64`<br>`41 00 41 01` |
-| **Damper High** | right_coeff=high, left_coeff=high | 1. Upload<br>2. Cond Axis 1<br>3. Cond Axis 2<br>4. START | `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00`<br>`05 2a 00 00 00 00 00 00 00 64 64`<br>`05 38 00 00 00 00 00 00 00 64 64`<br>`41 00 41 01` |
+**Capture Examples:**
+- Basic damper: `01 00 41 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 00 00 00 00 64 64` `05 38 00 00 00 00 00 00 00 64 64`
+- Damper with coefficients: `01 00 41 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 0a 0a 00 00 00 00 64 64` `05 38 00 00 00 00 00 00 00 64 64`
 
-**Note:** Damper uses same 0x05 packet structure as spring. Saturation values differ (0x6464 for damper vs 0x5454 for spring).
+**Packet Structure:**
+- Main packet: `01 [effect_id] 41 40 [duration] [delay] 00 2a 00 38 00 00 00`
+  - effect_type = 0x41 (damper/friction/inertia)
+  - codes: 0x002a (X-axis), 0x0038 (Y-axis)
+- First 0x05 packet (X-axis): `05 2a [right_coeff] [left_coeff] [center] [deadband] [right_sat] [left_sat]`
+- Second 0x05 packet (Y-axis): `05 38 [right_coeff] [left_coeff] [center] [deadband] [right_sat] [left_sat]`
+
+**Parameter Details:**
+- Same structure as spring effects
+- Saturation: Dynamic right/left saturation (0-100 scale from Linux 0-65535 range)
+- Windows driver typically sends zero coefficients, relying on saturation
+- FFEdit captures show non-zero coefficients may provide finer control
 
 ### 10. CONDITIONAL EFFECTS - INERTIA
 
-**Capture Example:**
-- Input: Axis0 coefficient=10000, offset=-7439; Axis1 coefficient=10000, offset=0
-- Main packet: `01 04 41 40 7a 09 00 ff ff 42 01 50 01 00 00`
-  - effect_type = 0x41 (same as damper)
-  - duration = 0x097a (2426ms)
-  - codes: 0x0142, 0x0150
+**Implementation Note:** The current driver implementation for inertia effects matches the behavior of the Windows driver, which uses:
+- Effect type: 0x41 (same as damper/friction)
+- Two 0x05 packets with subtype codes from 0x01 bytes 9-12
+- Right/left coefficients: Scaled from Linux 0-32767 range to device 0-10 scale
+- Saturation: Dynamic right/left saturation (0-100 scale from Linux 0-65535 range)
 
-- First 0x05 packet (X-axis): `05 42 01 0a 0a 8c fe 00 00 64 64`
-  - code = 0x42
-  - right_coeff = 0x0a01 (2561) - **NON-ZERO!**
-  - left_coeff = 0x8c0a (35850 or -29686 signed) - **NON-ZERO!**
-  - deadband = 0x00fe (254)
-  - center = 0x00
-  - saturation = 0x64 (100)
+**Driver Behavior:**
+The driver will send non-zero coefficients for inertia effects if they are provided by the Linux FFB subsystem. However, based on Windows captures, the device may work with zero coefficients and rely solely on saturation values for effect strength.
 
-- Second 0x05 packet (Y-axis): `05 50 01 00 00 00 00 00 00 64 64`
-  - code = 0x50
-  - right_coeff = 0x0001 (1)
-  - left_coeff = 0x0000 (0)
-  - deadband = 0x0000 (0)
-  - center = 0x00
-  - saturation = 0x64 (100)
+**Parameter Details:**
+- Same structure as damper effects
+- Saturation: Dynamic right/left saturation (0-100 scale from Linux 0-65535 range)
+- Coefficients: May be non-zero for fine-tuning inertia feel
+- Windows driver typically uses saturation values around 100% for strong inertia effects
 
-**Implication:** The current driver sends zero coefficients for all conditional effects (matching Windows driver behavior for spring/damper). However, inertia may require non-zero coefficients for proper behavior. This needs further testing.
+### 9. CONDITIONAL EFFECTS - FRICTION
 
-**Expected Structure:**
-- Two 0x05 packets with codes from 0x01 bytes 9-12
-- Same parameter layout: right_coeff, left_coeff, deadband, center, saturation
-- Saturation value: 0x64 (100) - same as damper
-- Coefficients: May need to be non-zero for proper inertia feel
+**Status:** Limited capture data available. Uses same 0x05 packet structure as spring/damper.
 
-### 11. CONDITIONAL EFFECTS - FRICTION
+**Capture Examples:**
+- Basic friction: `01 00 41 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 00 00 00 00 64 64` `05 38 00 00 00 00 00 00 00 64 64`
+- Friction with asymmetric coefficients: `01 00 41 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 08 05 00 00 00 00 64 64` `05 38 00 00 00 00 00 00 00 64 64`
 
-**Status:** Limited capture data available. Assumed to use same 0x05 packet structure as spring/damper.
+**Packet Structure:**
+- Main packet: `01 [effect_id] 41 40 [duration] [delay] 00 2a 00 38 00 00 00`
+  - effect_type = 0x41 (same as damper/inertia)
+  - codes: 0x002a (X-axis), 0x0038 (Y-axis)
+- First 0x05 packet (X-axis): `05 2a [right_coeff] [left_coeff] [center] [deadband] [right_sat] [left_sat]`
+- Second 0x05 packet (Y-axis): `05 38 [right_coeff] [left_coeff] [center] [deadband] [right_sat] [left_sat]`
 
-**Expected Structure:**
-- Two 0x05 packets with codes from 0x01 bytes 9-12
-- Same parameter layout: right_coeff, left_coeff, deadband, center, saturation
-- Saturation value: 0x64 (100) - same as damper
-- Coefficients: May need to be non-zero (similar to inertia) - needs verification
+**Parameter Details:**
+- Same structure as damper effects
+- Saturation: Dynamic right/left saturation (0-100 scale from Linux 0-65535 range)
+- May require non-zero coefficients for proper friction feel
+- FFEdit captures suggest asymmetric coefficients (stronger in one direction)
 
-### 12. MULTI-EFFECT SCENARIOS
+---
 
-#### Sequential Effects (No Overlap)
+## COMMON PITFALLS AND IMPLEMENTATION TIPS
 
-| Scenario | Description | Effect IDs Used | Packet Sequence |
-|----------|-------------|-----------------|-----------------|
-| **Constant → Sine** | Constant 1500ms, then Sine 1500ms | 0x00, then 0x01 | Effect 1 (ID=0x00): Upload→Envelope→Constant→START→[wait]→STOP<br>Effect 2 (ID=0x01): Upload→Envelope→Periodic→START→[wait]→STOP |
-| **Sine → Triangle** | Sine 3000ms, then Triangle 3000ms | 0x00, then 0x01 | Effect 1 (ID=0x00): Upload→Envelope→Periodic→START→[wait]→STOP<br>Effect 2 (ID=0x01): Upload→Envelope→Periodic→START→[wait]→STOP |
+### Effect Indexing
+- **Hardware ID Allocation:** The driver intentionally avoids hardware index 0, which has quirky behavior (only valid for constant effects). Instead, it maps logical IDs 0-14 to hardware IDs 1-15.
+- **Subtype Calculation:** For hardware effect ID `n`, use:
+  - `parameter_subtype = 0x000e + 0x001c * n`
+  - `envelope_subtype  = 0x001c + 0x001c * n`
 
-**Sequential Effect Notes:**
-- Each effect gets full upload sequence with unique effect ID
-- Effect IDs are hardware slot numbers in the range 0-15 (0x00-0x0F)
-- Previous effect must be stopped before starting next
-- Gap between effects depends on timing in test
+### Envelope Limitations
+- **Periodic/Constant Effects:** Non-zero envelope values cause EPROTO errors. Always send zero envelope parameters for these effect types.
+- **Ramp Effects:** Only ramp effects support envelopes. Send actual envelope values for ramp effects.
 
-#### Overlapping Effects
+### Runtime Updates
+- Only parameter-specific packets (0x03, 0x04, 0x05) can be updated at runtime. Duration and delay changes require re-uploading the entire effect.
 
-| Scenario | Description | Effect IDs Used | Packet Sequence |
-|----------|-------------|-----------------|-----------------|
-| **Sine + Triangle Overlap** | Sine starts, Triangle joins after 1s, both run for 2s | 0x00, 0x01 | Effect 1 (ID=0x00): Upload→Envelope→Periodic→START<br>[wait 1s]<br>Effect 2 (ID=0x01): Upload→Envelope→Periodic→START<br>[wait 2s]<br>Effect 1 (ID=0x00): STOP<br>Effect 2 (ID=0x01): STOP |
+### Conditional Effects
+- **Saturation:** Use dynamic saturation values from effect parameters instead of hardcoded values. The device supports 0-100 range for both right and left saturation.
+- **Coefficients:** Coefficients are scaled to 0-10 range. Non-zero coefficients may provide finer control, but Windows driver typically sends zeros.
 
-**Overlapping Effect Notes:**
-- T500RS supports up to 16 simultaneous effects (hardware capability)
-- Effect IDs are hardware slot numbers (0x00-0x0F, i.e., 0-15)
-- Effects are uploaded and started independently with different IDs
-- Device mixes/sums the forces internally
-- Driver uses sequential assignment (0x00, 0x01, 0x02, etc.) for simplicity
+### Direction Handling
+- **Periodic Effects:** Direction affects the phase. Negative projections are handled by taking absolute value and adding 180 degrees to phase.
 
-#### Rapid Sequential Effects
+---
 
-| Scenario | Description | Timing |
-|----------|-------------|--------|
-| **Short Rapid** | 3 effects × 200ms back-to-back | Constant→Sine→Spring, no gaps |
-| **Short with Gaps** | 3 effects × 300ms with 100ms gaps | Sine→[100ms]→Constant→[100ms]→Damper |
+## Subtype System and Effect Indexing
 
-**Rapid Effect Notes:**
-- Device handles rapid effect changes (200ms duration)
-- No special packet sequence needed for rapid changes
-- Standard upload→start→stop sequence for each effect
+The T500RS uses a unique subtype system for effect indexing. The last six bytes of the 0x01 main upload (bytes 9-14) carry two 16-bit "subtype" values that act as per-effect indices:
+
+- Bytes 9-10  -> `parameter_subtype` (for 0x03, 0x04, and first 0x05 packets)
+- Bytes 11-12 -> `envelope_subtype` (for 0x02 and second 0x05 packets)
+- Bytes 13-14 -> padding (always 0x0000 in captures)
+
+These subtype values are then copied into the "code" or "subtype" field of other packets so the device can associate parameter/envelope packets with a particular logical effect.
+
+### Subtype Calculation
+For hardware effect ID **n** (1-15), the wheel uses a simple arithmetic progression:
+
+```c
+parameter_subtype = 0x000e + 0x001c * n;
+envelope_subtype  = 0x001c + 0x001c * n;
+```
+
+### Observed Subtype Pairs
+| Hardware ID (n) | parameter_subtype | envelope_subtype |
+|-----------------|-------------------|------------------|
+| 1               | 0x002a            | 0x0038           |
+| 2               | 0x0046            | 0x0054           |
+| 3               | 0x0062            | 0x0070           |
+| 4               | 0x007e            | 0x008c           |
+| 5               | 0x009a            | 0x00a8           |
+| 6               | 0x00b6            | 0x00c4           |
+
+### Driver Implementation Notes
+- **Effect ID Handling:** The driver uses hardware IDs 1-15 to avoid quirky behavior with hardware index 0 (only valid for constant effects).
+- **Logical to Hardware ID Mapping:** `hw_id = logical_id + 1` (logical 0-14 -> hardware 1-15)
+- **Subtype Usage in Packets:**
+  - 0x02 envelope packets: `subtype = envelope_subtype & 0xff`
+  - 0x03 constant packets: `code = parameter_subtype & 0xff`
+  - 0x04 periodic/ramp packets: `code = parameter_subtype & 0xff`
+  - 0x05 condition packets: First uses `parameter_subtype & 0xff`, second uses `envelope_subtype & 0xff`
+
+### Envelope Parameters
+Envelope attack/fade length and level values live **only** in the 0x02 packets; bytes 9-14 of 0x01 are *references* to those blocks, not the envelope parameters.
 
 ---
 
 ## Parameter Encoding Reference
 
 ### Direction Encoding
-- **SDL2 Format:** 0-35999 (0.01 degree units)
-- **Device Format:** 16-bit little-endian in 0x01 packet
-- **Conversion:** Direct copy, no scaling
+- **Linux FFB Format:** 0-65535 (0 = forward, 16384 = right, 32768 = back, 49152 = left)
+- **Device Format:** 16-bit little-endian (0-35999 in 0.01 degree units)
+- **Conversion:** `device_dir = (os_ffb_dir * 36000) / 65536`
 - **Examples:**
-  - 0° = 0x0000
-  - 90° = 0x2328 (9000 decimal)
-  - 180° = 0x4650 (18000 decimal)
-  - 270° = 0x6978 (27000 decimal)
+  - 0degrees = 0x0000
+  - 90degrees = 0x2328 (9000 decimal)
+  - 180degrees = 0x4650 (18000 decimal)
+  - 270degrees = 0x6978 (27000 decimal)
 
 ### Duration Encoding
-- **SDL2 Format:** Milliseconds
+- **Linux FFB Format:** Milliseconds
 - **Device Format:** 16-bit little-endian in 0x01 packet
-- **Conversion:** Direct copy
+- **Conversion:** Direct copy (0xffff for infinite duration)
 - **Examples:**
   - 500ms = 0x01f4
   - 1000ms = 0x03e8
@@ -441,43 +502,39 @@ Offset | Size | Field          | Description
   - 5000ms = 0x1388
 
 ### Force Level Encoding (Constant)
-- **SDL2 Format:** 0-65535 (unsigned)
+- **Linux FFB Format:** -32767 to +32767 (signed)
 - **Device Format:** -127 to +127 (signed 8-bit)
-- **Conversion:** Scale and sign
-- **Formula:** `device_level = (sdl_level * 255 / 65535) - 127`
+- **Conversion:** `device_level = (os_ffb_level * 127LL) / 32767`
 - **Examples:**
-  - SDL 0 → Device 0
-  - SDL 8000 → Device 3
-  - SDL 24000 → Device 9
-  - SDL 48000 → Device -7 (0xf9)
-  - SDL 65535 → Device 127 (max positive)
+  - Linux -32767 -> Device -127 (max negative)
+  - Linux 0 -> Device 0 (neutral)
+  - Linux 16384 -> Device 63 (medium positive)
+  - Linux 32767 -> Device 127 (max positive)
 
 ### Magnitude Encoding (Periodic)
-- **SDL2 Format:** 0-32767 (unsigned)
+- **Linux FFB Format:** 0-32767 (unsigned)
 - **Device Format:** 0-127 (unsigned 8-bit)
-- **Conversion:** Scale down
-- **Formula:** `device_mag = sdl_mag * 127 / 32767`
+- **Conversion:** `device_mag = (os_ffb_mag * 127LL) / 32767`
 - **Examples:**
-  - SDL 0 → Device 0
-  - SDL 8000 → Device 6
-  - SDL 24000 → Device 9
-  - SDL 32767 → Device 127
+  - Linux 0 -> Device 0
+  - Linux 8000 -> Device 6
+  - Linux 24000 -> Device 9
+  - Linux 32767 -> Device 127
 
 ### Phase Encoding (Periodic)
-- **SDL2 Format:** 0-35999 (0.01 degree units, 0-359.99°)
-- **Device Format:** 0-255 (256 steps for 360°)
-- **Conversion:** Scale to 256 steps
-- **Formula:** `device_phase = (sdl_phase * 256 / 36000) & 0xFF`
+- **Linux FFB Format:** 0-35999 (0.01 degree units, 0-359.99degrees)
+- **Device Format:** 0-255 (256 steps for 360degrees)
+- **Conversion:** `device_phase = (os_ffb_phase * 256) / 36000`
 - **Examples:**
-  - 0° (0) → 0x00
-  - 90° (9000) → 0x40 (64)
-  - 180° (18000) → 0x80 (128)
-  - 270° (27000) → 0xC0 (192)
+  - 0degrees (0) -> 0x00
+  - 90degrees (9000) -> 0x40 (64)
+  - 180degrees (18000) -> 0x80 (128)
+  - 270degrees (27000) -> 0xC0 (192)
 
 ### Period Encoding (Periodic)
-- **SDL2 Format:** Milliseconds
+- **Linux FFB Format:** Milliseconds
 - **Device Format:** 16-bit little-endian in 0x04 packet
-- **Conversion:** Direct copy (keep in milliseconds, NOT Hz×100!)
+- **Conversion:** Direct copy (keep in milliseconds, NOT Hz*100!)
 - **Examples:**
   - 10ms = 0x000a
   - 50ms = 0x0032
@@ -485,90 +542,23 @@ Offset | Size | Field          | Description
   - 1000ms = 0x03e8
 
 ### Envelope Level Encoding
-- **SDL2 Format:** 0-32767 (unsigned)
+- **Linux FFB Format:** 0-32767 (unsigned)
 - **Device Format:** 0-255 (unsigned 8-bit)
-- **Conversion:** Scale down
-- **Formula:** `device_env = sdl_env * 255 / 32767`
+- **Conversion:** `device_env = (os_ffb_env * 255LL) / 32767`
 - **Examples:**
-  - SDL 0 → Device 0
-  - SDL 8000 → Device 6
-  - SDL 16000 → Device 12
-  - SDL 24000 → Device 18
-  - SDL 32767 → Device 255
+  - Linux 0 -> Device 0
+  - Linux 8000 -> Device 6
+  - Linux 16000 -> Device 12
+  - Linux 24000 -> Device 18
+  - Linux 32767 -> Device 255
 
----
-
-## FFEdit Capture Analysis (December 2025)
-
-New captures from FFEdit (Force Feedback Editor) tool provide comprehensive protocol understanding.
-
-### Capture Files Analyzed
-
-**Initial Captures:**
-- `inertia_Axis0_10000_offset_-7439_axis1_10000_offset_0.pcapng`
-- `square_medium.pcapng`, `square_max.pcapng`
-- `Ramp.pcapng`
-
-**Systematic Conditional Effect Captures (Dec 11, 2025):**
-- **Damper:** 8 captures with varying coefficients, offsets, deadbands
-- **Friction:** 5 captures with varying positive/negative coefficients
-- **Inertia:** 8 captures with varying coefficients and offsets
-
-### Key Findings
-
-#### 1. Square Wave Effect Type (0x20) ✅ IMPLEMENTED
-FFEdit confirms square wave uses effect type **0x20**:
-- Example: `01 04 20 40 1d 10 00 ff ff 42 01 50 01 00 00`
-- Uses same 0x04 packet structure as other periodic effects
-
-#### 2. Corrected 0x05 Packet Structure
-Previous understanding was incorrect. FFEdit analysis reveals:
-- **Coefficients are u8 (not u16!)** - scaled 0-10 for 0-10000 FFEdit range
-- **Center/offset is s16 LE** at bytes 5-6 (not single byte at position 8)
-- **Deadband is u16 LE** at bytes 7-8
-
-**Verified Examples:**
-| FFEdit Parameters | 0x05 Packet | Decoded |
-|-------------------|-------------|---------|
-| friction P=10000,N=10000 | `050e000a0a000000006464` | coeff=10,10 |
-| friction P=7500,N=5000 | `050e000805000000006464` | coeff=8,5 (rounded) |
-| damper PC=6000,NC=4000,O=5000 | `0546000604fa00000064 64` | coeff=6,4, center=250 |
-| damper O=-7439,D=4500 | `05460a0a8cfec2016464` | center=-372, deadband=450 |
-| inertia P=6000,N=4000,O=-4000 | `052a00060438ff00006464` | coeff=6,4, center=-200 |
-
-#### 3. Coefficient Scaling Formula
-```
-device_coeff = ffb_coeff / 1000   (for 0-10000 range) → 0-10 u8
-device_coeff = ffb_coeff / 3277   (for 0-32767 Linux range) → 0-10 u8
-```
-
-#### 4. Center/Offset Scaling Formula
-```
-device_center = ffb_center / 20   (for ±10000 FFEdit range) → s16 LE
-device_center = ffb_center / 65   (for ±32767 Linux range) → approx ±500
-```
-
-#### 5. Deadband Scaling Formula
-```
-device_deadband = ffb_deadband / 10   (for 0-10000 range) → u16 LE
-device_deadband = ffb_deadband / 65   (for 0-65535 Linux range) → 0-1008
-```
-
-#### 6. Windows vs FFEdit Behavior
-- **Windows driver:** Sends zeros for coefficients/center/deadband, relies on saturation only
-- **FFEdit:** Sends actual coefficient values; device accepts both approaches
-- **Conclusion:** Coefficients are optional for basic functionality but enable finer control
-
-#### 7. Ramp Effect Phase Field (✅ IMPLEMENTED)
-Ramp captures confirm phase encodes ramp direction:
-- `049a0000007f0000` - phase 0x7f (127) = positive/up ramp (start < end)
-- `049a000c00000000` - phase 0x00 = negative/down ramp (start > end)
-
-**Implementation:**
-```c
-/* Phase encodes ramp direction:
- * - Positive ramp (start < end): phase = 0x7f
- * - Negative ramp (start > end): phase = 0x00
- */
-phase = (start_level < end_level) ? 0x7f : 0x00;
-```
+### Conditional Effect Parameter Encoding
+- **Coefficients (Right/Left):** Linux 0-32767 -> Device 0-10 (u8)
+  - Formula: `device_coeff = (os_ffb_coeff * 10) / 32767`
+- **Center Offset:** Linux -32767 to +32767 -> Device s16 LE (approx +-500)
+  - Formula: `device_center = (os_ffb_center / 65)`
+- **Deadband:** Linux 0-65535 -> Device u16 LE (0-1008)
+  - Formula: `device_deadband = (os_ffb_deadband / 65)`
+- **Saturation (Right/Left):** Linux 0-65535 -> Device 0-100 (u8)
+  - Formula: `device_sat = (os_ffb_sat * 100) / 65535`
+  

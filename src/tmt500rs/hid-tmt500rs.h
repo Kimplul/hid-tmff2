@@ -50,12 +50,6 @@
 #define T500RS_EFFECT_FRICTION 0x41
 #define T500RS_EFFECT_INERTIA 0x41
 
-/* Saturation values for conditional effects */
-#define T500RS_SAT_SPRING 84
-#define T500RS_SAT_DAMPER 100
-#define T500RS_SAT_FRICTION 100
-#define T500RS_SAT_INERTIA 100
-
 /* Hardware limits */
 /* Advertise 15 logical effect slots to the framework (logical IDs 0..14).
  * The device/hardware ID space remains 0..15 (16 entries), but we avoid using
@@ -221,6 +215,14 @@ struct t500rs_pkt_r02_envelope {
   __le16 fade_len;   /* fade duration in ms */
   u8 fade_level;     /* 0-255 */
   u8 reserved;       /* 0x00 */
+} __packed;
+
+/* 0x40 - Configuration packet (4 bytes) */
+struct t500rs_pkt_r40_config {
+  u8 id;      /* 0x40 */
+  u8 subcmd;  /* subcommand */
+  u8 data1;   /* first data byte */
+  u8 data2;   /* second data byte */
 } __packed;
 
 #endif /* __HID_TMT500RS_H */
