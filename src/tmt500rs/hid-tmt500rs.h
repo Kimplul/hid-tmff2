@@ -40,7 +40,7 @@
 
 /* Effect type constants */
 #define T500RS_EFFECT_CONSTANT 0x00
-#define T500RS_EFFECT_SQUARE 0x20   /* Discovered from FFEdit captures (Dec 2025) */
+#define T500RS_EFFECT_SQUARE 0x20 
 #define T500RS_EFFECT_SINE 0x22
 #define T500RS_EFFECT_TRIANGLE 0x21
 #define T500RS_EFFECT_SAW_UP 0x23
@@ -65,7 +65,7 @@
 #define T500RS_GAIN_MAX 65535
 
 /* Range limits */
-#define T500RS_RANGE_MIN 40   /* Minimum range: 40 degrees */
+#define T500RS_RANGE_MIN 40 /* Minimum range: 40 degrees */
 #define T500RS_RANGE_MAX 1080 /* Maximum range: 1080 degrees */
 
 /*
@@ -75,15 +75,15 @@
  * Used internally by the sequencing system to manage packet order.
  */
 enum t500rs_seq_packet {
-  T500RS_SEQ_STOP,
-  T500RS_SEQ_SYNC_42_05,
-  T500RS_SEQ_SYNC_42_04,
-  T500RS_SEQ_ENVELOPE,
-  T500RS_SEQ_CONSTANT,
-  T500RS_SEQ_PERIODIC_RAMP,
-  T500RS_SEQ_CONDITION_X,
-  T500RS_SEQ_CONDITION_Y,
-  T500RS_SEQ_MAIN,
+	T500RS_SEQ_STOP,
+	T500RS_SEQ_SYNC_42_05,
+	T500RS_SEQ_SYNC_42_04,
+	T500RS_SEQ_ENVELOPE,
+	T500RS_SEQ_CONSTANT,
+	T500RS_SEQ_PERIODIC_RAMP,
+	T500RS_SEQ_CONDITION_X,
+	T500RS_SEQ_CONDITION_Y,
+	T500RS_SEQ_MAIN,
 };
 
 /* Supported effects */
@@ -118,16 +118,16 @@ extern const signed short t500rs_effects[];
  * - b13-b14: reserved (0x0000)
  */
 struct t500rs_pkt_r01_main {
-   u8 id;                /* b0: T500RS_PKT_MAIN */
-   u8 effect_id;         /* b1: hardware effect slot ID (1-15) */
-   u8 effect_type;       /* b2: effect type (T500RS_EFFECT_*) */
-   u8 control;           /* b3: always T500RS_CONTROL_DEFAULT (0x40) */
-   __le16 duration_ms;   /* b4-b5: duration in ms (LE) */
-   __le16 delay_ms;      /* b6-b7: delay before start in ms (LE) */
-   u8 reserved1;         /* b8: 0x00 */
-   __le16 packet_code_1; /* b9-b10: param subtype for 0x03/0x04/0x05 (LE) */
-   __le16 packet_code_2; /* b11-b12: env subtype for 0x02 (LE) */
-   __le16 reserved2;     /* b13-b14: 0x0000 */
+	u8 id; /* b0: T500RS_PKT_MAIN */
+	u8 effect_id; /* b1: hardware effect slot ID (1-15) */
+	u8 effect_type; /* b2: effect type (T500RS_EFFECT_*) */
+	u8 control; /* b3: always T500RS_CONTROL_DEFAULT (0x40) */
+	__le16 duration_ms; /* b4-b5: duration in ms (LE) */
+	__le16 delay_ms; /* b6-b7: delay before start in ms (LE) */
+	u8 reserved1; /* b8: 0x00 */
+	__le16 packet_code_1; /* b9-b10: param subtype for 0x03/0x04/0x05 (LE) */
+	__le16 packet_code_2; /* b11-b12: env subtype for 0x02 (LE) */
+	__le16 reserved2; /* b13-b14: 0x0000 */
 } __packed;
 
 /*
@@ -149,13 +149,13 @@ struct t500rs_pkt_r01_main {
  * start/end levels.
  */
 struct t500rs_pkt_r04_periodic_ramp {
-   u8 id;            /* b0: T500RS_PKT_PERIODIC */
-   u8 code;          /* b1: subtype code (from 0x01 packet_code_1) */
-   u8 reserved1;     /* b2: always 0x00 */
-   u8 magnitude;     /* b3: 0..127 magnitude (scaled) */
-   u8 offset;        /* b4: signed -127..+127 offset (scaled) */
-   u8 phase;         /* b5: 0..255 phase (0-360 degrees) */
-   __le16 period_ms; /* b6-b7: period in milliseconds (LE) */
+	u8 id; /* b0: T500RS_PKT_PERIODIC */
+	u8 code; /* b1: subtype code (from 0x01 packet_code_1) */
+	u8 reserved1; /* b2: always 0x00 */
+	u8 magnitude; /* b3: 0..127 magnitude (scaled) */
+	u8 offset; /* b4: signed -127..+127 offset (scaled) */
+	u8 phase; /* b5: 0..255 phase (0-360 degrees) */
+	__le16 period_ms; /* b6-b7: period in milliseconds (LE) */
 } __packed;
 
 /*
@@ -179,50 +179,50 @@ struct t500rs_pkt_r04_periodic_ramp {
  * - Saturation: 0-100 (no scaling)
  */
 struct t500rs_pkt_r05_condition {
-   u8 id;               /* T500RS_PKT_CONDITIONAL */
-   u8 code;             /* from 0x01 code1/code2 */
-   u8 reserved;         /* Always 0x00 */
-   u8 right_coeff;      /* Right/positive coefficient (0-10 scale) */
-   u8 left_coeff;       /* Left/negative coefficient (0-10 scale) */
-   __le16 center;       /* Center offset (s16 LE, scaled by /65) */
-   __le16 deadband;     /* Deadband width (u16 LE, scaled by /65) */
-   u8 right_sat;        /* Right saturation (0-100) */
-   u8 left_sat;         /* Left saturation (0-100) */
+	u8 id; /* T500RS_PKT_CONDITIONAL */
+	u8 code; /* from 0x01 code1/code2 */
+	u8 reserved; /* Always 0x00 */
+	u8 right_coeff; /* Right/positive coefficient (0-10 scale) */
+	u8 left_coeff; /* Left/negative coefficient (0-10 scale) */
+	__le16 center; /* Center offset (s16 LE, scaled by /65) */
+	__le16 deadband; /* Deadband width (u16 LE, scaled by /65) */
+	u8 right_sat; /* Right saturation (0-100) */
+	u8 left_sat; /* Left saturation (0-100) */
 } __packed;
 
 /* 0x03 - Constant force level (4 bytes) */
 struct t500rs_r03_const {
-  u8 id;    /* T500RS_PKT_CONSTANT */
-  u8 code;  /* T500RS_CODE_CONSTANT */
-  u8 zero;  /* 0x00 */
-  s8 level; /* -127..127 */
+	u8 id; /* T500RS_PKT_CONSTANT */
+	u8 code; /* T500RS_CODE_CONSTANT */
+	u8 zero; /* 0x00 */
+	s8 level; /* -127..127 */
 } __packed;
 
 /* 0x41 - START/STOP command (4 bytes) */
 struct t500rs_r41_cmd {
-  u8 id;        /* 0x41 */
-  u8 effect_id; /* usually 0 on T500RS */
-  u8 command;   /* 0x41 START, 0x00 STOP, 0x00 clear in init */
-  u8 arg;       /* 0x01 */
+	u8 id; /* 0x41 */
+	u8 effect_id; /* usually 0 on T500RS */
+	u8 command; /* 0x41 START, 0x00 STOP, 0x00 clear in init */
+	u8 arg; /* 0x01 */
 } __packed;
 
 /* 0x02 - Envelope packet (9 bytes) */
 struct t500rs_pkt_r02_envelope {
-  u8 id;             /* 0x02 */
-  u8 subtype;        /* from 0x01 code2 (env_sub low byte) */
-  __le16 attack_len; /* attack duration in ms */
-  u8 attack_level;   /* 0-255 */
-  __le16 fade_len;   /* fade duration in ms */
-  u8 fade_level;     /* 0-255 */
-  u8 reserved;       /* 0x00 */
+	u8 id; /* 0x02 */
+	u8 subtype; /* from 0x01 code2 (env_sub low byte) */
+	__le16 attack_len; /* attack duration in ms */
+	u8 attack_level; /* 0-255 */
+	__le16 fade_len; /* fade duration in ms */
+	u8 fade_level; /* 0-255 */
+	u8 reserved; /* 0x00 */
 } __packed;
 
 /* 0x40 - Configuration packet (4 bytes) */
 struct t500rs_pkt_r40_config {
-  u8 id;      /* 0x40 */
-  u8 subcmd;  /* subcommand */
-  u8 data1;   /* first data byte */
-  u8 data2;   /* second data byte */
+	u8 id; /* 0x40 */
+	u8 subcmd; /* subcommand */
+	u8 data1; /* first data byte */
+	u8 data2; /* second data byte */
 } __packed;
 
 #endif /* __HID_TMT500RS_H */
