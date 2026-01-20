@@ -111,8 +111,6 @@ int tspc_populate_api(struct tmff2_device_entry *tmff2);
 
 #define TMT248_PC_ID		0xb696
 
-#define TMT598_PC_ID            0xb6a5
-
 #define TX_ACTIVE               0xb669
 
 #define TSXW_ACTIVE		0xb692
