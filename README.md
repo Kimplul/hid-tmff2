@@ -1,4 +1,4 @@
-# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128, T-GT II, TS-PC and TS-XW wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128, T598, T-GT II, TS-PC and TS-XW wheels
 
 > **DISCLAIMER:** The module is ready for use in most force
 > feedback games, supports rangesetting as well as gain and autocentering along
@@ -14,7 +14,7 @@
 ## Description
 
 A Linux kernel module for Thrustmaster T300RS, T248, and (experimental support)
-TX, TS-PC and TS-XV wheels.
+TX, T128, T598, TS-PC and TS-XV wheels.
 
 I've been working on enhancing the real-time updating of effects, and although
 it's not flawless yet, the overall experience is gradually improving. There are
