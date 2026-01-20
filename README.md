@@ -139,6 +139,17 @@ for wheels:
 
 ## Common issues and notes
 
++ If buttons work in games but there's no FFB, try
+  ```shell
+  echo 'options hid-tmff-new open_mode=0' | sudo tee /etc/modprobe.d/hid-tmff-new.conf
+  ```
+
+  Generally, the wheel only starts handling force effects when 'opened' by an
+  application, but some tools like key remappers may interfere with this.
+  `open_mode=0` 'opens' the wheel immediately to work around this, but increases
+  power draw and sets the fan spinning when not using the wheel, which might be
+  a bit annoying.
+
 + To change gain, autocentering etc. use
   [Oversteer](https://github.com/berarma/oversteer).
 
