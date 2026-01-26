@@ -208,15 +208,17 @@ static int t248_send_open(struct t300rs_device_entry *t248)
 	return 0;
 }
 
-static void t248_open(void *data, int open_mode)
+static int t248_open(void *data, int open_mode)
 {
 	struct t300rs_device_entry *t248 = data;
 
 	if (!t248)
-		return;
+		return -ENODEV;
 
 	if (open_mode)
 		t248_send_open(t248);
+
+	return t248->open(t248->input_dev);
 }
 
 static int t248_send_close(struct t300rs_device_entry *t248)
@@ -235,14 +237,18 @@ static int t248_send_close(struct t300rs_device_entry *t248)
 	return 0;
 }
 
-static void t248_close(void *data, int open_mode)
+static int t248_close(void *data, int open_mode)
 {
 	struct t300rs_device_entry *t248 = data;
+
 	if (!t248)
-		return;
+		return -ENODEV;
 
 	if (open_mode)
 		t248_send_close(t248);
+
+	t248->close(t248->input_dev);
+	return 0;
 }
 
 static int t248_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
@@ -272,6 +278,9 @@ static int t248_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	report_list = &t248->hdev->report_enum[HID_OUTPUT_REPORT].report_list;
 	t248->report = list_entry(report_list->next, struct hid_report, list);
 	t248->ff_field = t248->report->field[0];
+
+	t248->open = t248->input_dev->open;
+	t248->close = t248->input_dev->close;
 
 	if ((ret = t248_interrupts(t248)))
 		goto interrupt_err;

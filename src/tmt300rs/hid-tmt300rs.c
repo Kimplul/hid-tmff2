@@ -1287,26 +1287,31 @@ static int t300rs_send_close(struct t300rs_device_entry *t300rs)
 	return t300rs_send_int(t300rs);
 }
 
-void t300rs_open(void *data, int open_mode)
+int t300rs_open(void *data, int open_mode)
 {
 	struct t300rs_device_entry *t300rs = data;
 	if (!t300rs)
-		return;
+		return -ENODEV;
 
 	if (open_mode && t300rs_send_open(t300rs))
 		hid_warn(t300rs->hdev, "failed sending open command\n");
+
+	return t300rs->open(t300rs->input_dev);
 }
 
-void t300rs_close(void *data, int open_mode)
+int t300rs_close(void *data, int open_mode)
 {
 	struct t300rs_device_entry *t300rs = data;
 	int ret = 0;
 
 	if (!t300rs)
-		return;
+		return -ENODEV;
 
 	if (open_mode && (ret = t300rs_send_close(t300rs)))
 		hid_warn(t300rs->hdev, "failed sending close command\n");
+
+	t300rs->close(t300rs->input_dev);
+	return ret;
 }
 
 static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
@@ -1463,6 +1468,9 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	/* because we set the rdesc, we know exactly which report and field to use */
 	t300rs->report = list_entry(report_list->next, struct hid_report, list);
 	t300rs->ff_field = t300rs->report->field[0];
+
+	t300rs->open = t300rs->input_dev->open;
+	t300rs->close = t300rs->input_dev->close;
 
 	/* TODO: PS4 advanced mode? */
 	alt_mode = (t300rs->mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID));

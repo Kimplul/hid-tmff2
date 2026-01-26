@@ -196,15 +196,17 @@ static int tx_send_open(struct t300rs_device_entry *tx)
 	return 0;
 }
 
-static void tx_open(void *data, int open_mode)
+static int tx_open(void *data, int open_mode)
 {
 	struct t300rs_device_entry *tx = data;
 
 	if (!tx)
-		return;
+		return -ENODEV;
 
 	if (open_mode)
 		tx_send_open(tx);
+
+	return tx->open(tx->input_dev);
 }
 
 static int tx_send_close(struct t300rs_device_entry *tx)
@@ -223,15 +225,18 @@ static int tx_send_close(struct t300rs_device_entry *tx)
 	return 0;
 }
 
-static void tx_close(void *data, int open_mode)
+static int tx_close(void *data, int open_mode)
 {
 	struct t300rs_device_entry *tx = data;
 
 	if (!tx)
-		return;
+		return -ENODEV;
 
 	if (open_mode)
 		tx_send_close(tx);
+
+	tx->close(tx->input_dev);
+	return 0;
 }
 
 static int tx_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
@@ -261,6 +266,9 @@ static int tx_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	report_list = &tx->hdev->report_enum[HID_OUTPUT_REPORT].report_list;
 	tx->report = list_entry(report_list->next, struct hid_report, list);
 	tx->ff_field = tx->report->field[0];
+
+	tx->open = tx->input_dev->open;
+	tx->close = tx->input_dev->close;
 
 	if ((ret = tx_interrupts(tx)))
 		goto interrupt_err;

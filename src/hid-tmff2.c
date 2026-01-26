@@ -486,26 +486,24 @@ static int tmff2_play(struct input_dev *dev, int effect_id, int value)
 	return 0;
 }
 
-static void tmff2_open(struct hid_device *hdev)
+static int tmff2_open(struct input_dev *dev)
 {
-	struct tmff2_device_entry *tmff2 = hid_get_drvdata(hdev);
+	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
 
-	pr_err("entering tmff2_open\n");
-
-	if (!tmff2) {
-		pr_err("no device entry\n");
-		return;
-	}
+	if (!tmff2)
+		return -ENODEV;
 
 	if (tmff2->open)
 		return tmff2->open(tmff2->data, open_mode);
+
+	hid_err(tmff2->hdev, "no open callback set\n");
+	return -EINVAL;
 }
 
-static void tmff2_close(struct hid_device *hdev)
+static void tmff2_close(struct input_dev *dev)
 {
-	struct tmff2_device_entry *tmff2 = hid_get_drvdata(hdev);
+	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
 
-	pr_err("entering tmff2_close\n");
 	if (!tmff2)
 		return;
 
@@ -514,8 +512,12 @@ static void tmff2_close(struct hid_device *hdev)
 	 * time */
 	cancel_delayed_work_sync(&tmff2->work);
 
-	if (tmff2->close)
-		return tmff2->close(tmff2->data, open_mode);
+	if (tmff2->close) {
+		tmff2->close(tmff2->data, open_mode);
+		return;
+	}
+
+	hid_err(tmff2->hdev, "no close callback set\n");
 }
 
 static int tmff2_create_files(struct tmff2_device_entry *tmff2)
@@ -631,6 +633,12 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	ff = tmff2->input_dev->ff;
 	ff->upload = tmff2_upload;
 	ff->playback = tmff2_play;
+
+	if (tmff2->open)
+		tmff2->input_dev->open = tmff2_open;
+
+	if (tmff2->close)
+		tmff2->input_dev->close = tmff2_close;
 
 	/* set defaults wherever possible */
 	if (tmff2->set_gain) {
@@ -817,8 +825,6 @@ static struct hid_driver tmff2_driver = {
 	.probe = tmff2_probe,
 	.remove = tmff2_remove,
 	.report_fixup = tmff2_report_fixup,
-	.on_hid_hw_open = tmff2_open,
-	.on_hid_hw_close = tmff2_close
 };
 module_hid_driver(tmff2_driver);
 

@@ -196,15 +196,17 @@ static int tsxw_send_open(struct t300rs_device_entry *tsxw)
 	return 0;
 }
 
-static void tsxw_open(void *data, int open_mode)
+static int tsxw_open(void *data, int open_mode)
 {
 	struct t300rs_device_entry *tsxw = data;
 
 	if (!tsxw)
-		return;
+		return -ENODEV;
 
 	if (open_mode)
 		tsxw_send_open(tsxw);
+
+	return tsxw->open(tsxw->input_dev);
 }
 
 static int tsxw_send_close(struct t300rs_device_entry *tsxw)
@@ -223,15 +225,18 @@ static int tsxw_send_close(struct t300rs_device_entry *tsxw)
 	return 0;
 }
 
-static void tsxw_close(void *data, int open_mode)
+static int tsxw_close(void *data, int open_mode)
 {
 	struct t300rs_device_entry *tsxw = data;
 
 	if (!tsxw)
-		return;
+		return -ENODEV;
 
 	if (open_mode)
 		tsxw_send_close(tsxw);
+
+	tsxw->close(tsxw->input_dev);
+	return 0;
 }
 
 static int tsxw_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
@@ -261,6 +266,9 @@ static int tsxw_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	report_list = &tsxw->hdev->report_enum[HID_OUTPUT_REPORT].report_list;
 	tsxw->report = list_entry(report_list->next, struct hid_report, list);
 	tsxw->ff_field = tsxw->report->field[0];
+
+	tsxw->open = tsxw->input_dev->open;
+	tsxw->close = tsxw->input_dev->close;
 
 	if ((ret = tsxw_interrupts(tsxw)))
 		goto interrupt_err;
