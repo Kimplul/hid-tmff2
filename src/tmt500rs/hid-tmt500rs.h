@@ -140,9 +140,9 @@ struct t500rs_pkt_r01_main {
  * - b0: packet type (0x04)
  * - b1: subtype code (from 0x01 packet_code_1, typically 0x2a)
  * - b2: reserved (0x00)
- * - b3: magnitude (0-127, scaled from SDL 0-32767)
- * - b4: offset (signed -127 to +127, scaled from SDL -32768 to +32767)
- * - b5: phase (0-255 for 360 degrees, scaled from SDL 0-35999)
+ * - b3: magnitude (0-127, scaled from Linux FFB 0-32767)
+ * - b4: offset (signed -127 to +127, scaled from Linux FFB -32768 to +32767)
+ * - b5: phase (0-255 for 360 degrees, scaled from Linux FFB 0-35999)
  * - b6-b7: period in milliseconds (LE, no Hz conversion!)
  *
  * For ramp effects: phase=0, period=ramp duration, magnitude/offset encode

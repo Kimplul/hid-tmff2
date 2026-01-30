@@ -14,49 +14,50 @@ All values are little-endian unless specified otherwise.
 ### Device Overview
 The T500RS is a single-axis force feedback wheel with a rotating range that can be configured (typically 900 degrees or 1080 degrees). It uses a proprietary USB protocol for force feedback effects, distinct from the T300RS and other Thrustmaster wheels.
 
-### Effect Playing and Stopping
+### Understanding Force Feedback Effects
 
-#### Playing an Effect
-```
-41 00 41 01 - START command
-```
-- **Packet Type:** 0x41 (Command)
-- **Effect ID:** 0x00 (always 0x00 for T500RS)
-- **Command:** 0x41 (START)
-- **Argument:** 0x01 (play count, 0x01 = play once)
+**What are force feedback effects?**
+Force feedback effects are ways the wheel can apply physical resistance to your steering. Different effects simulate different real-world sensations:
 
-#### Stopping an Effect
-```
-41 00 00 01 - STOP command
-```
-- **Packet Type:** 0x41 (Command)
-- **Effect ID:** 0x00 (always 0x00 for T500RS)
-- **Command:** 0x00 (STOP)
-- **Argument:** 0x01 (stop parameter)
+| Effect Type | Real-World Analogy | Use In Games |
+|-------------|---------------------|--------------|
+| **Constant Force** | Constant push/pull in one direction | Sustained force from collision, wind, road surface |
+| **Periodic (Sine)** | Smooth vibration that oscillates | Engine rumble, gravel road texture |
+| **Periodic (Square)** | Sharp on/off vibration | Hitting rumble strips, driving over grass |
+| **Spring** | Wheel pulls back to center | Self-centering feeling, returning to straight |
+| **Damper** | Viscous resistance when moving | Wheel gets heavier at high speeds |
+| **Inertia** | Resistance to CHANGING direction | Simulates weight of the car |
 
-### USB Packet Types Overview
+**How effects are created** (in simple terms):
+1. **Main packet** (0x01): Describes the effect - type, duration, identifies which packets follow
+2. **Parameter packets** (0x03, 0x04, 0x05): Set specific values - force level, vibration speed, spring strength
+3. **Command packet** (0x41): START or STOP the effect
 
-| Packet ID | Name | Size | Purpose |
-|-----------|------|------|---------|
-| 0x01 | Main Upload | 15 bytes | Effect type, direction, duration, packet codes |
-| 0x02 | Envelope | 9 bytes | Attack/fade parameters (limited support) |
-| 0x03 | Constant Force | 4 bytes | Force level for constant effects |
-| 0x04 | Periodic/Ramp | 8 bytes | Magnitude, offset, phase, period |
-| 0x05 | Conditional | 11 bytes | Spring/damper/inertia/friction parameters |
-| 0x41 | Command | 4 bytes | START (0x41) / STOP (0x00) |
-| 0x42 | Status/Control | 2-16 bytes | Device status queries (0x00, 0x04, 0x05) |
-| 0x43 | Init/Config | 64 bytes | Device initialization |
-| 0x49 | Polling | 7-16 bytes | Status polling (high frequency) |
-| 0x07 | Telemetry | 15 bytes | Position feedback (high frequency) |
+The T500RS uses a unique "subtype system" where each effect gets a unique ID that helps the device match parameter packets to the right effect. Think of it like a mailbox number - each effect has its own mailbox for parameter updates.
 
-**Important Notes:**
-- **Envelope Support:** Envelope packets (0x02) have limited support. Non-zero envelope values cause EPROTO errors on periodic and constant effects. Always send zeros for envelope parameters on these effect types.
-- **Runtime Updates:** Effect updates (via `update_effect` callback) only modify parameter-specific packets (0x03, 0x04, 0x05). Duration and delay changes require re-uploading the entire effect.
-- **Effect Indexing:** The T500RS uses a unique subtype system for effect indexing. See the [Subtype System and Effect Indexing](#subtype-system-and-effect-indexing) section for details.
+---
+## EFFECT EXAMPLES BY TYPE
+
+** NEW TO THIS DOCUMENT? START HERE:**
+
+1. **[Quick Start](#quick-start)** (above): Create your first effect in 3 simple steps
+2. **[Understanding Effects](#understanding-effects)** (above): Learn what each effect type does
+3. **[Complete Examples](#effect-examples)** (below): See working captures for each effect type with detailed breakdowns
+
+** REFERENCE SECTIONS** (for deep dives):
+- [Packet Structure Details](#packet-structure) - Detailed packet format reference  
+- [Common Pitfalls](#pitfalls) - Implementation tips and gotchas
+- [Subtype System](#subtype-system) - Effect indexing deep dive
+- [Parameter Encoding](#encoding-reference) - Value conversion formulas
 
 ---
 
-## Packet Structure Details
+This section shows complete working examples for each effect type captured from actual USB traffic. Each example includes:
+- The complete hexadecimal packet sequence
+- Step-by-step breakdown of what each packet does
+- Practical explanations of the values and their effect
+
+Start with these examples to understand how effects are created in practice, then consult the [Reference Sections](#reference-sections) below for detailed protocol information.
 
 ### 0x01 - Main Upload Packet (15 bytes)
 ```
@@ -69,8 +70,8 @@ Offset | Size | Field          | Description
  4      | 2    | duration_ms    | Duration in milliseconds, little-endian
  6      | 2    | delay_ms       | Delay before start, little-endian
  8      | 1    | reserved1      | 0x00
- 9      | 2    | packet_code_1  | Code for subsequent packet type (variable!)
-11      | 2    | packet_code_2  | Code for second subsequent packet (variable!)
+ 9      | 2    | param_sub      | Parameter subtype for 0x03/0x04/first 0x05 packet (variable!)
+ 11      | 2    | env_sub        | Envelope subtype for 0x02/second 0x05 packet (variable!)
 13      | 2    | reserved2      | 0x0000
 ```
 
@@ -90,7 +91,7 @@ Offset | Size | Field          | Description
 
 **Note:** Square wave (0x20) was discovered in FFEdit captures. The Windows driver may not expose this effect type through the standard API.
 
-**IMPORTANT:** Bytes 9-12 specify the packet codes used in subsequent packets. These are NOT fixed values!
+**IMPORTANT:** Bytes 9-12 specify the subtype codes (param_sub and env_sub) used in subsequent packets. These are NOT fixed values!
 
 **Common Code Combinations:**
 - Constant effects: bytes 9-10 = 0x000e (for 0x03 packet), bytes 11-12 = 0x001c (envelope)
@@ -99,6 +100,9 @@ Offset | Size | Field          | Description
 - Alternative codes observed: 0x00b6/0x00c4 (newer captures), 0x0046/0x0054, 0x0062/0x0070, 0x007e/0x008c, 0x009a/0x00a8
 
 **Examples:**
+
+> **NOTE:** Effect IDs in examples are hardware slot IDs (1-15) assigned by the driver. The driver maps logical effect IDs (0-14) to hardware IDs (1-15). Examples show typical values. See the [Subtype System and Effect Indexing](#subtype-system-and-effect-indexing) section for details on how hardware IDs are allocated.
+
 - `01 01 00 40 f4 01 00 00 0e 00 1c 00 00 00` - Constant effect with envelope
   - Effect ID: 0x01 (hardware slot 1, logical 0)
   - Effect type: 0x00 (constant)
@@ -106,7 +110,8 @@ Offset | Size | Field          | Description
   - Duration: 0x01f4 = 500ms
   - Delay: 0x0000 = 0ms
   - Reserved1: 0x00
-  - Packet codes: 0x000e (constant), 0x001c (envelope)
+  - Subtype codes: param_sub=0x000e (constant), env_sub=0x001c (envelope)
+    - Note: Constant effects use fixed subtype 0x000e/0x001c regardless of hw_id
   - Reserved2: 0x0000
 
 - `01 01 40 40 d0 07 00 00 2a 00 38 00 00 00` - Conditional effect
@@ -116,7 +121,8 @@ Offset | Size | Field          | Description
   - Duration: 0x07d0 = 2000ms
   - Delay: 0x0000 = 0ms
   - Reserved1: 0x00
-  - Packet codes: 0x002a (first conditional), 0x0038 (second conditional)
+  - Subtype codes: param_sub=0x002a (first conditional), env_sub=0x0038 (second conditional)
+    - Calculation: hw_id=1, param_sub=0x000e+0x001c*1=0x002a, env_sub=0x001c+0x001c*1=0x0038
   - Reserved2: 0x0000
 
 ### 0x02 - Envelope Packet (9 bytes)
@@ -178,8 +184,8 @@ Offset | Size | Field          | Description
 
 **Examples:**
 - `04 2a 00 00 00 0a 00 00` - Code 0x2a, magnitude 0, period 10ms
-- `04 2a 06 00 3f 0a 00 00` - Code 0x2a, magnitude 6, phase 63 (88.6degrees), period 10ms
-- `04 2a 09 00 7f 64 00 00` - Code 0x2a, magnitude 9, phase 127 (178.6degrees), period 100ms
+- `04 2a 06 00 3f 0a 00 00` - Code 0x2a, magnitude 6, phase 63 (88.6 degrees), period 10ms
+- `04 2a 09 00 7f 64 00 00` - Code 0x2a, magnitude 9, phase 127 (178.6 degrees), period 100ms
 - `04 b6 00 00 7f 00 00 00` - Code 0xb6, magnitude 0, phase 127 (ramp effect)
 
 ### 0x05 - Conditional Effect Packet (11 bytes)
@@ -234,11 +240,38 @@ Offset | Size | Field          | Description
 
 ## Effect Type Implementation Table
 
+This section shows complete working examples for each effect type captured from actual USB traffic.
+
+**Example Format:**
+- **Complete packet sequence**: Shows all packets in hexadecimal
+- **Packet breakdown**: Explains what each packet does and what the values mean
+- **Additional examples**: Shows variations (different parameters, magnitudes, etc.)
+
+All examples follow this consistent format to help you understand both the protocol and practical usage.
+
+---
+
 ### 1. CONSTANT FORCE EFFECTS
 
-**Capture Examples:**
-- Zero force: `01 00 00 40 f4 01 00 00 0e 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `03 0e 00 00`
-- Low positive force: `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00` `02 1c 00 00 06 00 00 06 00` `03 0e 00 03`
+**Example: Zero Force (No force applied)**
+
+Complete packet sequence: `01 00 00 40 f4 01 00 00 0e 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `03 0e 00 00`
+
+**Packet breakdown:**
+- **0x01 (Main Upload)**: Effect ID 0x00, type 0x00 (constant), duration 500ms, delay 0ms, subtypes 0x000e/0x001c
+- **0x02 (Envelope)**: Subtype 0x001c, 0ms attack/fade, level 0
+- **0x03 (Constant Force)**: Subtype 0x000e, level 0 (no force)
+
+**Example: Low Positive Force (Weak force in one direction)**
+
+Complete packet sequence: `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00` `02 1c 00 00 06 00 00 06 00` `03 0e 00 03`
+
+**Packet breakdown:**
+- **0x01 (Main Upload)**: Effect ID 0x00, type 0x00 (constant), duration 2000ms, delay 0ms, subtypes 0x000e/0x001c
+- **0x02 (Envelope)**: Subtype 0x001c, 0ms attack/fade, level 6 (slight ramp)
+- **0x03 (Constant Force)**: Subtype 0x000e, level 3 (weak positive force)
+
+**Additional Capture Examples:**
 - Medium force: `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00` `02 1c 00 00 12 00 00 12 00` `03 0e 00 09`
 - High negative force: `01 00 00 40 88 13 00 00 0e 00 1c 00 00 00` `02 1c 00 00 0d 00 00 0d 00` `03 0e 00 f9`
 - Maximum force with direction: `01 00 00 40 d0 07 00 00 0e 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `03 0e 00 00`
@@ -258,10 +291,18 @@ Offset | Size | Field          | Description
 
 ### 2. PERIODIC EFFECTS - SINE WAVE
 
-**Capture Examples:**
+**Example: Medium Magnitude Sine Wave**
+
+Complete packet sequence: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 12 00 00 12 00` `04 2a 09 00 7f 64 00 00`
+
+**Packet breakdown:**
+- **0x01 (Main Upload)**: Effect ID 0x00, type 0x22 (sine), duration 2000ms, delay 0ms, subtypes 0x002a/0x001c
+- **0x02 (Envelope)**: Subtype 0x001c, attack/fade 18ms, level 18 (medium ramp)
+- **0x04 (Periodic)**: Subtype 0x002a, magnitude 9, offset 0, phase 127 (178.6 degrees), period 100ms
+
+**Additional Capture Examples:**
 - Zero magnitude: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 00 00 00 00 00` `04 2a 00 00 00 0a 00 00`
 - Low magnitude with phase: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 06 00 00 06 00` `04 2a 06 00 3f 0a 00 00`
-- Medium magnitude: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c 00 00 12 00 00 12 00` `04 2a 09 00 7f 64 00 00`
 - With envelope: `01 00 22 40 d0 07 00 00 2a 00 1c 00 00 00` `02 1c f4 01 12 f4 01 12 00` `04 2a 09 00 00 64 00 00`
 
 **Packet Structure:**
@@ -273,9 +314,9 @@ Offset | Size | Field          | Description
 
 **Parameter Details:**
 - Magnitude: 0-127 (scaled from Linux 0-32767)
-- Offset: s8 (-128 to +127, DC bias (Direct Current bias - a constant force offset), scaled from Linux -32768 to +32767)
+- Offset: s8 (-128 to +127, constant force offset that shifts the waveform up or down, scaled from Linux -32768 to +32767)
 - Phase: 0-255 (256 steps for 360 degrees, scaled from Linux 0-35999)
-- Period: Direct milliseconds (no Hz conversion!)
+- Period: Direct milliseconds
 - Direction: Applied during magnitude scaling (projection onto wheel axis)
 
 ### 3. PERIODIC EFFECTS - TRIANGLE WAVE
@@ -310,7 +351,7 @@ Offset | Size | Field          | Description
   - effect_type = 0x24 (sawtooth down)
 - Same envelope and periodic packet structure as sine wave
 
-**Note:** Offset field allows DC bias (Direct Current bias - a constant force offset) - useful for asymmetric waveforms like sawtooth where you want to shift the entire waveform up or down. This creates a net force in one direction over time.
+**Note:** Offset field allows shifting the waveform up or down by adding a constant force. Useful for asymmetric waveforms like sawtooth to create a net force in one direction over time.
 
 ### 6. RAMP EFFECTS
 
@@ -335,8 +376,16 @@ Offset | Size | Field          | Description
 
 ### 7. CONDITIONAL EFFECTS - SPRING
 
-**Capture Examples:**
-- Basic spring with low coefficients: `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 00 00 00 00 54 54` `05 38 00 00 00 00 00 00 00 54 54`
+**Example: Basic Spring Effect**
+
+Complete packet sequence: `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 00 00 00 00 54 54` `05 38 00 00 00 00 00 00 00 54 54`
+
+**Packet breakdown:**
+- **0x01 (Main Upload)**: Effect ID 0x00, type 0x40 (spring), duration 2000ms, delay 0ms, subtypes 0x002a/0x0038
+- **0x05 (First - X-axis)**: Subtype 0x002a, coeffs 0/0, center 0, deadband 0, saturation 100/100
+- **0x05 (Second - Y-axis)**: Subtype 0x0038, coeffs 0/0, center 0, deadband 0, saturation 100/100 (unused for single-axis)
+
+**Additional Capture Examples:**
 - Spring with deadband: `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 00 00 07 00 54 54` `05 38 00 00 00 00 00 00 00 54 54`
 - Asymmetric spring: `01 00 40 40 d0 07 00 00 2a 00 38 00 00 00` `05 2a 00 00 00 99 00 4c 00 54 54` `05 38 00 00 00 00 00 00 00 54 54`
 
@@ -413,6 +462,12 @@ The driver will send non-zero coefficients for inertia effects if they are provi
 
 ---
 
+## REFERENCE SECTIONS
+
+The following sections provide detailed protocol information for advanced readers. For beginners, we recommend starting with the [Quick Start](#quick-start) and [Effect Examples](#effect-examples) sections above.
+
+---
+
 ## COMMON PITFALLS AND IMPLEMENTATION TIPS
 
 ### Effect Indexing
@@ -486,10 +541,10 @@ Envelope attack/fade length and level values live **only** in the 0x02 packets; 
 - **Device Format:** 16-bit little-endian (0-35999 in 0.01 degree units)
 - **Conversion:** `device_dir = (os_ffb_dir * 36000) / 65536`
 - **Examples:**
-  - 0degrees = 0x0000
-  - 90degrees = 0x2328 (9000 decimal)
-  - 180degrees = 0x4650 (18000 decimal)
-  - 270degrees = 0x6978 (27000 decimal)
+  - 0 degrees = 0x0000
+  - 90 degrees = 0x2328 (9000 decimal)
+  - 180 degrees = 0x4650 (18000 decimal)
+  - 270 degrees = 0x6978 (27000 decimal)
 
 ### Duration Encoding
 - **Linux FFB Format:** Milliseconds
@@ -522,14 +577,14 @@ Envelope attack/fade length and level values live **only** in the 0x02 packets; 
   - Linux 32767 -> Device 127
 
 ### Phase Encoding (Periodic)
-- **Linux FFB Format:** 0-35999 (0.01 degree units, 0-359.99degrees)
-- **Device Format:** 0-255 (256 steps for 360degrees)
+- **Linux FFB Format:** 0-35999 (0.01 degree units, 0-359.99 degrees)
+- **Device Format:** 0-255 (256 steps for 360 degrees)
 - **Conversion:** `device_phase = (os_ffb_phase * 256) / 36000`
 - **Examples:**
-  - 0degrees (0) -> 0x00
-  - 90degrees (9000) -> 0x40 (64)
-  - 180degrees (18000) -> 0x80 (128)
-  - 270degrees (27000) -> 0xC0 (192)
+  - 0 degrees (0) -> 0x00
+  - 90 degrees (9000) -> 0x40 (64)
+  - 180 degrees (18000) -> 0x80 (128)
+  - 270 degrees (27000) -> 0xC0 (192)
 
 ### Period Encoding (Periodic)
 - **Linux FFB Format:** Milliseconds

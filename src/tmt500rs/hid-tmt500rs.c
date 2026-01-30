@@ -20,8 +20,12 @@ static const enum t500rs_seq_packet t500rs_seq_constant[] = {
 };
 
 static const enum t500rs_seq_packet t500rs_seq_periodic[] = {
-	T500RS_SEQ_STOP,     T500RS_SEQ_SYNC_42_05,    T500RS_SEQ_SYNC_42_04,
-	T500RS_SEQ_ENVELOPE, T500RS_SEQ_PERIODIC_RAMP, T500RS_SEQ_MAIN,
+	T500RS_SEQ_STOP,
+	T500RS_SEQ_SYNC_42_05,
+	T500RS_SEQ_SYNC_42_04,
+	T500RS_SEQ_ENVELOPE,
+	T500RS_SEQ_PERIODIC_RAMP,
+	T500RS_SEQ_MAIN,
 };
 
 static const enum t500rs_seq_packet t500rs_seq_ramp[] = {
@@ -237,9 +241,9 @@ static void t500rs_build_r04_periodic(struct t500rs_pkt_r04_periodic_ramp *p,
 				      u8 phase, u16 period_ms)
 {
 	/* Byte order per Windows USB captures (example: 04 2a 00 06 00 3f 0a 00):
-   * b0=T500RS_PKT_PERIODIC, b1=code, b2=reserved1, b3=mag, b4=offset,
-   * b5=phase, b6-b7=period
-   */
+	* b0=T500RS_PKT_PERIODIC, b1=code, b2=reserved1, b3=mag, b4=offset,
+	* b5=phase, b6-b7=period
+	*/
 	memset(p, 0, sizeof(*p));
 	p->id = T500RS_PKT_PERIODIC; /* b0 */
 	p->code = code; /* b1 */
@@ -357,19 +361,19 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
 	offset = (s8)((end_level - start_level) / 512);
 
 	/*
-   * Phase encodes ramp direction per FFEdit captures:
-   * - Positive ramp (start < end): phase = 0x7f (127)
-   * - Negative ramp (start > end): phase = 0x00
-   * - Equal levels: treat as positive (neutral case)
-   *
-   * Example captures:
-   * - 049a0000007f0000 - phase 0x7f = positive/up direction
-   * - 049a000c00000000 - phase 0x00 = negative/down direction
-   */
+	* Phase encodes ramp direction per FFEdit captures:
+	* - Positive ramp (start < end): phase = 0x7f (127)
+	* - Negative ramp (start > end): phase = 0x00
+	* - Equal levels: treat as positive (neutral case)
+	*
+	* Example captures:
+	* - 049a0000007f0000 - phase 0x7f = positive/up direction
+	* - 049a000c00000000 - phase 0x00 = negative/down direction
+	*/
 	phase = (start_level < end_level) ? 0x7f : 0x00;
 
 	/* Byte order per USB captures: b0=id, b1=code, b2=reserved1, b3=mag,
-   * b4=offset, b5=phase, b6-b7=period */
+	* b4=offset, b5=phase, b6-b7=period */
 	p->id = 0x04; /* b0 */
 	p->code = code; /* b1 */
 	p->reserved1 = 0; /* b2: always 0x00 */
@@ -377,6 +381,27 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
 	p->offset = (u8)offset; /* b4 */
 	p->phase = phase; /* b5: direction (0x7f=up, 0x00=down) */
 	p->period_ms = cpu_to_le16(duration_ms); /* b6-b7 */
+}
+
+/* Saturation scaling constants */
+#define T500RS_SATURATION_DEVICE_MAX 100
+#define T500RS_SATURATION_LINUX_MAX 65535
+
+/**
+ * t500rs_scale_saturation - Scale saturation from Linux FFB to device range
+ * @saturation: Linux FFB saturation value (0-65535)
+ *
+ * Returns: Scaled saturation value (0-100)
+ *
+ * Uses 32-bit arithmetic to prevent overflow and ensures accurate scaling.
+ * The result is clamped to 0-100 range.
+ */
+static inline u8 t500rs_scale_saturation(u16 saturation)
+{
+	return (u8)min_t(u32,
+		((u32)saturation * T500RS_SATURATION_DEVICE_MAX) /
+		T500RS_SATURATION_LINUX_MAX,
+		T500RS_SATURATION_DEVICE_MAX);
 }
 
 /*
@@ -417,6 +442,230 @@ static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
 
 	p->right_sat = right_sat;
 	p->left_sat = left_sat;
+}
+
+/*
+ * Build and send a 0x05 conditional effect packet.
+ *
+ * This helper function encapsulates the common pattern of building and
+ * sending a condition (spring/damper/friction/inertia) packet, reducing
+ * code duplication and improving maintainability.
+ *
+ * Parameters:
+ * - t500rs: Device context
+ * - buf: Buffer to use for packet construction
+ * - code: Packet code (from param_sub or env_sub)
+ * - cond: Condition effect parameters
+ *
+ * Returns: 0 on success, negative errno on failure
+ */
+static int t500rs_send_condition_packet(struct t500rs_device_entry *t500rs,
+					u8 *buf, u8 code,
+					const struct ff_condition_effect *cond)
+{
+	struct t500rs_pkt_r05_condition *p;
+
+	if (!t500rs || !buf || !cond)
+		return -EINVAL;
+
+	/* Scale saturation from Linux FFB range to device range */
+	u8 right_sat = t500rs_scale_saturation(cond->right_saturation);
+	u8 left_sat = t500rs_scale_saturation(cond->left_saturation);
+
+	/* Build and send the condition packet */
+	p = (struct t500rs_pkt_r05_condition *)buf;
+	t500rs_build_r05_condition(p, code, cond->right_coeff, cond->left_coeff,
+				   right_sat, left_sat, cond->deadband,
+				   cond->center);
+
+	return t500rs_send_hid(t500rs, buf,
+			       sizeof(struct t500rs_pkt_r05_condition));
+}
+
+/*
+ * Build and send a 0x03 constant force packet.
+ *
+ * This helper function encapsulates the common pattern of building and
+ * sending a constant force packet, reducing code duplication and improving
+ * maintainability. Handles level scaling with direction projection.
+ *
+ * Parameters:
+ * - t500rs: Device context
+ * - buf: Buffer to use for packet construction
+ * - code: Packet code (from param_sub)
+ * - level: Constant force level (-32767 to 32767)
+ * - direction: Effect direction (0-65535)
+ *
+ * Returns: 0 on success, negative errno on failure
+ */
+static int t500rs_send_constant_packet(struct t500rs_device_entry *t500rs,
+				       u8 *buf, u8 code,
+				       s16 level, u16 direction)
+{
+	struct t500rs_r03_const *r3;
+	s8 scaled_level;
+
+	if (!t500rs || !buf)
+		return -EINVAL;
+
+	/* Scale level with direction projection */
+	scaled_level = t500rs_scale_const_with_direction(level, direction);
+
+	/* Build and send packet */
+	r3 = (struct t500rs_r03_const *)buf;
+	t500rs_build_r03_constant(r3, code, scaled_level);
+
+	return t500rs_send_hid(t500rs, buf, sizeof(*r3));
+}
+
+/*
+ * Build and send a 0x04 periodic effect packet.
+ *
+ * This helper function encapsulates the common pattern of building and
+ * sending a periodic effect packet, reducing code duplication and improving
+ * maintainability. Handles magnitude scaling with direction projection,
+ * phase adjustment, and period validation.
+ *
+ * Parameters:
+ * - t500rs: Device context
+ * - buf: Buffer to use for packet construction
+ * - code: Packet code (from param_sub)
+ * - periodic: Periodic effect parameters
+ * - direction: Effect direction (0-65535)
+ *
+ * Returns: 0 on success, negative errno on failure
+ */
+static int t500rs_send_periodic_packet(struct t500rs_device_entry *t500rs,
+				       u8 *buf, u8 code,
+				       const struct ff_periodic_effect *periodic,
+				       u16 direction)
+{
+	struct t500rs_pkt_r04_periodic_ramp *p;
+	u16 phase_raw;
+	u8 mag, phase;
+	s8 offset;
+	u16 period_ms;
+
+	if (!t500rs || !buf || !periodic)
+		return -EINVAL;
+
+	/* Validate period */
+	period_ms = periodic->period;
+	if (period_ms == 0) {
+		hid_err(t500rs->hdev,
+			"Periodic effect period cannot be zero\n");
+		return -EINVAL;
+	}
+
+	/* Apply direction projection to magnitude and adjust phase */
+	phase_raw = periodic->phase;
+	mag = t500rs_scale_periodic_with_direction(
+		periodic->magnitude, direction, &phase_raw);
+	phase = t500rs_scale_periodic_phase(phase_raw);
+	offset = t500rs_scale_periodic_offset(periodic->offset);
+
+	/* Build and send packet */
+	p = (struct t500rs_pkt_r04_periodic_ramp *)buf;
+	t500rs_build_r04_periodic(p, code, mag, offset, phase, period_ms);
+
+	return t500rs_send_hid(t500rs, buf, sizeof(*p));
+}
+
+/*
+ * Build and send a 0x04 ramp effect packet.
+ *
+ * This helper function encapsulates the common pattern of building and
+ * sending a ramp effect packet, reducing code duplication and improving
+ * maintainability. Ramp effects use the same 0x04 packet structure as
+ * periodic effects.
+ *
+ * Parameters:
+ * - t500rs: Device context
+ * - buf: Buffer to use for packet construction
+ * - code: Packet code (from param_sub)
+ * - ramp: Ramp effect parameters
+ * - duration_ms: Ramp duration in milliseconds
+ *
+ * Returns: 0 on success, negative errno on failure
+ */
+static int t500rs_send_ramp_packet(struct t500rs_device_entry *t500rs,
+				   u8 *buf, u8 code,
+				   const struct ff_ramp_effect *ramp,
+				   u16 duration_ms)
+{
+	struct t500rs_pkt_r04_periodic_ramp *p;
+
+	if (!t500rs || !buf || !ramp)
+		return -EINVAL;
+
+	/* Validate duration */
+	if (duration_ms == 0) {
+		hid_err(t500rs->hdev,
+			"Ramp effect duration cannot be zero\n");
+		return -EINVAL;
+	}
+
+	/* Build and send ramp packet */
+	p = (struct t500rs_pkt_r04_periodic_ramp *)buf;
+	t500rs_build_r04_ramp(p, code, ramp->start_level,
+			     ramp->end_level, duration_ms);
+
+	return t500rs_send_hid(t500rs, buf, sizeof(*p));
+}
+
+/*
+ * Build and send a 0x02 envelope packet.
+ *
+ * This helper function encapsulates the common pattern of building and
+ * sending an envelope packet, reducing code duplication and improving
+ * maintainability. Determines envelope availability based on effect type.
+ *
+ * Per firmware behavior, only ramp effects support non-zero envelope values.
+ * Periodic and constant effects must send zero envelope values due to
+ * firmware limitations.
+ *
+ * Parameters:
+ * - t500rs: Device context
+ * - buf: Buffer to use for packet construction
+ * - subtype: Envelope subtype (from env_sub)
+ * - effect: Effect containing envelope parameters
+ *
+ * Returns: 0 on success, negative errno on failure
+ */
+static int t500rs_send_envelope_packet(struct t500rs_device_entry *t500rs,
+				       u8 *buf, u8 subtype,
+				       const struct ff_effect *effect)
+{
+	struct t500rs_pkt_r02_envelope *env;
+	const struct ff_envelope *envelope = NULL;
+	bool allow_envelope = false;
+
+	if (!t500rs || !buf || !effect)
+		return -EINVAL;
+
+	/* Determine envelope availability based on effect type */
+	switch (effect->type) {
+	case FF_RAMP:
+		envelope = &effect->u.ramp.envelope;
+		allow_envelope = true;
+		break;
+	case FF_CONSTANT:
+	case FF_PERIODIC:
+		envelope = &effect->u.periodic.envelope;
+		allow_envelope = false; /* Firmware bug: must send zeros */
+		break;
+	default:
+		/* No envelope for this effect type */
+		envelope = NULL;
+		allow_envelope = false;
+		break;
+	}
+
+	/* Build and send envelope packet */
+	env = (struct t500rs_pkt_r02_envelope *)buf;
+	t500rs_build_r02_envelope(env, subtype, envelope, allow_envelope);
+
+	return t500rs_send_hid(t500rs, buf, sizeof(*env));
 }
 
 /*
@@ -491,13 +740,13 @@ static void t500rs_build_r02_envelope(struct t500rs_pkt_r02_envelope *p,
 	p->subtype = subtype;
 
 	/*
-   * Per T500RS_EFFECTS.md, the device firmware rejects
-   * non-zero envelope values for periodic and constant effects with
-   * EPROTO (-71). Only ramp effects can safely use envelopes.
-   *
-   * Windows driver always sends zeros for periodic/constant:
-   * 02 38 00 00 00 00 00 00 00
-   */
+	* Per T500RS_EFFECTS.md, the device firmware rejects
+	* non-zero envelope values for periodic and constant effects with
+	* EPROTO (-71). Only ramp effects can safely use envelopes.
+	*
+	* Windows driver always sends zeros for periodic/constant:
+	* 02 38 00 00 00 00 00 00 00
+	*/
 	if (env && allow_nonzero) {
 		p->attack_len = cpu_to_le16(env->attack_length);
 		p->attack_level =
@@ -591,101 +840,39 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
 			break;
 
 		case T500RS_SEQ_ENVELOPE: {
-			struct t500rs_pkt_r02_envelope *env =
-				(struct t500rs_pkt_r02_envelope *)buf;
-			const struct ff_envelope *envelope = NULL;
-			bool allow_envelope = false;
-
-			if (effect->type == FF_RAMP) {
-				envelope = &effect->u.ramp.envelope;
-				allow_envelope =
-					true; /* Ramp supports envelope */
-			} else if (effect->type == FF_CONSTANT ||
-				   effect->type == FF_PERIODIC) {
-				envelope = &effect->u.periodic.envelope;
-				allow_envelope =
-					false; /* Firmware bug: must send zeros */
-			}
-
-			t500rs_build_r02_envelope(env, (u8)(env_sub & 0xff),
-						  envelope, allow_envelope);
-			ret = t500rs_send_hid(
-				t500rs, buf,
-				sizeof(struct t500rs_pkt_r02_envelope));
+			ret = t500rs_send_envelope_packet(t500rs, buf,
+							  (u8)env_sub, effect);
 			break;
 		}
 
 		case T500RS_SEQ_CONSTANT: {
-			s8 level = t500rs_scale_const_with_direction(
-				effect->u.constant.level, effect->direction);
-			struct t500rs_r03_const *r3 =
-				(struct t500rs_r03_const *)buf;
-			t500rs_build_r03_constant(r3, (u8)(param_sub & 0xff),
-						  level);
-			ret = t500rs_send_hid(t500rs, buf,
-					      sizeof(struct t500rs_r03_const));
+			ret = t500rs_send_constant_packet(t500rs, buf,
+							  (u8)param_sub,
+							  effect->u.constant.level,
+							  effect->direction);
 			break;
 		}
 
 		case T500RS_SEQ_PERIODIC_RAMP: {
 			if (effect->type == FF_RAMP) {
-				struct t500rs_pkt_r04_periodic_ramp *p =
-					(struct t500rs_pkt_r04_periodic_ramp *)
-						buf;
-				t500rs_build_r04_ramp(
-					p, (u8)(param_sub & 0xff),
-					effect->u.ramp.start_level,
-					effect->u.ramp.end_level,
-					effect->replay.length);
+				ret = t500rs_send_ramp_packet(t500rs, buf,
+							     (u8)param_sub,
+							     &effect->u.ramp,
+							     effect->replay.length);
 			} else {
-				/* Apply direction projection to magnitude and adjust phase if needed */
-				u16 phase_raw = effect->u.periodic.phase;
-				u8 mag = t500rs_scale_periodic_with_direction(
-					effect->u.periodic.magnitude,
-					effect->direction, &phase_raw);
-				u8 phase =
-					t500rs_scale_periodic_phase(phase_raw);
-				s8 offset = t500rs_scale_periodic_offset(
-					effect->u.periodic.offset);
-				u16 period_ms = effect->u.periodic.period;
-				if (period_ms == 0) {
-					hid_err(t500rs->hdev,
-						"Periodic effect period cannot be zero\n");
-					return -EINVAL;
-				}
-				struct t500rs_pkt_r04_periodic_ramp *p =
-					(struct t500rs_pkt_r04_periodic_ramp *)
-						buf;
-				t500rs_build_r04_periodic(
-					p, (u8)(param_sub & 0xff), mag, offset,
-					phase, period_ms);
+				ret = t500rs_send_periodic_packet(t500rs, buf,
+								  (u8)param_sub,
+								  &effect->u.periodic,
+								  effect->direction);
 			}
-			ret = t500rs_send_hid(
-				t500rs, buf,
-				sizeof(struct t500rs_pkt_r04_periodic_ramp));
-			if (ret)
-				break;
 			break;
 		}
 
 		case T500RS_SEQ_CONDITION_X: {
 			const struct ff_condition_effect *cond =
 				&effect->u.condition[0];
-			/* Scale saturation from Linux FFB range (0..65535) to device range
-       * (0..100) */
-			u8 right_sat = (cond->right_saturation * 100) / 65535;
-			u8 left_sat = (cond->left_saturation * 100) / 65535;
-
-			struct t500rs_pkt_r05_condition *p =
-				(struct t500rs_pkt_r05_condition *)buf;
-			t500rs_build_r05_condition(p, (u8)(param_sub),
-						   cond->right_coeff,
-						   cond->left_coeff, right_sat,
-						   left_sat, cond->deadband,
-						   cond->center);
-			ret = t500rs_send_hid(
-				t500rs, buf,
-				sizeof(struct t500rs_pkt_r05_condition));
+			ret = t500rs_send_condition_packet(t500rs, buf,
+							   (u8)param_sub, cond);
 			break;
 		}
 
@@ -693,21 +880,8 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
 			/* Y-axis: use condition[1] if available, else zeros */
 			const struct ff_condition_effect *cond =
 				&effect->u.condition[1];
-			/* Scale saturation from Linux FFB range (0..65535) to device range
-       * (0..100) */
-			u8 right_sat = (cond->right_saturation * 100) / 65535;
-			u8 left_sat = (cond->left_saturation * 100) / 65535;
-
-			struct t500rs_pkt_r05_condition *p =
-				(struct t500rs_pkt_r05_condition *)buf;
-			t500rs_build_r05_condition(p, (u8)(env_sub & 0xff),
-						   cond->right_coeff,
-						   cond->left_coeff, right_sat,
-						   left_sat, cond->deadband,
-						   cond->center);
-			ret = t500rs_send_hid(
-				t500rs, buf,
-				sizeof(struct t500rs_pkt_r05_condition));
+			ret = t500rs_send_condition_packet(t500rs, buf,
+							   (u8)env_sub, cond);
 			break;
 		}
 
@@ -946,9 +1120,9 @@ static int t500rs_upload_condition(struct t500rs_device_entry *t500rs,
 	u8 effect_gain;
 	const char *type_name;
 	/*
-   * Determine effect type code and gain level.
-   * Per Windows captures: Spring=0x40, Damper/Friction/Inertia=0x41
-   */
+	* Determine effect type code and gain level.
+	* Per Windows captures: Spring=0x40, Damper/Friction/Inertia=0x41
+	*/
 	u8 effect_type;
 	switch (effect->type) {
 	case FF_SPRING:
@@ -1016,18 +1190,18 @@ static int t500rs_upload_periodic(struct t500rs_device_entry *t500rs,
 	u8 effect_type;
 
 	/*
-   * Determine waveform name and effect_type for 0x01 packet.
-   *
-   * Per Windows captures, waveform type IS encoded in the 0x01 packet's
-   * effect_type field (byte 2).
-   *
-   * Effect type values for periodic waveforms:
-   * - 0x20 = Square
-   * - 0x21 = Triangle
-   * - 0x22 = Sine
-   * - 0x23 = Sawtooth Up
-   * - 0x24 = Sawtooth Down
-   */
+	* Determine waveform name and effect_type for 0x01 packet.
+	*
+	* Per Windows captures, waveform type IS encoded in the 0x01 packet's
+	* effect_type field (byte 2).
+	*
+	* Effect type values for periodic waveforms:
+	* - 0x20 = Square
+	* - 0x21 = Triangle
+	* - 0x22 = Sine
+	* - 0x23 = Sawtooth Up
+	* - 0x24 = Sawtooth Down
+	*/
 	switch (effect->u.periodic.waveform) {
 	case FF_SQUARE:
 		type_name = "square";
@@ -1189,10 +1363,10 @@ static int t500rs_upload_effect(void *data,
 
 	/* Validate common parameters */
 	/* Direction is provided by the Linux FF subsystem as 0..65535 (u16).
-   * The device expects 0..35999 (0.01 degree units); scaling is done by
-   * t500rs_scale_direction() when sending packets. Accept the full u16
-   * range here instead of rejecting values >35999 (e.g. 49152).
-   */
+	* The device expects 0..35999 (0.01 degree units); scaling is done by
+	* t500rs_scale_direction() when sending packets. Accept the full u16
+	* range here instead of rejecting values >35999 (e.g. 49152).
+	*/
 	/* no validation needed here */
 	if (effect->replay.delay > 65535) {
 		hid_err(t500rs->hdev, "Delay %u exceeds maximum 65535\n",
@@ -1336,21 +1510,15 @@ static int t500rs_update_effect(void *data,
 
 	switch (effect->type) {
 	case FF_CONSTANT: {
-		int level = effect->u.constant.level;
-		u16 direction = effect->direction;
-
-		if (level == old->u.constant.level &&
-		    direction == old->direction)
+		if (effect->u.constant.level == old->u.constant.level &&
+		    effect->direction == old->direction)
 			return 0;
 
-		s8 signed_level =
-			t500rs_scale_const_with_direction(level, direction);
 		u16 param_sub, env_sub;
 		t500rs_index_to_subtypes(hw_id, &param_sub, &env_sub);
-		struct t500rs_r03_const *r3 = (struct t500rs_r03_const *)buf;
-		t500rs_build_r03_constant(r3, (u8)(param_sub & 0xff),
-					  signed_level);
-		return t500rs_send_hid(t500rs, (u8 *)r3, sizeof(*r3));
+		return t500rs_send_constant_packet(t500rs, buf, (u8)param_sub,
+						   effect->u.constant.level,
+						   effect->direction);
 	}
 
 	case FF_PERIODIC: {
@@ -1362,29 +1530,11 @@ static int t500rs_update_effect(void *data,
 		    effect->direction == old->direction)
 			return 0;
 
-		/* Apply direction projection to magnitude and adjust phase if needed */
-		u16 phase_raw = effect->u.periodic.phase;
-		u8 mag = t500rs_scale_periodic_with_direction(
-			effect->u.periodic.magnitude, effect->direction,
-			&phase_raw);
-		u8 phase = t500rs_scale_periodic_phase(phase_raw);
-		u8 offset =
-			t500rs_scale_periodic_offset(effect->u.periodic.offset);
-		u16 period_ms = effect->u.periodic.period;
 		u16 param_sub, env_sub;
-
-		if (period_ms == 0) {
-			hid_err(t500rs->hdev,
-				"Periodic effect period cannot be zero\n");
-			return -EINVAL;
-		}
-
 		t500rs_index_to_subtypes(hw_id, &param_sub, &env_sub);
-		struct t500rs_pkt_r04_periodic_ramp *p =
-			(struct t500rs_pkt_r04_periodic_ramp *)buf;
-		t500rs_build_r04_periodic(p, (u8)(param_sub & 0xff), mag,
-					  offset, phase, period_ms);
-		return t500rs_send_hid(t500rs, buf, sizeof(*p));
+		return t500rs_send_periodic_packet(t500rs, buf, (u8)param_sub,
+						   &effect->u.periodic,
+						   effect->direction);
 	}
 
 	case FF_RAMP: {
@@ -1394,22 +1544,11 @@ static int t500rs_update_effect(void *data,
 		    effect->replay.length == old->replay.length)
 			return 0;
 
-		u16 duration_ms = effect->replay.length;
-		if (duration_ms == 0) {
-			hid_err(t500rs->hdev,
-				"Ramp effect duration cannot be zero\n");
-			return -EINVAL;
-		}
-
 		u16 param_sub, env_sub;
 		t500rs_index_to_subtypes(hw_id, &param_sub, &env_sub);
-		struct t500rs_pkt_r04_periodic_ramp *p =
-			(struct t500rs_pkt_r04_periodic_ramp *)buf;
-		t500rs_build_r04_ramp(p, (u8)(param_sub & 0xff),
-				      effect->u.ramp.start_level,
-				      effect->u.ramp.end_level, duration_ms);
-
-		return t500rs_send_hid(t500rs, buf, sizeof(*p));
+		return t500rs_send_ramp_packet(t500rs, buf, (u8)param_sub,
+					       &effect->u.ramp,
+					       effect->replay.length);
 	}
 
 	case FF_SPRING:
@@ -1417,9 +1556,9 @@ static int t500rs_update_effect(void *data,
 	case FF_FRICTION:
 	case FF_INERTIA: {
 		/*
-     * Skip update if parameters unchanged - prevents micro-pulse/rumble
-     * when games spam identical condition updates.
-     */
+		* Skip update if parameters unchanged - prevents micro-pulse/rumble
+		* when games spam identical condition updates.
+		*/
 		const struct ff_condition_effect *cond =
 			&effect->u.condition[0];
 		const struct ff_condition_effect *cond_old =
@@ -1436,18 +1575,8 @@ static int t500rs_update_effect(void *data,
 			return 0;
 
 		t500rs_index_to_subtypes(hw_id, &param_sub, &env_sub);
-		/* Scale saturation from Linux FFB range (0..65535) to device range (0..100)
-     */
-		u8 right_sat = (cond->right_saturation * 100) / 65535;
-		u8 left_sat = (cond->left_saturation * 100) / 65535;
-
-		struct t500rs_pkt_r05_condition *p =
-			(struct t500rs_pkt_r05_condition *)buf;
-		t500rs_build_r05_condition(p, (u8)(param_sub & 0xff),
-					   cond->right_coeff, cond->left_coeff,
-					   right_sat, left_sat, cond->deadband,
-					   cond->center);
-		return t500rs_send_hid(t500rs, buf, sizeof(*p));
+		return t500rs_send_condition_packet(t500rs, buf,
+						    (u8)param_sub, cond);
 	}
 
 	default:
@@ -1468,10 +1597,12 @@ static int t500rs_set_autocenter(void *data, u16 autocenter)
 
 	autocenter_percent = (u8)((autocenter * 100) / 65535);
 
-	/* Wine compatibility: Some games (e.g., LFS under Wine) set autocenter to
-   * 100%% at startup. That leaves a permanent strong
-   * centering force which masks/overpowers other forces. To avoid this, message
-   * the requests for the user to revert the gain value to expected value. */
+	/* 
+	* Wine compatibility: Some games (e.g., LFS under Wine) set autocenter to
+	* 100%% at startup. That leaves a permanent strong
+	* centering force which masks/overpowers other forces. To avoid this, message
+	* the requests for the user to revert the gain value to expected value.
+	*/
 	if (autocenter_percent >= 100) {
 		hid_warn(
 			t500rs->hdev,
@@ -1485,27 +1616,23 @@ static int t500rs_set_autocenter(void *data, u16 autocenter)
 		return -ENOMEM;
 
 	/* Enable autocenter: Report 0x40 0x04 0x01 */
-	{
-		struct t500rs_pkt_r40_config *config =
-			(struct t500rs_pkt_r40_config *)buf;
-		config->id = 0x40;
-		config->subcmd = 0x04;
-		config->data1 = 0x01; /* Enable */
-		config->data2 = 0x00;
-	}
+	struct t500rs_pkt_r40_config *config =
+		(struct t500rs_pkt_r40_config *)buf;
+	config->id = 0x40;
+	config->subcmd = 0x04;
+	config->data1 = 0x01; /* Enable */
+	config->data2 = 0x00;
 	ret = t500rs_send_hid(t500rs, buf, 4);
 	if (ret)
 		return ret;
 
 	/* Set autocenter strength: Report 0x40 0x03 [value] */
-	{
-		struct t500rs_pkt_r40_config *config =
-			(struct t500rs_pkt_r40_config *)buf;
-		config->id = 0x40;
-		config->subcmd = 0x03;
-		config->data1 = autocenter_percent; /* 0-100 percentage */
-		config->data2 = 0x00;
-	}
+	struct t500rs_pkt_r40_config *config =
+		(struct t500rs_pkt_r40_config *)buf;
+	config->id = 0x40;
+	config->subcmd = 0x03;
+	config->data1 = autocenter_percent; /* 0-100 percentage */
+	config->data2 = 0x00;
 	ret = t500rs_send_hid(t500rs, buf, 4);
 	if (ret)
 		return ret;
@@ -1636,9 +1763,9 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	T500RS_DBG(t500rs, "Sending initialization sequence...\n");
 
 	/* Report 0x42 - Init/status commands (2 bytes each)
-   * Windows sends these at startup: 0x42 0x04, 0x42 0x05, 0x42 0x00
-   * These appear to initialize the FFB subsystem state.
-   */
+	* Windows sends these at startup: 0x42 0x04, 0x42 0x05, 0x42 0x00
+	* These appear to initialize the FFB subsystem state.
+	*/
 	memset(init_buf, 0, 2);
 	init_buf[0] = 0x42;
 	init_buf[1] = 0x04;
@@ -1664,8 +1791,8 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 			 ret);
 
 	/* Report 0x40 - Enable FFB (4 bytes)
-   * Magic value seen in captures that enables FFB on the base.
-   */
+	* Magic value seen in captures that enables FFB on the base.
+	*/
 	{
 		struct t500rs_pkt_r40_config *config =
 			(struct t500rs_pkt_r40_config *)init_buf;
@@ -1695,8 +1822,8 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 			 "Init command 3 (0x40 config) failed: %d\n", ret);
 
 	/* Report 0x43 - Set global gain (2 bytes)
-   * Start at maximum device gain; the FFB gain callback will adjust later.
-   */
+	* Start at maximum device gain; the FFB gain callback will adjust later.
+	*/
 	memset(init_buf, 0, 2);
 	init_buf[0] = 0x43;
 	init_buf[1] = 0xFF;
