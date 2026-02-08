@@ -52,7 +52,7 @@ Kernel modules require kernel headers to be installed. Use any
 one of the right command for your distribution:
 
 ```shell
-sudo apt install linux-headers-$(uname -r)   # Debian-based
+sudo apt install linux-headers-generic       # Debian-based
 sudo pacman -S linux-headers                 # Arch-based
 sudo yum install kernel-devel kernel-headers # Fedora-based
 ```
