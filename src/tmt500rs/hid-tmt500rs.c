@@ -383,6 +383,17 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
 	p->period_ms = cpu_to_le16(duration_ms); /* b6-b7 */
 }
 
+/* Forward declarations for functions used by helper functions */
+static int t500rs_send_hid(struct t500rs_device_entry *t500rs, u8 *data,
+			   size_t len);
+static inline int t500rs_send_stop(struct t500rs_device_entry *t500rs,
+				   u8 hw_effect_id);
+static void t500rs_build_r03_constant(struct t500rs_r03_const *p, u8 code,
+				      s8 level);
+static void t500rs_build_r02_envelope(struct t500rs_pkt_r02_envelope *p,
+				      u8 subtype, const struct ff_envelope *env,
+				      bool allow_nonzero);
+
 /* Saturation scaling constants */
 #define T500RS_SATURATION_DEVICE_MAX 100
 #define T500RS_SATURATION_LINUX_MAX 65535
@@ -774,30 +785,6 @@ const signed short t500rs_effects[] = { FF_CONSTANT, FF_SPRING,	    FF_DAMPER,
 					FF_SQUARE,   FF_SINE,	    FF_TRIANGLE,
 					FF_SAW_UP,   FF_SAW_DOWN,   FF_RAMP,
 					FF_GAIN,     FF_AUTOCENTER, -1 };
-
-/* Forward declarations to avoid implicit declarations before worker uses them
- */
-static int t500rs_send_hid(struct t500rs_device_entry *t500rs, u8 *data,
-			   size_t len);
-
-static inline int t500rs_send_stop(struct t500rs_device_entry *t500rs,
-				   u8 hw_effect_id);
-
-static int t500rs_set_autocenter(void *data, u16 autocenter);
-
-static int t500rs_set_range(void *data, u16 range);
-
-static int t500rs_upload_effect(void *data,
-				const struct tmff2_effect_state *state);
-
-static int t500rs_update_effect(void *data,
-				const struct tmff2_effect_state *state);
-
-static int t500rs_play_effect(void *data,
-			      const struct tmff2_effect_state *state);
-
-static int t500rs_stop_effect(void *data,
-			      const struct tmff2_effect_state *state);
 
 /*
  * Send a sequence of packets for effect upload.
@@ -1627,12 +1614,12 @@ static int t500rs_set_autocenter(void *data, u16 autocenter)
 		return ret;
 
 	/* Set autocenter strength: Report 0x40 0x03 [value] */
-	struct t500rs_pkt_r40_config *config =
+	struct t500rs_pkt_r40_config *strength =
 		(struct t500rs_pkt_r40_config *)buf;
-	config->id = 0x40;
-	config->subcmd = 0x03;
-	config->data1 = autocenter_percent; /* 0-100 percentage */
-	config->data2 = 0x00;
+	strength->id = 0x40;
+	strength->subcmd = 0x03;
+	strength->data1 = autocenter_percent; /* 0-100 percentage */
+	strength->data2 = 0x00;
 	ret = t500rs_send_hid(t500rs, buf, 4);
 	if (ret)
 		return ret;
