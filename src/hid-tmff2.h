@@ -14,6 +14,10 @@ extern int range;
 extern int gain;
 extern int alt_mode;
 
+//Combine Pedals / Center Clutch patch
+extern bool combine_pedals;
+extern bool center_clutch;
+
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
 /* the wheel seems to only be capable of processing a certain number of
@@ -36,6 +40,10 @@ extern int alt_mode;
 #define PARAM_RANGE		(1 << 3)
 #define PARAM_ALT_MODE		(1 << 4)
 #define PARAM_GAIN		(1 << 5)
+
+//Combine Pedals / Center Clutch patch
+#define PARAM_COMBINE_PEDALS    (1 << 6) //Combine Pedals
+#define PARAM_CENTER_CLUTCH     (1 << 7) //Clutch always 512 (Centered)
 
 #undef fixp_sin16
 #define fixp_sin16(v) (((v % 360) > 180) ?\
@@ -93,9 +101,15 @@ struct tmff2_device_entry {
 	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
+	int (*raw_event)(struct hid_device *hdev, struct hid_report *report, u8 *data, int size);
 
 	/* void pointers are dangerous, I know, but in this case likely the
 	 * best option... */
+
+	//Combine Pedals / Center Clutch patch
+	bool combine_pedals;
+	bool center_clutch;
+
 };
 
 /* external */
