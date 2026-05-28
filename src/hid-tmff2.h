@@ -101,6 +101,7 @@ struct tmff2_device_entry {
 /* external */
 int t300rs_populate_api(struct tmff2_device_entry *tmff2);
 int t248_populate_api(struct tmff2_device_entry *tmff2);
+int t598_populate_api(struct tmff2_device_entry *tmff2);
 int tx_populate_api(struct tmff2_device_entry *tmff2);
 int tsxw_populate_api(struct tmff2_device_entry *tmff2);
 int tspc_populate_api(struct tmff2_device_entry *tmff2);
@@ -108,6 +109,8 @@ int tspc_populate_api(struct tmff2_device_entry *tmff2);
 #define TMT300RS_PS3_NORM_ID	0xb66e
 #define TMT300RS_PS3_ADV_ID	0xb66f
 #define TMT300RS_PS4_NORM_ID	0xb66d
+
+#define TMT598_PC_ID            0xb696
 
 #define TMT248_PC_ID		0xb696
 
