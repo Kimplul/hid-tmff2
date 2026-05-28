@@ -1,4 +1,4 @@
-# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128, T-GT II, TS-PC and TS-XW wheels
+# Linux kernel module for Thrustmaster T300RS, T248 and (experimental) TX, T128, T598, T-GT II, TS-PC and TS-XW wheels
 
 > **DISCLAIMER:** The module is ready for use in most force
 > feedback games, supports rangesetting as well as gain and autocentering along
@@ -14,7 +14,7 @@
 ## Description
 
 A Linux kernel module for Thrustmaster T300RS, T248, and (experimental support)
-TX, TS-PC and TS-XV wheels.
+TX, T128, T598, TS-PC and TS-XV wheels.
 
 I've been working on enhancing the real-time updating of effects, and although
 it's not flawless yet, the overall experience is gradually improving. There are
@@ -52,9 +52,9 @@ Kernel modules require kernel headers to be installed. Use any
 one of the right command for your distribution:
 
 ```shell
-sudo apt install linux-headers-$(uname -r)   # Debian-based
-sudo pacman -S linux-headers                 # Arch-based
-sudo yum install kernel-devel kernel-headers # Fedora-based
+sudo apt install linux-headers-generic dkms       # Debian-based
+sudo pacman -S linux-headers dkms                 # Arch-based
+sudo yum install kernel-devel kernel-headers dkms # Fedora-based
 ```
 
 The SteamDeck has a few possible options it seems, try some of these:
@@ -138,6 +138,17 @@ for wheels:
 + [T818](https://github.com/Kimplul/hid-tmff2/issues/58)
 
 ## Common issues and notes
+
++ If buttons work in games but there's no FFB, try
+  ```shell
+  echo 'options hid-tmff-new open_mode=0' | sudo tee /etc/modprobe.d/hid-tmff-new.conf
+  ```
+
+  Generally, the wheel only starts handling force effects when 'opened' by an
+  application, but some tools like key remappers may interfere with this.
+  `open_mode=0` 'opens' the wheel immediately to work around this, but increases
+  power draw and sets the fan spinning when not using the wheel, which might be
+  a bit annoying.
 
 + To change gain, autocentering etc. use
   [Oversteer](https://github.com/berarma/oversteer).
