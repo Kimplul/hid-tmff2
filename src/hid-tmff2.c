@@ -2,6 +2,7 @@
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <linux/hid.h>
+#include <linux/usb.h>
 #include <linux/version.h>
 #include "hid-tmff2.h"
 
@@ -694,10 +695,18 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 				goto wheel_err;
 			break;
 
-		case TMT248_PC_ID:
-			if ((ret = t248_populate_api(tmff2)))
-				goto wheel_err;
-			break;
+		case TMT248_PC_ID: /* shared with T598, distinguish by bcdDevice */
+         {
+                        struct usb_device *usbdev = to_usb_device(hdev->dev.parent->parent);
+                        if (le16_to_cpu(usbdev->descriptor.bcdDevice) == 0x0598) {
+                                if ((ret = t598_populate_api(tmff2)))
+                                         goto wheel_err;
+                        } else {
+                                if ((ret = t248_populate_api(tmff2)))
+                                        goto wheel_err;
+                        }
+                        break;
+          }
 
 		case TX_ACTIVE:
 			if ((ret = tx_populate_api(tmff2)))
@@ -814,6 +823,7 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMTS_PC_RACER_ID)},
 	/* tsxw */
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TSXW_ACTIVE)},
+        { HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT598_PC_ID) },
 
 	{}
 };
