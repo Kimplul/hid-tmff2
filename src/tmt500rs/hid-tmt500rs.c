@@ -1811,14 +1811,22 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	/* Report 0x42 - Init/status commands (2 bytes each)
 	* Windows sends these at startup: 0x42 0x04, 0x42 0x05, 0x42 0x00
 	* These appear to initialize the FFB subsystem state.
+	*
+	* The opening sync (0x42 0x04) is mandatory: if the device cannot
+	* even acknowledge the first handshake, FFB will be dead and binding
+	* would advertise a non-functional FF device. Fail probe loudly so the
+	* failure is visible (wheel_destroy, called by the parent, frees the
+	* buffers allocated above).
 	*/
 	memset(init_buf, 0, 2);
 	init_buf[0] = 0x42;
 	init_buf[1] = 0x04;
 	ret = t500rs_send_hid(t500rs, init_buf, 2);
-	if (ret)
-		hid_warn(t500rs->hdev, "Init command 0x42 0x04 failed: %d\n",
-			 ret);
+	if (ret) {
+		hid_err(t500rs->hdev,
+			"Mandatory init sync 0x42 0x04 failed: %d\n", ret);
+		return ret;
+	}
 
 	memset(init_buf, 0, 2);
 	init_buf[0] = 0x42;
@@ -1838,6 +1846,8 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 
 	/* Report 0x40 - Enable FFB (4 bytes)
 	* Magic value seen in captures that enables FFB on the base.
+	* Mandatory: without this the base never enables force feedback, so
+	* every uploaded effect would be silently ignored.
 	*/
 	{
 		struct t500rs_pkt_r40_config *config =
@@ -1848,11 +1858,16 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 		config->data2 = 0x7b;
 	}
 	ret = t500rs_send_hid(t500rs, init_buf, 4);
-	if (ret)
-		hid_warn(t500rs->hdev,
-			 "Init command 2 (0x40 enable) failed: %d\n", ret);
+	if (ret) {
+		hid_err(t500rs->hdev,
+			"Mandatory FFB-enable (0x40 0x11) failed: %d\n", ret);
+		return ret;
+	}
 
-	/* Report 0x40 - Disable built-in autocenter (4 bytes) */
+	/* Report 0x40 - Disable built-in autocenter (4 bytes). Advisory:
+	 * if this fails the base keeps its default autocenter, which the
+	 * set_autocenter callback can still override later.
+	 */
 	{
 		struct t500rs_pkt_r40_config *config =
 			(struct t500rs_pkt_r40_config *)init_buf;
@@ -1865,18 +1880,19 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	ret = t500rs_send_hid(t500rs, init_buf, 4);
 	if (ret)
 		hid_warn(t500rs->hdev,
-			 "Init command 3 (0x40 config) failed: %d\n", ret);
+			 "Autocenter-disable (0x40 0x04) failed: %d\n", ret);
 
-	/* Report 0x43 - Set global gain (2 bytes)
-	* Start at maximum device gain; the FFB gain callback will adjust later.
-	*/
+	/* Report 0x43 - Set global gain (2 bytes). Advisory: start at maximum
+	 * device gain; the FFB gain callback will adjust later, and a failure
+	 * here just leaves whatever gain the base already has.
+	 */
 	memset(init_buf, 0, 2);
 	init_buf[0] = 0x43;
 	init_buf[1] = 0xFF;
 	ret = t500rs_send_hid(t500rs, init_buf, 2);
 	if (ret)
-		hid_warn(t500rs->hdev, "Init command 4 (0x43) failed: %d\n",
-			 ret);
+		hid_warn(t500rs->hdev,
+			 "Initial gain set (0x43) failed: %d\n", ret);
 
 	hid_info(t500rs->hdev, "T500RS initialized successfully (HID mode)\n");
 	T500RS_DBG(t500rs, "Buffer: %zu bytes\n", t500rs->buffer_length);
