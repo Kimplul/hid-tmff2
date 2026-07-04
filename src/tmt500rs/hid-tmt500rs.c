@@ -803,14 +803,16 @@ static void t500rs_build_r02_envelope(struct t500rs_pkt_r02_envelope *p,
 			t500rs_scale_envelope_level(env->attack_level);
 		p->fade_len = cpu_to_le16(env->fade_length);
 		p->fade_level = t500rs_scale_envelope_level(env->fade_level);
-	} else {
-		/*
-     * User requested envelope but device doesn't support it.
-     * Log once to inform user, then send zeros.
-     */
+	} else if (env && (env->attack_length || env->attack_level ||
+			   env->fade_length || env->fade_level)) {
+		/* The user supplied a non-zero envelope that the device cannot
+		 * apply to this effect type (firmware rejects it with EPROTO).
+		 * Warn once and silently drop it by sending zeros.
+		 */
 		pr_warn_once(
-			"t500rs: Envelope requested but not supported for this effect type\n");
+			"t500rs: non-zero envelope ignored for this effect type\n");
 	}
+	/* else: zero/no envelope -> sending zeros is normal protocol behavior */
 }
 
 /* Supported parameters */
