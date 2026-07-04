@@ -432,19 +432,42 @@ static inline u8 t500rs_scale_saturation(u16 saturation)
  * - deadband: Deadband from ff_condition_effect (0-65535)
  * - center: Center offset from ff_condition_effect (-32767 to +32767)
  */
+/* Resolve the per-effect-type strength level (0-100) for conditional effects.
+ * Mirrors T300RS t300rs_calculate_coefficient()'s input_level selection:
+ * spring/damper/friction honor their module params; inertia defaults to 100.
+ */
+static inline u8 t500rs_condition_level(u16 effect_type)
+{
+	switch (effect_type) {
+	case FF_SPRING:
+		return spring_level;
+	case FF_DAMPER:
+		return damper_level;
+	case FF_FRICTION:
+		return friction_level;
+	default:
+		return 100;
+	}
+}
+
 static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
 				       u8 code, s16 right_coeff, s16 left_coeff,
-				       u8 right_sat, u8 left_sat, u16 deadband,
-				       s16 center)
+				       u8 level, u8 right_sat, u8 left_sat,
+				       u16 deadband, s16 center)
 {
 	memset(p, 0, sizeof(*p));
 	p->id = T500RS_PKT_CONDITIONAL;
 	p->code = code;
 	p->reserved = 0x00;
 
-	/* Scale coefficients from Linux 0-32767 range to device 0-10 u8 scale */
-	p->right_coeff = (u8)((right_coeff * 10) / 32767);
-	p->left_coeff = (u8)((left_coeff * 10) / 32767);
+	/* Scale coefficients from Linux 0-32767 range to device 0-10 u8 scale,
+	 * applying the per-effect-type strength level (spring/damper/friction
+	 * module params), matching the T300RS t300rs_calculate_coefficient().
+	 * Order matters for int precision: (coeff * level / 100) keeps the
+	 * intermediate in 0..32767 before the *10/32767 device scaling.
+	 */
+	p->right_coeff = (u8)(((right_coeff * level) / 100) * 10 / 32767);
+	p->left_coeff = (u8)(((left_coeff * level) / 100) * 10 / 32767);
 
 	/* Center: /20 confirmed by captures (e.g. center=-372 = -7439/20 in
 	 * docs/T500RS_FFBEFFECTS.md capture C, and center=250 = 5000/20 in
@@ -481,7 +504,8 @@ static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
  */
 static int t500rs_send_condition_packet(struct t500rs_device_entry *t500rs,
 					u8 *buf, u8 code,
-					const struct ff_condition_effect *cond)
+					const struct ff_condition_effect *cond,
+					u8 level)
 {
 	struct t500rs_pkt_r05_condition *p;
 
@@ -495,7 +519,7 @@ static int t500rs_send_condition_packet(struct t500rs_device_entry *t500rs,
 	/* Build and send the condition packet */
 	p = (struct t500rs_pkt_r05_condition *)buf;
 	t500rs_build_r05_condition(p, code, cond->right_coeff, cond->left_coeff,
-				   right_sat, left_sat, cond->deadband,
+				   level, right_sat, left_sat, cond->deadband,
 				   cond->center);
 
 	return t500rs_send_hid(t500rs, buf,
@@ -868,7 +892,8 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
 			const struct ff_condition_effect *cond =
 				&effect->u.condition[0];
 			ret = t500rs_send_condition_packet(t500rs, buf,
-							   (u8)param_sub, cond);
+							   (u8)param_sub, cond,
+							   t500rs_condition_level(effect->type));
 			break;
 		}
 
@@ -877,7 +902,8 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
 			const struct ff_condition_effect *cond =
 				&effect->u.condition[1];
 			ret = t500rs_send_condition_packet(t500rs, buf,
-							   (u8)env_sub, cond);
+							   (u8)env_sub, cond,
+							   t500rs_condition_level(effect->type));
 			break;
 		}
 
@@ -1113,33 +1139,24 @@ static int t500rs_upload_condition(struct t500rs_device_entry *t500rs,
 	const struct ff_effect *effect = &state->effect;
 	int ret;
 	int hw_id;
-	u8 effect_gain;
 	const char *type_name;
-	/*
-	* Determine effect type code and gain level.
-	* Per Windows captures: Spring=0x40, Damper/Friction/Inertia=0x41
-	*/
-	u8 effect_type;
+
+	/* Resolve the effect name for diagnostics. The hardware effect_type
+	 * code and the per-type strength level are derived inside the packet
+	 * sequence (MAIN step) and t500rs_condition_level() respectively.
+	 */
 	switch (effect->type) {
 	case FF_SPRING:
 		type_name = "spring";
-		effect_gain = spring_level;
-		effect_type = T500RS_EFFECT_SPRING;
 		break;
 	case FF_DAMPER:
 		type_name = "damper";
-		effect_gain = damper_level;
-		effect_type = T500RS_EFFECT_DAMPER;
 		break;
 	case FF_FRICTION:
 		type_name = "friction";
-		effect_gain = friction_level;
-		effect_type = T500RS_EFFECT_FRICTION;
 		break;
 	case FF_INERTIA:
 		type_name = "inertia";
-		effect_gain = 100;
-		effect_type = T500RS_EFFECT_INERTIA;
 		break;
 	default:
 		return -EINVAL;
@@ -1572,7 +1589,8 @@ static int t500rs_update_effect(void *data,
 
 		t500rs_index_to_subtypes(hw_id, &param_sub, &env_sub);
 		return t500rs_send_condition_packet(t500rs, buf,
-						    (u8)param_sub, cond);
+						    (u8)param_sub, cond,
+						    t500rs_condition_level(effect->type));
 	}
 
 	default:
