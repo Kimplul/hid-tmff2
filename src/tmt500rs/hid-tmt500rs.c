@@ -130,50 +130,23 @@ struct t500rs_device_entry {
  *
  * Per Windows captures, effect_type values are:
  * - 0x00 = Constant
- * - 0x22 = Sine
- * - 0x21 = Triangle (inferred)
- * - 0x23 = Sawtooth Up (inferred)
- * - 0x24 = Sawtooth Down (inferred)
+ * - 0x20 = Square, 0x21 = Triangle, 0x22 = Sine,
+ *   0x23 = Sawtooth Up, 0x24 = Sawtooth Down
+ *   (see docs/T500RS_FFBEFFECTS.md effect-type table)
  * - 0x40 = Spring
  * - 0x41 = Damper/Friction/Inertia
  *
  * NOTE: Direction is sent separately in a 0x03 packet for constant force,
  * not in this 0x01 packet.
+ *
+ * This is a pure constructor: callers must validate effect_id/effect_type
+ * beforehand (the MAIN sequence step derives them from validated effect
+ * fields, and hw_id is clamped by t500rs_logical_to_hw_id).
  */
-static int t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
-				 u8 effect_type, u16 duration_ms, u16 delay_ms,
-				 u16 param_sub, u16 envelope_sub)
+static void t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
+				  u8 effect_type, u16 duration_ms, u16 delay_ms,
+				  u16 param_sub, u16 envelope_sub)
 {
-	/* Validate effect_id */
-	if (effect_id >= T500RS_MAX_HW_EFFECTS) {
-		pr_err("t500rs: Invalid effect_id %u (max %d)\n", effect_id,
-		       T500RS_MAX_HW_EFFECTS - 1);
-		return -EINVAL;
-	}
-
-	/* Validate effect_type against known constants */
-	switch (effect_type) {
-	case T500RS_EFFECT_CONSTANT:
-	case T500RS_EFFECT_SQUARE:
-	case T500RS_EFFECT_SINE:
-	case T500RS_EFFECT_TRIANGLE:
-	case T500RS_EFFECT_SAW_UP:
-	case T500RS_EFFECT_SAW_DOWN:
-	case T500RS_EFFECT_SPRING:
-	case T500RS_EFFECT_DAMPER: /* Note: DAMPER, FRICTION, INERTIA all use 0x41 */
-		break;
-	default:
-		pr_err("t500rs: Unknown effect_type 0x%02x\n", effect_type);
-		return -EINVAL;
-	}
-
-	/* Validate packet codes are non-zero (0x0000 likely indicates bug) */
-	if (param_sub == 0 || envelope_sub == 0) {
-		pr_warn("t500rs: Suspicious packet codes: param_sub=0x%04x "
-			"envelope_sub=0x%04x\n",
-			param_sub, envelope_sub);
-	}
-
 	memset(p, 0, sizeof(*p));
 	p->id = T500RS_PKT_MAIN;
 	p->effect_id = effect_id;
@@ -185,8 +158,6 @@ static int t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
 	p->packet_code_1 = cpu_to_le16(param_sub);
 	p->packet_code_2 = cpu_to_le16(envelope_sub);
 	p->reserved2 = 0;
-
-	return 0;
 }
 
 /*
@@ -204,7 +175,7 @@ static int t500rs_build_r01_main(struct t500rs_pkt_r01_main *p, u8 effect_id,
  * Scaling formulas (from protocol doc):
  *   device_mag   = os_ffb_mag * 127 / 32767
  *   device_phase = (os_ffb_phase * 256 / 36000) & 0xFF
- *   device_offset = os_ffb_offset / 256  (approximate, TBD based on testing)
+ *   device_offset = os_ffb_offset / 256  (TODO(hw-verify): unconfirmed)
  *   period_ms    = direct copy (no frequency conversion)
  */
 static void t500rs_build_r04_periodic(struct t500rs_pkt_r04_periodic_ramp *p,
@@ -297,7 +268,10 @@ static inline u8 t500rs_scale_periodic_phase(u16 os_ffb_phase)
  * Scale periodic offset from Linux FFB subsystem format to device format.
  * Linux FFB: -32768..32767
  * Device: signed, stored as s8 (-128..127)
- * Note: exact mapping TBD based on testing; using simple /256 for now.
+ *
+ * TODO(hw-verify): exact mapping is unconfirmed; using simple /256 for
+ * now. Capture a periodic effect with a known non-zero offset and verify
+ * the device reproduces it correctly, then adjust the divisor if needed.
  */
 static inline s8 t500rs_scale_periodic_offset(s16 os_ffb_offset)
 {
@@ -314,9 +288,11 @@ static inline s8 t500rs_scale_periodic_offset(s16 os_ffb_offset)
  * - phase: encodes ramp direction (0x7f = up, 0x00 = down)
  * - period_ms: ramp duration in milliseconds
  *
- * Note: exact mapping of start/end to magnitude/offset is uncertain;
- * Windows captures show identical packets for different ramp parameters.
- * Current implementation uses a simple average for magnitude.
+ * Note: TODO(hw-verify) the exact mapping of start/end to magnitude/offset
+ * is unconfirmed; Windows captures show identical packets for different
+ * ramp parameters. The current implementation uses a simple average for
+ * magnitude. Capture ramps with varied start/end levels and confirm the
+ * device reproduces the intended slope before trusting this encoding.
  */
 static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
 				  u8 code, s16 start_level, s16 end_level,
@@ -334,7 +310,8 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
 	magnitude = (u8)((avg_level * 127) / 32767);
 
 	/* Offset encodes direction: positive = ramping up, negative = ramping down */
-	/* Simple approximation: (end - start) / 512 to fit in s8 range */
+	/* TODO(hw-verify): (end - start) / 512 to fit in s8 range; divisor
+	 * unconfirmed against captures. */
 	offset = (s8)((end_level - start_level) / 512);
 
 	/*
@@ -907,6 +884,11 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
 				}
 				break;
 			case FF_RAMP:
+				/* Intentional: ramps reuse the sawtooth-down
+				 * effect type code per captures
+				 * (docs/T500RS_FFBEFFECTS.md "RAMP EFFECTS":
+				 * effect_type = 0x24). Do not "fix" this to a
+				 * ramp-specific code. */
 				effect_type = T500RS_EFFECT_SAW_DOWN;
 				break;
 			default:
@@ -920,11 +902,9 @@ static int t500rs_send_packet_sequence(struct t500rs_device_entry *t500rs,
 
 			struct t500rs_pkt_r01_main *m =
 				(struct t500rs_pkt_r01_main *)buf;
-			ret = t500rs_build_r01_main(m, hw_id, effect_type,
-						    duration_ms, delay_ms,
-						    param_sub, env_sub);
-			if (ret)
-				break;
+			t500rs_build_r01_main(m, hw_id, effect_type,
+					      duration_ms, delay_ms, param_sub,
+					      env_sub);
 
 			ret = t500rs_send_hid(
 				t500rs, buf,
@@ -966,16 +946,16 @@ static int t500rs_set_gain(void *data, u16 gain)
 	/* Scale 0..65535 to device 0..255 */
 	device_gain_byte = (u8)((gain * 255ULL) / T500RS_GAIN_MAX);
 
-	hid_info(t500rs->hdev, "FFB: set_gain %u -> device %u\n", gain,
-		 device_gain_byte);
+	/* Per-frame gain changes are common; keep this at dbg to avoid
+	 * flooding dmesg. */
+	hid_dbg(t500rs->hdev, "FFB: set_gain %u -> device %u\n", gain,
+		device_gain_byte);
 
 	buf[0] = T500RS_PKT_GAIN;
 	buf[1] = device_gain_byte;
 
 	ret = t500rs_send_hid(t500rs, buf, 2);
-	if (ret == 0)
-		hid_info(t500rs->hdev, "FFB: Gain set successfully\n");
-	else
+	if (ret)
 		hid_err(t500rs->hdev, "FFB: Failed to set gain: %d\n", ret);
 	return ret;
 }
@@ -1268,34 +1248,33 @@ static int t500rs_upload_effect(void *data,
 	}
 
 	/* Validate effect parameters based on type */
+	/* Per-type range checks. We only reject values that are genuinely
+	 * malformed against the Linux input UAPI contract; values within the
+	 * field's representable range are handled by the scaling helpers'
+	 * clamping, so they are not validated here.
+	 *
+	 * Specifically NOT checked (all either impossible for the field's
+	 * type or already covered by helper clamping):
+	 *  - constant.level  (__s16; helper clamps to [-32767,32767])
+	 *  - periodic.magnitude (__u16; helper clamps projected value)
+	 *  - periodic.offset (__s16; full range handled by /256 scaling)
+	 *  - ramp start/end_level (__s16; builder uses abs()/division)
+	 *  - replay.delay (__u16; cannot exceed 65535)
+	 */
 	switch (effect->type) {
 	case FF_CONSTANT:
-		/* Validate constant force level */
-		if (effect->u.constant.level < -32767 ||
-		    effect->u.constant.level > 32767) {
-			hid_err(t500rs->hdev,
-				"Constant level %d out of range [-32767, 32767]\n",
-				effect->u.constant.level);
-			return -EINVAL;
-		}
+	case FF_RAMP:
+	case FF_SPRING:
+	case FF_DAMPER:
+	case FF_FRICTION:
+	case FF_INERTIA:
 		break;
 
 	case FF_PERIODIC:
-		/* Validate periodic effect parameters */
-		if (effect->u.periodic.magnitude < 0 ||
-		    effect->u.periodic.magnitude > 32767) {
-			hid_err(t500rs->hdev,
-				"Periodic magnitude %d out of range [0, 32767]\n",
-				effect->u.periodic.magnitude);
-			return -EINVAL;
-		}
-		if (effect->u.periodic.offset < -32768 ||
-		    effect->u.periodic.offset > 32767) {
-			hid_err(t500rs->hdev,
-				"Periodic offset %d out of range [-32768, 32767]\n",
-				effect->u.periodic.offset);
-			return -EINVAL;
-		}
+		/* phase is documented in the UAPI as 0..35999 (1/100 deg);
+		 * reject a malformed value rather than silently clamping it
+		 * (clamping would subtly shift the phase).
+		 */
 		if (effect->u.periodic.phase > 35999) {
 			hid_err(t500rs->hdev,
 				"Periodic phase %u exceeds maximum 35999\n",
@@ -1304,48 +1283,16 @@ static int t500rs_upload_effect(void *data,
 		}
 		break;
 
-	case FF_RAMP:
-		/* Validate ramp effect parameters */
-		if (effect->u.ramp.start_level < -32767 ||
-		    effect->u.ramp.start_level > 32767) {
-			hid_err(t500rs->hdev,
-				"Ramp start level %d out of range [-32767, 32767]\n",
-				effect->u.ramp.start_level);
-			return -EINVAL;
-		}
-		if (effect->u.ramp.end_level < -32767 ||
-		    effect->u.ramp.end_level > 32767) {
-			hid_err(t500rs->hdev,
-				"Ramp end level %d out of range [-32767, 32767]\n",
-				effect->u.ramp.end_level);
-			return -EINVAL;
-		}
-		break;
-
-	case FF_SPRING:
-	case FF_DAMPER:
-	case FF_FRICTION:
-	case FF_INERTIA:
-		break;
-
 	default:
 		hid_err(t500rs->hdev, "Unsupported effect type: %d\n",
 			effect->type);
 		return -EINVAL;
 	}
 
-	/* Validate common parameters */
 	/* Direction is provided by the Linux FF subsystem as 0..65535 (u16);
 	 * direction projection is applied in the per-effect scaling helpers
 	 * (t500rs_scale_const_with_direction / t500rs_scale_periodic_with_
-	 * direction), so accept the full u16 range here rather than rejecting
-	 * values >35999 (e.g. 49152). */
-	/* no validation needed here */
-	if (effect->replay.delay > 65535) {
-		hid_err(t500rs->hdev, "Delay %u exceeds maximum 65535\n",
-			effect->replay.delay);
-		return -EINVAL;
-	}
+	 * direction), so accept the full u16 range here. */
 
 	switch (effect->type) {
 	case FF_CONSTANT:
