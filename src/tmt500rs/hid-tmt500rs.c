@@ -266,7 +266,8 @@ static void t500rs_build_r04_periodic(struct t500rs_pkt_r04_periodic_ramp *p,
  *
  * Linux FFB magnitude: 0..32767 (unsigned)
  * Linux FFB direction: 0..65535 (0=forward, 16384=right, 32768=back,
- * 49152=left) Linux FFB phase: 0..65535 (0..360 degrees in 1/65536 units)
+ * 49152=left) Linux FFB phase: 0..35999 (0..360 degrees in 1/100ths of a
+ * degree; capped by the validator before this function is reached)
  * Device magnitude: 0..127
  *
  * @param os_ffb_mag: Original magnitude from Linux FFB (0..32767)
@@ -290,9 +291,14 @@ static inline u8 t500rs_scale_periodic_with_direction(int os_ffb_mag,
 		projected = -projected;
 
 		/* Add 180 degrees to phase to maintain correct force direction.
-     * Phase is in 0..65535 range (Linux FFB), 180 degrees = 0x8000 */
+		 * Phase is in 0..35999 (hundredths-of-a-degree) units here, so
+		 * 180 deg = 18000 and a full circle = 36000. This must match
+		 * t500rs_scale_periodic_phase(); do NOT use the 0x8000/0x10000
+		 * values from the T300RS driver, which uses a different unit
+		 * system (0..65535).
+		 */
 		if (phase_ptr)
-			*phase_ptr = (*phase_ptr + 0x8000) % 0x10000;
+			*phase_ptr = (*phase_ptr + 18000) % 36000;
 	}
 
 	/* Clamp to valid range */
