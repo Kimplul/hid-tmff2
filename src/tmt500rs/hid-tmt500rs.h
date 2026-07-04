@@ -17,26 +17,13 @@
 
 /* Packet type constants */
 #define T500RS_PKT_MAIN 0x01
-#define T500RS_PKT_ENVELOPE 0x02
 #define T500RS_PKT_CONSTANT 0x03
 #define T500RS_PKT_PERIODIC 0x04
 #define T500RS_PKT_CONDITIONAL 0x05
-#define T500RS_PKT_COMMAND 0x41
-#define T500RS_PKT_STATUS 0x42
 #define T500RS_PKT_GAIN 0x43
 
-/* Packet code constants */
-#define T500RS_CODE_CONSTANT 0x0e
-#define T500RS_CODE_PERIODIC 0x2a
-#define T500RS_CODE_ENVELOPE 0x1c
-#define T500RS_CODE_CONDITIONAL_X 0x2a
-#define T500RS_CODE_CONDITIONAL_Y 0x38
-
-/* Control and command constants */
+/* Control constants */
 #define T500RS_CONTROL_DEFAULT 0x40
-#define T500RS_CMD_START 0x41
-#define T500RS_CMD_STOP 0x00
-#define T500RS_CMD_ARG 0x01
 
 /* Effect type constants */
 #define T500RS_EFFECT_CONSTANT 0x00
@@ -59,7 +46,6 @@
 #define T500RS_MAX_EFFECTS 15
 #define T500RS_MAX_HW_EFFECTS 16
 #define T500RS_BUFFER_LENGTH 32 /* HID report max packet size */
-#define T500RS_HID_TIMEOUT 1000 /* 1 second */
 
 /* Gain scaling */
 #define T500RS_GAIN_MAX 65535
@@ -195,7 +181,7 @@ struct t500rs_pkt_r05_condition {
 /* 0x03 - Constant force level (4 bytes) */
 struct t500rs_r03_const {
 	u8 id; /* T500RS_PKT_CONSTANT */
-	u8 code; /* T500RS_CODE_CONSTANT */
+	u8 code; /* param_subtype low byte (e.g. 0x0e for slot 0) */
 	u8 zero; /* 0x00 */
 	s8 level; /* -127..127 */
 } __packed;

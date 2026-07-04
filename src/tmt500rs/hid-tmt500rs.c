@@ -68,19 +68,6 @@ static inline s8 t500rs_scale_const_with_direction(int level, u16 direction)
 	return t500rs_scale_const_level_s8(projected);
 }
 
-/* Scale magnitude (0..32767 or signed) to 7-bit (0..127) */
-static inline u8 t500rs_scale_mag_u7(int magnitude)
-{
-	/* Input validation and clamping */
-	if (magnitude < 0)
-		magnitude = -magnitude;
-	if (magnitude > 32767)
-		magnitude = 32767;
-
-	/* Use long long arithmetic to prevent overflow */
-	return (u8)((magnitude * 127LL) / 32767);
-}
-
 /*
  * Map logical effect ID to hardware effect ID.
  * hw_id = logical_id + 1
@@ -129,22 +116,6 @@ struct t500rs_device_entry {
 	u8 *send_buffer;
 	size_t buffer_length;
 };
-
-/*
- * Scale direction from Linux ff_effect format to T500RS protocol format.
- *
- * Linux ff_effect.direction: 0-65535 (0 = forward, 16384 = right, 32768 = back,
- * 49152 = left) T500RS protocol: 0-35999 in 0.01 degree units (0 = 0 degrees,
- * 9000 = 90 degrees, 18000 = 180 degrees, etc.)
- *
- * Conversion: device_dir = (os_ffb_dir * 36000) / 65536
- * This maps 0-65535 -> 0-35999 (approximately, since 65535 -> 35999.45)
- */
-static inline u16 t500rs_scale_direction(u16 os_ffb_dir)
-{
-	/* Use 32-bit arithmetic to avoid overflow */
-	return (u16)(((u32)os_ffb_dir * 36000) / 65536);
-}
 
 /*
  * Build a protocol-accurate 0x01 main upload packet.
@@ -716,25 +687,6 @@ static int t500rs_send_envelope_packet(struct t500rs_device_entry *t500rs,
 	t500rs_build_r02_envelope(env, subtype, envelope, allow_envelope);
 
 	return t500rs_send_hid(t500rs, buf, sizeof(*env));
-}
-
-/*
- * Scale constant force level from Linux FFB subsystem format to device format.
- *
- * Per the T500RS USB protocol documentation:
- * - Linux FFB level: 0-65535 (unsigned)
- * - Device level: -127 to +127 (signed 8-bit)
- * - Formula: device_level = (os_ffb_level * 255 / 65535) - 127
- *
- * This maps:
- *   Linux FFB 0     -> Device -127 (max negative)
- *   Linux FFB 32767 -> Device 0 (neutral)
- *   Linux FFB 65535 -> Device +127 (max positive)
- */
-static inline s8 t500rs_scale_constant_level(u16 os_ffb_level)
-{
-	s32 tmp = ((s32)os_ffb_level * 255) / 65535;
-	return (s8)(tmp - 127);
 }
 
 /*
@@ -1383,11 +1335,11 @@ static int t500rs_upload_effect(void *data,
 	}
 
 	/* Validate common parameters */
-	/* Direction is provided by the Linux FF subsystem as 0..65535 (u16).
-	* The device expects 0..35999 (0.01 degree units); scaling is done by
-	* t500rs_scale_direction() when sending packets. Accept the full u16
-	* range here instead of rejecting values >35999 (e.g. 49152).
-	*/
+	/* Direction is provided by the Linux FF subsystem as 0..65535 (u16);
+	 * direction projection is applied in the per-effect scaling helpers
+	 * (t500rs_scale_const_with_direction / t500rs_scale_periodic_with_
+	 * direction), so accept the full u16 range here rather than rejecting
+	 * values >35999 (e.g. 49152). */
 	/* no validation needed here */
 	if (effect->replay.delay > 65535) {
 		hid_err(t500rs->hdev, "Delay %u exceeds maximum 65535\n",
@@ -1406,11 +1358,6 @@ static int t500rs_upload_effect(void *data,
 		ret = t500rs_upload_condition(t500rs, state);
 		break;
 	case FF_PERIODIC:
-	case FF_SQUARE:
-	case FF_SINE:
-	case FF_TRIANGLE:
-	case FF_SAW_UP:
-	case FF_SAW_DOWN:
 		ret = t500rs_upload_periodic(t500rs, state);
 		break;
 	case FF_RAMP:
