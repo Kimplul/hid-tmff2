@@ -240,18 +240,18 @@ static void t500rs_build_r04_periodic(struct t500rs_pkt_r04_periodic_ramp *p,
 				      u8 code, u8 magnitude, s8 offset,
 				      u8 phase, u16 period_ms)
 {
-	/* Byte order per Windows USB captures (example: 04 2a 00 06 00 3f 0a 00):
-	* b0=T500RS_PKT_PERIODIC, b1=code, b2=reserved1, b3=mag, b4=offset,
-	* b5=phase, b6-b7=period
+	/* Byte order per Windows USB captures (example: 04 2a 06 00 3f 0a 00 00):
+	* b0=T500RS_PKT_PERIODIC, b1=code, b2=mag, b3=offset,
+	* b4=phase, b5-b6=period, b7=reserved
 	*/
 	memset(p, 0, sizeof(*p));
 	p->id = T500RS_PKT_PERIODIC; /* b0 */
 	p->code = code; /* b1 */
-	p->reserved1 = 0; /* b2: always 0x00 */
-	p->magnitude = magnitude; /* b3 */
-	p->offset = (u8)offset; /* b4 */
-	p->phase = phase; /* b5 */
-	p->period_ms = cpu_to_le16(period_ms); /* b6-b7 */
+	p->magnitude = magnitude; /* b2 */
+	p->offset = offset; /* b3 */
+	p->phase = phase; /* b4 */
+	p->period_ms = cpu_to_le16(period_ms); /* b5-b6 */
+	/* p->reserved = 0 (cleared by memset) */
 }
 
 /*
@@ -372,15 +372,16 @@ static void t500rs_build_r04_ramp(struct t500rs_pkt_r04_periodic_ramp *p,
 	*/
 	phase = (start_level < end_level) ? 0x7f : 0x00;
 
-	/* Byte order per USB captures: b0=id, b1=code, b2=reserved1, b3=mag,
-	* b4=offset, b5=phase, b6-b7=period */
+	/* Field layout matches wire format (see struct t500rs_pkt_r04_periodic_ramp):
+	 * b2=magnitude, b3=offset, b4=phase(direction), b5-b6=period_ms */
+	memset(p, 0, sizeof(*p));
 	p->id = 0x04; /* b0 */
 	p->code = code; /* b1 */
-	p->reserved1 = 0; /* b2: always 0x00 */
-	p->magnitude = magnitude; /* b3 */
-	p->offset = (u8)offset; /* b4 */
-	p->phase = phase; /* b5: direction (0x7f=up, 0x00=down) */
-	p->period_ms = cpu_to_le16(duration_ms); /* b6-b7 */
+	p->magnitude = magnitude; /* b2 */
+	p->offset = offset; /* b3 */
+	p->phase = phase; /* b4: direction (0x7f=up, 0x00=down) */
+	p->period_ms = cpu_to_le16(duration_ms); /* b5-b6 */
+	/* p->reserved = 0 (cleared by memset) */
 }
 
 /* Forward declarations for functions used by helper functions */
@@ -1699,8 +1700,10 @@ static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	u8 *init_buf; /* Will use send_buffer for transfers */
 	int ret;
 
-	/* Sanity check protocol main-upload packet size against documentation */
+	/* Sanity check protocol packet sizes against documentation */
 	BUILD_BUG_ON(sizeof(struct t500rs_pkt_r01_main) != 15);
+	BUILD_BUG_ON(sizeof(struct t500rs_pkt_r04_periodic_ramp) != 8);
+	BUILD_BUG_ON(sizeof(struct t500rs_pkt_r05_condition) != 11);
 
 	/* Validate input parameters */
 	if (!tmff2) {

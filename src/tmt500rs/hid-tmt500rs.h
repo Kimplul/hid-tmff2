@@ -136,26 +136,27 @@ struct t500rs_pkt_r01_main {
  * Used for both periodic effects (sine, triangle, sawtooth) and ramp effects.
  * Code field must match the subtype specified in 0x01 packet bytes 9-10.
  *
- * Packet format:
+ * Packet format (verified against USB captures, e.g.
+ * docs/T500RS_FFBEFFECTS.md "04 2a 06 00 3f 0a 00 00"):
  * - b0: packet type (0x04)
  * - b1: subtype code (from 0x01 packet_code_1, typically 0x2a)
- * - b2: reserved (0x00)
- * - b3: magnitude (0-127, scaled from Linux FFB 0-32767)
- * - b4: offset (signed -127 to +127, scaled from Linux FFB -32768 to +32767)
- * - b5: phase (0-255 for 360 degrees, scaled from Linux FFB 0-35999)
- * - b6-b7: period in milliseconds (LE, no Hz conversion!)
+ * - b2: magnitude (0-127, scaled from Linux FFB 0-32767)
+ * - b3: offset (signed -127 to +127, scaled from Linux FFB -32768 to +32767)
+ * - b4: phase (0-255 for 360 degrees, scaled from Linux FFB 0-35999)
+ * - b5-b6: period in milliseconds (LE, no Hz conversion!)
+ * - b7: reserved (0x00)
  *
- * For ramp effects: phase=0, period=ramp duration, magnitude/offset encode
- * start/end levels.
+ * For ramp effects: phase encodes direction (0x7f=up/0x00=down),
+ * period=ramp duration, magnitude/offset encode start/end levels.
  */
 struct t500rs_pkt_r04_periodic_ramp {
 	u8 id; /* b0: T500RS_PKT_PERIODIC */
 	u8 code; /* b1: subtype code (from 0x01 packet_code_1) */
-	u8 reserved1; /* b2: always 0x00 */
-	u8 magnitude; /* b3: 0..127 magnitude (scaled) */
-	u8 offset; /* b4: signed -127..+127 offset (scaled) */
-	u8 phase; /* b5: 0..255 phase (0-360 degrees) */
-	__le16 period_ms; /* b6-b7: period in milliseconds (LE) */
+	u8 magnitude; /* b2: 0..127 magnitude (scaled) */
+	s8 offset; /* b3: signed -127..+127 offset (scaled) */
+	u8 phase; /* b4: 0..255 phase (0-360 degrees) */
+	__le16 period_ms; /* b5-b6: period in milliseconds (LE) */
+	u8 reserved; /* b7: always 0x00 */
 } __packed;
 
 /*
