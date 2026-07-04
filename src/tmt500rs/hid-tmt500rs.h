@@ -175,8 +175,9 @@ struct t500rs_pkt_r04_periodic_ramp {
  *
  * Scaling (from Linux FFB to device):
  * - Coefficients: (value * 10) / 32767 -> 0-10 u8
- * - Center: value / 65 -> s16 LE (approx +-500 range)
- * - Deadband: value / 65 -> u16 LE (0-1008 range)
+ * - Center: value / 20 -> s16 LE (capture-verified)
+ * - Deadband: value / 65 -> u16 LE (UNVERIFIED; doc contradicts itself,
+ *   see TODO in t500rs_build_r05_condition)
  * - Saturation: 0-100 (no scaling)
  */
 struct t500rs_pkt_r05_condition {
@@ -185,8 +186,8 @@ struct t500rs_pkt_r05_condition {
 	u8 reserved; /* Always 0x00 */
 	u8 right_coeff; /* Right/positive coefficient (0-10 scale) */
 	u8 left_coeff; /* Left/negative coefficient (0-10 scale) */
-	__le16 center; /* Center offset (s16 LE, scaled by /65) */
-	__le16 deadband; /* Deadband width (u16 LE, scaled by /65) */
+	__le16 center; /* Center offset (s16 LE, scaled by /20) */
+	__le16 deadband; /* Deadband width (u16 LE, scaled by /65, UNVERIFIED) */
 	u8 right_sat; /* Right saturation (0-100) */
 	u8 left_sat; /* Left saturation (0-100) */
 } __packed;

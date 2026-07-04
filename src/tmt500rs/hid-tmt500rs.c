@@ -446,10 +446,18 @@ static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
 	p->right_coeff = (u8)((right_coeff * 10) / 32767);
 	p->left_coeff = (u8)((left_coeff * 10) / 32767);
 
-	/* Scale center from Linux +-32767 range to device s16 LE (approx +-500) */
-	p->center = cpu_to_le16((s16)(center / 65));
+	/* Center: /20 confirmed by captures (e.g. center=-372 = -7439/20 in
+	 * docs/T500RS_FFBEFFECTS.md capture C, and center=250 = 5000/20 in
+	 * capture B). The doc's contradictory "/65" row is incorrect.
+	 */
+	p->center = cpu_to_le16((s16)(center / 20));
 
-	/* Scale deadband from Linux 0-65535 range to device u16 LE (0-1008) */
+	/* Deadband: doc is self-contradictory ("/10" in the byte-layout table
+	 * vs "/65" in the scaling table). "/65" matches the implied device max
+	 * of ~1008; capture C gives device value 450 but no input, so this
+	 * divisor is UNVERIFIED. TODO: capture a spring effect with a known
+	 * non-zero deadband to confirm.
+	 */
 	p->deadband = cpu_to_le16((u16)(deadband / 65));
 
 	p->right_sat = right_sat;
