@@ -1740,7 +1740,16 @@ out:
 	return ret;
 }
 
-/* Initialize T500RS device */
+/* Initialize T500RS device.
+ *
+ * open_mode is intentionally unused here: this variant installs no
+ * open/close callback (see t500rs_populate_api), so there is nothing to
+ * gate on open/close. FFB is armed once during this init (0x42 0x04/
+ * 0x05/0x00 handshake + 0x40 FFB-enable + 0x43 gain) and stays armed;
+ * the parent falls back to the default HID input open/close. The parent's
+ * open_mode module param therefore has no effect on this wheel, which is
+ * the correct behavior given the single-armed init strategy.
+ */
 static int t500rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 {
 	struct t500rs_device_entry *t500rs = NULL;
@@ -1910,7 +1919,25 @@ static int t500rs_wheel_destroy(void *data)
 	return 0;
 }
 
-/* Populate API callbacks */
+/* Populate API callbacks.
+ *
+ * No wheel_fixup is registered (unlike t300rs/tspc) and this is deliberate,
+ * verified against the real T500RS HID descriptor: the stock report 
+ * descriptor already correctly declares the wheel X axis (0..65535), 
+ * pedals (Y/Rz/Slider, 0..1023), 13 buttons, and an 8-way hat — 
+ * it is well-formed and needs no patching.
+ *
+ * The FFB output path also does not depend on the descriptor: it sends raw
+ * packets via hid_hw_output_report(), which issues USB SET_REPORT control
+ * transfers keyed by the first byte of the buffer as the report ID. This
+ * bypasses descriptor validation, so the descriptor's declared vendor output
+ * report (ID 0x0a) is irrelevant to FFB. Hence no report/field fixup is
+ * required for either input or output.
+ *
+ * No open/close callback is installed: FFB is armed once in wheel_init and
+ * the parent falls back to the default HID open/close (see comment on
+ * t500rs_wheel_init re: open_mode).
+ */
 int t500rs_populate_api(struct tmff2_device_entry *tmff2)
 {
 	tmff2->play_effect = t500rs_play_effect;
