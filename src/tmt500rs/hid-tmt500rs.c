@@ -1673,9 +1673,23 @@ static int t500rs_set_autocenter(void *data, u16 autocenter)
 static int t500rs_set_range(void *data, u16 range)
 {
 	struct t500rs_device_entry *t500rs = data;
-	u8 *buf;
+	/* Use a dedicated heap buffer, NOT t500rs->send_buffer. The parent
+	 * calls set_range directly from sysfs process context (range_store),
+	 * which races the FFB worker that reuses send_buffer for
+	 * upload/update/play/stop. Mirrors the documented T300RS fix.
+	 *
+	 * NB: the buffer must be DMA-safe because hid_hw_output_report()
+	 * maps it for USB DMA; a stack buffer is rejected by the USB HCD
+	 * ("transfer buffer is on stack"). kmalloc memory is DMA-safe.
+	 */
+	u8 *buf = kzalloc(4, GFP_KERNEL);
 	int ret;
 	u16 range_value;
+
+	if (!buf) {
+		hid_err(t500rs->hdev, "could not allocate range buffer\n");
+		return -ENOMEM;
+	}
 
 	/* Validate range - minimum 40 degrees, maximum 1080 degrees */
 	if (range < T500RS_RANGE_MIN)
@@ -1683,9 +1697,6 @@ static int t500rs_set_range(void *data, u16 range)
 
 	if (range > T500RS_RANGE_MAX)
 		range = T500RS_RANGE_MAX;
-
-	/* Use preallocated buffer */
-	buf = t500rs->send_buffer;
 
 	T500RS_DBG(t500rs, "Setting wheel range to %u degrees\n", range);
 
@@ -1708,7 +1719,7 @@ static int t500rs_set_range(void *data, u16 range)
 	if (ret) {
 		hid_err(t500rs->hdev, "Failed to send range command: %d\n",
 			ret);
-		return ret;
+		goto out;
 	}
 
 	/* Apply settings with Report 0x42 0x05 */
@@ -1718,13 +1729,15 @@ static int t500rs_set_range(void *data, u16 range)
 	if (ret) {
 		hid_err(t500rs->hdev, "Failed to apply range settings: %d\n",
 			ret);
-		return ret;
+		goto out;
 	}
 
 	T500RS_DBG(t500rs, "Range set to %u degrees (final value=0x%04x)\n",
 		   range, range_value);
 
-	return 0;
+out:
+	kfree(buf);
+	return ret;
 }
 
 /* Initialize T500RS device */
