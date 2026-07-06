@@ -389,19 +389,32 @@ static inline u8 t500rs_scale_saturation(u16 saturation)
 /* Resolve the per-effect-type strength level (0-100) for conditional effects.
  * Mirrors T300RS t300rs_calculate_coefficient()'s input_level selection:
  * spring/damper/friction honor their module params; inertia defaults to 100.
+ *
+ * The module params are 'int' and are not range-checked at module_param load
+ * time; the sysfs store clamps >100 but not negatives. Clamp to [0,100] here
+ * so an out-of-range/negative value cannot wrap through the u8 return and
+ * skew coefficient scaling.
  */
 static inline u8 t500rs_condition_level(u16 effect_type)
 {
+	int level;
+
 	switch (effect_type) {
 	case FF_SPRING:
-		return spring_level;
+		level = spring_level;
+		break;
 	case FF_DAMPER:
-		return damper_level;
+		level = damper_level;
+		break;
 	case FF_FRICTION:
-		return friction_level;
+		level = friction_level;
+		break;
 	default:
-		return 100;
+		level = 100;
+		break;
 	}
+
+	return (u8)clamp_t(int, level, 0, 100);
 }
 
 static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
@@ -417,11 +430,20 @@ static void t500rs_build_r05_condition(struct t500rs_pkt_r05_condition *p,
 	/* Scale coefficients from Linux 0-32767 range to device 0-10 u8 scale,
 	 * applying the per-effect-type strength level (spring/damper/friction
 	 * module params), matching the T300RS t300rs_calculate_coefficient().
-	 * Order matters for int precision: (coeff * level / 100) keeps the
-	 * intermediate in 0..32767 before the *10/32767 device scaling.
+	 *
+	 * right_coeff/left_coeff are __s16 and may be negative (the FF UAPI
+	 * allows signed condition coefficients). The T500RS device field is an
+	 * unsigned 0..10 strength byte (unlike T300RS's signed 16-bit field),
+	 * so compute in int and clamp the result to [0,10]: a negative
+	 * coefficient maps to 0 (no force) rather than wrapping to ~246, and
+	 * any overflow saturates at 10.
 	 */
-	p->right_coeff = (u8)(((right_coeff * level) / 100) * 10 / 32767);
-	p->left_coeff = (u8)(((left_coeff * level) / 100) * 10 / 32767);
+	p->right_coeff = (u8)clamp_t(int,
+				((right_coeff * (int)level) / 100) * 10 / 32767,
+				0, 10);
+	p->left_coeff = (u8)clamp_t(int,
+				((left_coeff * (int)level) / 100) * 10 / 32767,
+				0, 10);
 
 	/* Center: /20 confirmed by captures (e.g. center=-372 = -7439/20 in
 	 * docs/T500RS_FFBEFFECTS.md capture C, and center=250 = 5000/20 in
