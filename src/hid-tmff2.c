@@ -690,7 +690,17 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		case TMT300RS_PS3_NORM_ID:
 		case TMT300RS_PS3_ADV_ID:
 		case TMT300RS_PS4_NORM_ID:
-			if ((ret = t300rs_populate_api(tmff2)))
+			/* T248R apparently reuses b66d, which in this driver is
+			 * TMT300RS_PS4_NORM_ID. There's some indication
+			 * that different wheels under this same ID can be
+			 * identified by the bcdDevice USB field, which seems to
+			 * be copied into the hdev->version member hid-core.c,
+			 * so try this special case first*/
+			if (tmff2->hdev->version == 0x249
+			&& (ret = t248_populate_api(tmff2)))
+				goto wheel_err;
+
+			else if ((ret = t300rs_populate_api(tmff2)))
 				goto wheel_err;
 			break;
 
