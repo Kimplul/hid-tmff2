@@ -83,9 +83,37 @@ static struct tmff2_device_entry *tmff2_from_input(struct input_dev *input_dev)
 	return tmff2_from_hdev(hdev);
 }
 
+/* Levels are passive: they are read during upload, not pushed to the device.
+ * This bridges the gap by re-uploading active effects of the given type so
+ * that sysfs level changes take effect immediately on playing effects.
+ */
+static void tmff2_requeue_effects_by_type(struct tmff2_device_entry *tmff2,
+					  u16 effect_type)
+{
+	unsigned long flags;
+	int i;
+
+	if (!tmff2 || !tmff2->states)
+		return;
+
+	spin_lock_irqsave(&tmff2->lock, flags);
+
+	for (i = 0; i < tmff2->max_effects; i++) {
+		if (tmff2->states[i].effect.type == effect_type)
+			__set_bit(FF_EFFECT_QUEUE_UPLOAD,
+				  &tmff2->states[i].flags);
+	}
+
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
+}
+
 static ssize_t spring_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct tmff2_device_entry *tmff2;
 	unsigned int value;
 	int ret;
 
@@ -100,7 +128,13 @@ static ssize_t spring_level_store(struct device *dev,
 		value = 100;
 	}
 
+	if (spring_level == value)
+		return count;
+
 	spring_level = value;
+
+	tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	tmff2_requeue_effects_by_type(tmff2, FF_SPRING);
 
 	return count;
 }
@@ -115,9 +149,9 @@ static DEVICE_ATTR_RW(spring_level);
 static ssize_t damper_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct tmff2_device_entry *tmff2;
 	unsigned int value;
 	int ret;
-
 
 	ret = kstrtouint(buf, 0, &value);
 	if (ret) {
@@ -130,7 +164,13 @@ static ssize_t damper_level_store(struct device *dev,
 		value = 100;
 	}
 
+	if (damper_level == value)
+		return count;
+
 	damper_level = value;
+
+	tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	tmff2_requeue_effects_by_type(tmff2, FF_DAMPER);
 
 	return count;
 }
@@ -145,9 +185,9 @@ static DEVICE_ATTR_RW(damper_level);
 static ssize_t friction_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct tmff2_device_entry *tmff2;
 	unsigned int value;
 	int ret;
-
 
 	ret = kstrtouint(buf, 0, &value);
 	if (ret) {
@@ -160,7 +200,13 @@ static ssize_t friction_level_store(struct device *dev,
 		value = 100;
 	}
 
+	if (friction_level == value)
+		return count;
+
 	friction_level = value;
+
+	tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	tmff2_requeue_effects_by_type(tmff2, FF_FRICTION);
 
 	return count;
 }
