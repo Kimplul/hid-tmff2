@@ -418,7 +418,7 @@ static void tmff2_work_handler(struct work_struct *w)
 	if (set_gain && tmff2->set_gain)
 		tmff2->set_gain(tmff2->data, (pending_gain * gain) / GAIN_MAX);
 
-	if (set_gain && tmff2->set_autocenter)
+	if (set_autocenter && tmff2->set_autocenter)
 		tmff2->set_autocenter(tmff2->data, pending_autocenter);
 
 	for (effect_id = 0; effect_id < tmff2->max_effects; ++effect_id) {
