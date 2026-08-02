@@ -2,6 +2,7 @@
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <linux/hid.h>
+#include <linux/usb.h>
 #include <linux/version.h>
 #include "hid-tmff2.h"
 
@@ -677,14 +678,21 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	int ret;
 
-
 	if (!tmff2) {
 		ret = -ENOMEM;
 		goto oom_err;
 	}
 
+	if (!hid_is_usb(hdev)) {
+		ret = -EINVAL;
+		goto oom_err;
+	}
+
 	tmff2->hdev = hdev;
 	hid_set_drvdata(tmff2->hdev, tmff2);
+
+	struct usb_device *usbdev = to_usb_device(tmff2->hdev->dev.parent->parent);
+	uint16_t bcdDevice = __le16_to_cpu(usbdev->descriptor.bcdDevice);
 
 	switch (tmff2->hdev->product) {
 		case TMT300RS_PS3_NORM_ID:
@@ -693,10 +701,9 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			/* T248R apparently reuses b66d, which in this driver is
 			 * TMT300RS_PS4_NORM_ID. There's some indication
 			 * that different wheels under this same ID can be
-			 * identified by the bcdDevice USB field, which seems to
-			 * be copied into the hdev->version member hid-core.c,
-			 * so try this special case first*/
-			if (tmff2->hdev->version == 0x249
+			 * identified by the bcdDevice USB field,
+			 * so try this special case first */
+			if (bcdDevice == 0x249
 			&& (ret = t248_populate_api(tmff2)))
 				goto wheel_err;
 
