@@ -2,6 +2,7 @@
 #include <linux/usb.h>
 #include <linux/hid.h>
 #include "../hid-tmff2.h"
+#include <linux/unaligned.h>
 
 #define T300RS_MAX_EFFECTS 16
 #define T300RS_NORM_BUFFER_LENGTH 63
@@ -17,6 +18,8 @@ static const unsigned long t300rs_params =
 	| PARAM_GAIN
 	| PARAM_RANGE
 	| PARAM_ALT_MODE
+	| PARAM_COMBINE_PEDALS
+	| PARAM_CENTER_CLUTCH
 	;
 
 static const signed short t300rs_effects[] = {
@@ -82,6 +85,73 @@ struct usb_ctrlrequest t300rs_fw_request = {
 struct t300rs_data {
 	unsigned long quirks;
 	void *device_props;
+};
+
+static u8 t300rs_rdesc_nrm_combined[] = {
+	0x05, 0x01,
+	0x09, 0x04,
+	0xa1, 0x01,
+	0x09, 0x01,
+	0xa1, 0x00,
+	0x85, 0x07,
+	0x09, 0x30,                   /* X (wheel) */
+	0x15, 0x00,
+	0x27, 0xff, 0xff, 0x00, 0x00,
+	0x35, 0x00,
+	0x47, 0xff, 0xff, 0x00, 0x00,
+	0x75, 0x10,
+	0x95, 0x01,
+	0x81, 0x02,
+	0x81, 0x03,                   /* brake slot → constant (hidden) */
+	0x09, 0x32,                   /* Z (combined gas/brake) */
+	0x26, 0xff, 0x03,
+	0x46, 0xff, 0x03,
+	0x75, 0x10,
+	0x95, 0x01,
+	0x81, 0x02,
+	0x09, 0x31,                   /* Y (clutch) — unchanged */
+	0x81, 0x02,
+	0x81, 0x03,
+	/* rest identical to t300rs_rdesc_nrm_fixed from buttons onward */
+	0x05, 0x09,
+	0x19, 0x01,
+	0x29, 0x0d,
+	0x25, 0x01,
+	0x45, 0x01,
+	0x75, 0x01,
+	0x95, 0x0d,
+	0x81, 0x02,
+	0x75, 0x0b,
+	0x95, 0x01,
+	0x81, 0x03,
+	0x05, 0x01,
+	0x09, 0x39,
+	0x25, 0x07,
+	0x46, 0x3b, 0x01,
+	0x55, 0x00,
+	0x65, 0x14,
+	0x75, 0x04,
+	0x81, 0x42,
+	0x65, 0x00,
+	0x81, 0x03,
+	0x85, 0x60,
+	0x06, 0x00, 0xff,
+	0x09, 0x60,
+	0x75, 0x08,
+	0x95, 0x3f,
+	0x26, 0xff, 0x7f,
+	0x15, 0x00,
+	0x46, 0xff, 0x7f,
+	0x36, 0x00, 0x80,
+	0x91, 0x02,
+	0x85, 0x02,
+	0x09, 0x02,
+	0x81, 0x02,
+	0x09, 0x14,
+	0x85, 0x14,
+	0x81, 0x02,
+	0xc0,
+	0xc0,
 };
 
 static u8 t300rs_rdesc_nrm_fixed[] = {
@@ -1512,11 +1582,20 @@ static int t300rs_wheel_destroy(void *data)
 static __u8 *t300rs_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,
 		unsigned int *rsize)
 {
+	struct tmff2_device_entry *tmff2 = hid_get_drvdata(hdev);
+
 	switch (hdev->product) {
 		case TMT300RS_PS3_NORM_ID:
 		/* normal PS3 mode */
-		rdesc = t300rs_rdesc_nrm_fixed;
-		*rsize = sizeof(t300rs_rdesc_nrm_fixed);
+
+		//Combine Pedals patch
+		if (tmff2 && tmff2->combine_pedals) {
+			rdesc = t300rs_rdesc_nrm_combined;
+			*rsize = sizeof(t300rs_rdesc_nrm_combined);
+		} else {
+			rdesc = t300rs_rdesc_nrm_fixed;
+			*rsize = sizeof(t300rs_rdesc_nrm_fixed);
+		}
 		break;
 
 		case TMT300RS_PS4_NORM_ID:
@@ -1533,6 +1612,41 @@ static __u8 *t300rs_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,
 	}
 
 	return rdesc;
+}
+
+//Combine Pedals / Center Clutch patch
+//This method is the one that actually modifies the raw data coming from the wheel
+static int t300rs_raw_event(struct hid_device *hdev, struct hid_report *report,
+		u8 *data, int size)
+{
+	struct tmff2_device_entry *tmff2 = hid_get_drvdata(hdev);
+	struct t300rs_device_entry *t300rs;
+	s32 combined;
+	u16 gas, brake;
+
+	if (!tmff2 || !tmff2->combine_pedals)
+		return 0;
+
+	if (hdev->product != TMT300RS_PS3_NORM_ID)
+		return 0;
+
+	if (data[0] != 0x07 || size < 9)
+		return 0;
+
+	brake = get_unaligned_le16(&data[3]);
+	gas   = get_unaligned_le16(&data[5]);
+
+	combined = ((s32)gas - (s32)brake + 1023) / 2;
+	combined = clamp(combined, 0, 1023);
+
+	put_unaligned_le16(0, &data[3]);
+	put_unaligned_le16((u16)combined, &data[5]);
+
+	t300rs = tmff2->data;
+	if (t300rs && tmff2->center_clutch)
+		put_unaligned_le16(512, &data[7]);
+
+	return 0;
 }
 
 int t300rs_populate_api(struct tmff2_device_entry *tmff2)
@@ -1555,6 +1669,8 @@ int t300rs_populate_api(struct tmff2_device_entry *tmff2)
 	tmff2->alt_mode_store = t300rs_alt_mode_store;
 	tmff2->set_autocenter = t300rs_set_autocenter;
 	tmff2->wheel_fixup = t300rs_wheel_fixup;
+
+	tmff2->raw_event = t300rs_raw_event; //Combine Pedals patch
 
 	return 0;
 }

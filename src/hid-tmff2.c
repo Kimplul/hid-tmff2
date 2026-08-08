@@ -48,6 +48,19 @@ module_param(gain, int, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
 
+
+//Combine Pedals / Center Clutch patch
+bool combine_pedals = false;
+bool center_clutch = false;
+
+module_param(combine_pedals, bool, 0);
+MODULE_PARM_DESC(combine_pedals, "Combine gas and brake into a single Z axis (default: false)");
+
+module_param(center_clutch, bool, 0);
+MODULE_PARM_DESC(center_clutch, "Center clutch axis when combine_pedals is active (default: false)");
+
+//Combine Pedals / Center Clutch patch
+
 static spinlock_t lock;
 
 static struct tmff2_device_entry *tmff2_from_hdev(struct hid_device *hdev)
@@ -254,6 +267,78 @@ static ssize_t gain_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%i\n", gain);
 }
 static DEVICE_ATTR_RW(gain);
+
+//Combine Pedals patch
+
+static ssize_t combine_pedals_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	unsigned int value;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &value);
+	if (ret) {
+		dev_err(dev, "kstrtouint failed at combine_pedals_store: %i", ret);
+		return ret;
+	}
+
+	combine_pedals = (bool)value;
+
+	if (tmff2)
+		tmff2->combine_pedals = (bool)value;
+
+	return count;
+}
+
+static ssize_t combine_pedals_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+
+	if (!tmff2)
+		return -ENODEV;
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", tmff2->combine_pedals);
+}
+
+static DEVICE_ATTR_RW(combine_pedals);
+
+//Center Clutch Settings
+static ssize_t center_clutch_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	unsigned int value;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &value);
+	if (ret) {
+		dev_err(dev, "kstrtouint failed at center_clutch_store: %i", ret);
+		return ret;
+	}
+
+	center_clutch = (bool)value;
+
+	if (tmff2)
+		tmff2->center_clutch = (bool)value;
+
+	return count;
+}
+
+static ssize_t center_clutch_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+
+	if (!tmff2)
+		return -ENODEV;
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", tmff2->center_clutch);
+}
+static DEVICE_ATTR_RW(center_clutch);
+
+//Combine Pedals / Center Clutch patch
 
 static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 {
@@ -569,8 +654,28 @@ static int tmff2_create_files(struct tmff2_device_entry *tmff2)
 		}
 	}
 
+	//Combine Pedals / Center Clutch patch
+	if (tmff2->params & PARAM_COMBINE_PEDALS) {
+		if ((ret = device_create_file(dev, &dev_attr_combine_pedals))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for combine_pedals\n");
+			goto combine_err;
+		}
+	}
+
+	//Combine Pedals / Center Clutch patch
+	if (tmff2->params & PARAM_CENTER_CLUTCH) {
+		if ((ret = device_create_file(dev, &dev_attr_center_clutch))) {
+			hid_warn(tmff2->hdev, "unable to create sysfs for center_clutch\n");
+			goto center_clutch_err;
+		}
+	}
+
 	return 0;
 
+	center_clutch_err:
+		device_remove_file(dev, &dev_attr_combine_pedals); //Combine Pedals / Center Clutch patch
+	combine_err:
+		device_remove_file(dev, &dev_attr_friction_level); //Combine Pedals / Center Clutch patch
 friction_err:
 	device_remove_file(dev, &dev_attr_damper_level);
 damper_err:
@@ -716,6 +821,10 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			goto wheel_err;
 	}
 
+	//Combine Pedals / Center Clutch patch
+	tmff2->combine_pedals = combine_pedals;
+	tmff2->center_clutch = center_clutch;
+
 	if ((ret = hid_parse(tmff2->hdev))) {
 		hid_err(hdev, "parse failed\n");
 		goto hid_err;
@@ -764,6 +873,17 @@ static const __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 	return rdesc;
 }
 
+static int tmff2_raw_event(struct hid_device *hdev, struct hid_report *report,
+		u8 *data, int size)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(hdev);
+
+	if (!tmff2 || !tmff2->raw_event)
+		return 0;
+
+	return tmff2->raw_event(hdev, report, data, size);
+}
+
 static void tmff2_remove(struct hid_device *hdev)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(hdev);
@@ -793,6 +913,12 @@ static void tmff2_remove(struct hid_device *hdev)
 
 	if (tmff2->params & PARAM_GAIN)
 		device_remove_file(dev, &dev_attr_gain);
+
+	if (tmff2->params & PARAM_COMBINE_PEDALS)
+		device_remove_file(dev, &dev_attr_combine_pedals);
+
+	if (tmff2->params & PARAM_CENTER_CLUTCH)
+		device_remove_file(dev, &dev_attr_center_clutch);
 
 	hid_hw_stop(hdev);
 	tmff2->wheel_destroy(tmff2->data);
@@ -825,6 +951,7 @@ static struct hid_driver tmff2_driver = {
 	.probe = tmff2_probe,
 	.remove = tmff2_remove,
 	.report_fixup = tmff2_report_fixup,
+	.raw_event = tmff2_raw_event,   //Combine Pedals patch
 };
 module_hid_driver(tmff2_driver);
 
