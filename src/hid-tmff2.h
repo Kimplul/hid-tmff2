@@ -11,7 +11,7 @@ extern int spring_level;
 extern int damper_level;
 extern int friction_level;
 extern int range;
-extern int gain;
+extern u16 gain;
 extern int alt_mode;
 
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f

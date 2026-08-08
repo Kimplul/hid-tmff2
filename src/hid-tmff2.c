@@ -43,8 +43,8 @@ MODULE_PARM_DESC(alt_mode,
 		"Alternate mode, eg. F1 mode");
 
 #define GAIN_MAX 65535
-int gain = 40000;
-module_param(gain, int, 0);
+u16 gain = 40000;
+module_param(gain, ushort, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
 
@@ -230,14 +230,15 @@ static ssize_t gain_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
-	unsigned int value;
+	u16 value;
 	int ret;
 
 	if (!tmff2)
 		return -ENODEV;
 
-	if ((ret = kstrtouint(buf, 0, &value))) {
-		dev_err(dev, "kstrtouint failed at gain_store: %i", ret);
+	ret = kstrtou16(buf, 0, &value);
+	if (ret) {
+		dev_err(dev, "failed to parse gain: %d\n", ret);
 		return ret;
 	}
 
@@ -251,7 +252,7 @@ static ssize_t gain_store(struct device *dev,
 static ssize_t gain_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%i\n", gain);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", gain);
 }
 static DEVICE_ATTR_RW(gain);
 
