@@ -48,6 +48,11 @@ module_param(gain, ushort, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
 
+static u16 tmff2_scale_gain(u16 value)
+{
+	return (u32)value * gain / GAIN_MAX;
+}
+
 static spinlock_t lock;
 
 static struct tmff2_device_entry *tmff2_from_hdev(struct hid_device *hdev)
@@ -244,7 +249,7 @@ static ssize_t gain_store(struct device *dev,
 
 	gain = value;
 	if (tmff2->set_gain) /* if we can, update gain immediately */
-		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+		tmff2->set_gain(tmff2->data, gain);
 
 	return count;
 }
@@ -268,7 +273,7 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_gain(tmff2->data, (value * gain) / GAIN_MAX))
+	if (tmff2->set_gain(tmff2->data, tmff2_scale_gain(value)))
 		hid_warn(tmff2->hdev, "unable to set gain\n");
 }
 
@@ -644,7 +649,7 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	/* set defaults wherever possible */
 	if (tmff2->set_gain) {
 		ff->set_gain = tmff2_set_gain;
-		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+		tmff2->set_gain(tmff2->data, gain);
 	}
 
 	if (tmff2->set_autocenter)
