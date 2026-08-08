@@ -807,6 +807,26 @@ static void tmff2_remove(struct hid_device *hdev)
 	kfree(tmff2);
 }
 
+static int tmff2_input_configured(struct hid_device *hdev,
+				  struct hid_input *hidinput)
+{
+	struct input_dev *input = hidinput->input;
+	int axis;
+
+	if (!input->absinfo)
+		return 0;
+
+	for (axis = ABS_X; axis <= ABS_BRAKE; axis++) {
+		if (!test_bit(axis, input->absbit))
+			continue;
+
+		input_abs_set_fuzz(input, axis, 0);
+		input_abs_set_flat(input, axis, 0);
+	}
+
+	return 0;
+}
+
 static const struct hid_device_id tmff2_devices[] = {
 	/* t300rs and variations */
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
@@ -831,6 +851,7 @@ static struct hid_driver tmff2_driver = {
 	.probe = tmff2_probe,
 	.remove = tmff2_remove,
 	.report_fixup = tmff2_report_fixup,
+	.input_configured = tmff2_input_configured,
 };
 module_hid_driver(tmff2_driver);
 
