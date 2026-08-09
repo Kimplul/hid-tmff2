@@ -344,30 +344,35 @@ static uint16_t t300rs_calculate_length(uint16_t length)
 	return length;
 }
 
+static s32 t300rs_scale_direction(s16 level, u16 direction)
+{
+	return (s32)level * fixp_sin16(direction * 360 / 0x10000) / 0x7fff;
+}
+
 static int16_t t300rs_calculate_constant_level(int16_t level, uint16_t direction)
 {
-	level = (level * fixp_sin16(direction * 360 / 0x10000)) / 0x7fff;
+	s32 scaled_level = t300rs_scale_direction(level, direction);
 
 	/* the Windows driver uses the range [-16385;16381] */
-	level = level / 2;
-
-	return level;
+	return scaled_level / 2;
 }
 
 static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 {
 	struct ff_periodic_effect *periodic = &effect->u.periodic;
-	int16_t headroom;
+	s32 magnitude, headroom;
 
-	periodic->magnitude = (periodic->magnitude * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
+	magnitude = t300rs_scale_direction(periodic->magnitude,
+					   effect->direction);
 
-	if (periodic->magnitude < 0){
+	if (magnitude < 0) {
 		/* the wheel handles positive magnitudes only */
-		periodic->magnitude = -periodic->magnitude;
+		magnitude = -magnitude;
 
 		/* to give the expected result 180 deg is added to the phase */
 		periodic->phase = (periodic->phase + (0x10000 / 2)) % 0x10000;
 	}
+	periodic->magnitude = min_t(s32, magnitude, S16_MAX);
 
 	/* the interval [0; 32677[ is used by the wheel for the [0; 360[ degree phase shift */
 	periodic->phase = periodic->phase * 32677 / 0x10000;
@@ -443,13 +448,16 @@ static void t300rs_calculate_ramp_parameters(uint16_t *out_slope,
 {
 	struct ff_ramp_effect *ramp = &effect->u.ramp;
 
-	int16_t start_level, end_level;
+	s32 start_level, end_level;
 
-	start_level = (ramp->start_level * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
-	end_level = (ramp->end_level * fixp_sin16(effect->direction * 360 / 0x10000)) / 0x7fff;
+	start_level = t300rs_scale_direction(ramp->start_level,
+					     effect->direction);
+	end_level = t300rs_scale_direction(ramp->end_level,
+					   effect->direction);
 
 	*out_slope = abs(start_level - end_level) / 2;
-	*out_center = (start_level + end_level) / 2;
+	*out_center = clamp_t(s32, (start_level + end_level) / 2,
+			      S16_MIN, S16_MAX);
 
 	*out_invert = (start_level < end_level) ? 0x04 : 0x05;
 }

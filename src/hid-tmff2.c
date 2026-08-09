@@ -43,10 +43,15 @@ MODULE_PARM_DESC(alt_mode,
 		"Alternate mode, eg. F1 mode");
 
 #define GAIN_MAX 65535
-int gain = 40000;
-module_param(gain, int, 0);
+u16 gain = 40000;
+module_param(gain, ushort, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
+
+static u16 tmff2_scale_gain(u16 value)
+{
+	return (u32)value * gain / GAIN_MAX;
+}
 
 static spinlock_t lock;
 
@@ -230,20 +235,21 @@ static ssize_t gain_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
-	unsigned int value;
+	u16 value;
 	int ret;
 
 	if (!tmff2)
 		return -ENODEV;
 
-	if ((ret = kstrtouint(buf, 0, &value))) {
-		dev_err(dev, "kstrtouint failed at gain_store: %i", ret);
+	ret = kstrtou16(buf, 0, &value);
+	if (ret) {
+		dev_err(dev, "failed to parse gain: %d\n", ret);
 		return ret;
 	}
 
 	gain = value;
 	if (tmff2->set_gain) /* if we can, update gain immediately */
-		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+		tmff2->set_gain(tmff2->data, gain);
 
 	return count;
 }
@@ -251,7 +257,7 @@ static ssize_t gain_store(struct device *dev,
 static ssize_t gain_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%i\n", gain);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", gain);
 }
 static DEVICE_ATTR_RW(gain);
 
@@ -267,7 +273,7 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_gain(tmff2->data, (value * gain) / GAIN_MAX))
+	if (tmff2->set_gain(tmff2->data, tmff2_scale_gain(value)))
 		hid_warn(tmff2->hdev, "unable to set gain\n");
 }
 
@@ -643,7 +649,7 @@ static int tmff2_wheel_init(struct tmff2_device_entry *tmff2)
 	/* set defaults wherever possible */
 	if (tmff2->set_gain) {
 		ff->set_gain = tmff2_set_gain;
-		tmff2->set_gain(tmff2->data, (GAIN_MAX * gain) / GAIN_MAX);
+		tmff2->set_gain(tmff2->data, gain);
 	}
 
 	if (tmff2->set_autocenter)
@@ -801,6 +807,26 @@ static void tmff2_remove(struct hid_device *hdev)
 	kfree(tmff2);
 }
 
+static int tmff2_input_configured(struct hid_device *hdev,
+				  struct hid_input *hidinput)
+{
+	struct input_dev *input = hidinput->input;
+	int axis;
+
+	if (!input->absinfo)
+		return 0;
+
+	for (axis = ABS_X; axis <= ABS_BRAKE; axis++) {
+		if (!test_bit(axis, input->absbit))
+			continue;
+
+		input_abs_set_fuzz(input, axis, 0);
+		input_abs_set_flat(input, axis, 0);
+	}
+
+	return 0;
+}
+
 static const struct hid_device_id tmff2_devices[] = {
 	/* t300rs and variations */
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
@@ -825,6 +851,7 @@ static struct hid_driver tmff2_driver = {
 	.probe = tmff2_probe,
 	.remove = tmff2_remove,
 	.report_fixup = tmff2_report_fixup,
+	.input_configured = tmff2_input_configured,
 };
 module_hid_driver(tmff2_driver);
 
