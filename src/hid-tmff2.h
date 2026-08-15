@@ -3,6 +3,7 @@
 #define __HID_TMFF2_H
 
 #include <linux/fixp-arith.h>
+#include <linux/math.h>
 #include <linux/ktime.h>
 #include <linux/input.h>
 

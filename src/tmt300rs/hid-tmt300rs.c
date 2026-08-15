@@ -346,7 +346,8 @@ static uint16_t t300rs_calculate_length(uint16_t length)
 
 static s32 t300rs_scale_direction(s16 level, u16 direction)
 {
-	return (s32)level * fixp_sin16(direction * 360 / 0x10000) / 0x7fff;
+	return DIV_ROUND_CLOSEST((s32)level *
+		fixp_sin16(direction * 360 / 0x10000), 0x7fff);
 }
 
 static int16_t t300rs_calculate_constant_level(int16_t level, uint16_t direction)
@@ -354,7 +355,7 @@ static int16_t t300rs_calculate_constant_level(int16_t level, uint16_t direction
 	s32 scaled_level = t300rs_scale_direction(level, direction);
 
 	/* the Windows driver uses the range [-16385;16381] */
-	return scaled_level / 2;
+	return DIV_ROUND_CLOSEST(scaled_level, 2);
 }
 
 static void t300rs_calculate_periodic_values(struct ff_effect *effect)
@@ -375,7 +376,8 @@ static void t300rs_calculate_periodic_values(struct ff_effect *effect)
 	periodic->magnitude = min_t(s32, magnitude, S16_MAX);
 
 	/* the interval [0; 32677[ is used by the wheel for the [0; 360[ degree phase shift */
-	periodic->phase = periodic->phase * 32677 / 0x10000;
+	periodic->phase = DIV_ROUND_CLOSEST((u32)periodic->phase * 32677,
+					    0x10000);
 
 	headroom = 0x7fff - periodic->magnitude;
 	/* magnitude + offset cannot be outside the valid magnitude range, */
@@ -419,7 +421,7 @@ static int16_t t300rs_calculate_coefficient(int16_t coeff, uint16_t effect_type)
 		break;
 	}
 
-	return coeff * input_level / 100;
+	return DIV_ROUND_CLOSEST((s32)coeff * input_level, 100);
 }
 
 static uint16_t t300rs_calculate_saturation(uint16_t sat, uint16_t effect_type)
@@ -429,7 +431,7 @@ static uint16_t t300rs_calculate_saturation(uint16_t sat, uint16_t effect_type)
 	if(sat == 0)
 		return max;
 
-	return sat * max / 0xffff;
+	return DIV_ROUND_CLOSEST((u32)sat * max, 0xffff);
 }
 
 static void t300rs_calculate_deadband(int16_t *out_rband, int16_t *out_lband,
@@ -437,8 +439,10 @@ static void t300rs_calculate_deadband(int16_t *out_rband, int16_t *out_lband,
 {
 	/* max deadband value is 0x7fff in either direction */
 	/* deadband is the width of the deadzone, one direction is half of it */
-	*out_rband = clamp(offset + (deadband / 2), -0x7fff, 0x7fff);
-	*out_lband = clamp(offset - (deadband / 2), -0x7fff, 0x7fff);
+	*out_rband = clamp(offset + DIV_ROUND_CLOSEST(deadband, 2),
+				  -0x7fff, 0x7fff);
+	*out_lband = clamp(offset - DIV_ROUND_CLOSEST(deadband, 2),
+				  -0x7fff, 0x7fff);
 }
 
 static void t300rs_calculate_ramp_parameters(uint16_t *out_slope,
@@ -455,8 +459,8 @@ static void t300rs_calculate_ramp_parameters(uint16_t *out_slope,
 	end_level = t300rs_scale_direction(ramp->end_level,
 					   effect->direction);
 
-	*out_slope = abs(start_level - end_level) / 2;
-	*out_center = clamp_t(s32, (start_level + end_level) / 2,
+	*out_slope = DIV_ROUND_CLOSEST(abs(start_level - end_level), 2);
+	*out_center = clamp_t(s32, DIV_ROUND_CLOSEST(start_level + end_level, 2),
 			      S16_MIN, S16_MAX);
 
 	*out_invert = (start_level < end_level) ? 0x04 : 0x05;
