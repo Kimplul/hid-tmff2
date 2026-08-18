@@ -50,7 +50,7 @@ MODULE_PARM_DESC(gain,
 
 static u16 tmff2_scale_gain(u16 value)
 {
-	return (u32)value * gain / GAIN_MAX;
+	return DIV_ROUND_CLOSEST((u32)value * gain, GAIN_MAX);
 }
 
 static spinlock_t lock;
