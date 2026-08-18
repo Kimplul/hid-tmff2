@@ -855,4 +855,5 @@ static struct hid_driver tmff2_driver = {
 };
 module_hid_driver(tmff2_driver);
 
+MODULE_DESCRIPTION("FFB for Thrustmaster wheels");
 MODULE_LICENSE("GPL");
