@@ -196,5 +196,10 @@ for wheels:
   and add `options hid-tmff-new timer_msecs=NUMBER` into it.
   The default timer period is 8, but numbers as low as 2 should work alright.
 
-+ The T-GT II might show up as a T300 at the moment, since it reuses the T300
-  USB product ID.
++ The T-GT II reuses the T300 USB product ID. Since the two wheels are not
+  distinguishable at probe time, T-GT II support (rotary encoders, ministicks,
+  analog L2/R2 and the correct pedal order) must be enabled explicitly with
+  the `tgt2_force=1` module parameter, e.g. in
+  `/etc/modprobe.d/hid-tmff-new.conf`:
+  `options hid-tmff-new tgt2_force=1`.
+  Without it, the wheel is handled as a T300.
