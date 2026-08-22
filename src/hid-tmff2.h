@@ -94,6 +94,8 @@ struct tmff2_device_entry {
 	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
 	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
+	int (*raw_event)(struct hid_device *hdev, __u8 *data, int size);
+	void *raw_event_data;
 
 	/* void pointers are dangerous, I know, but in this case likely the
 	 * best option... */
@@ -105,6 +107,7 @@ int t248_populate_api(struct tmff2_device_entry *tmff2);
 int tx_populate_api(struct tmff2_device_entry *tmff2);
 int tsxw_populate_api(struct tmff2_device_entry *tmff2);
 int tspc_populate_api(struct tmff2_device_entry *tmff2);
+int tgt2_populate_api(struct tmff2_device_entry *tmff2);
 
 #define TMT300RS_PS3_NORM_ID	0xb66e
 #define TMT300RS_PS3_ADV_ID	0xb66f
@@ -150,6 +153,7 @@ int t300rs_set_range(void *, uint16_t);
 int t300rs_set_autocenter(void *, uint16_t);
 
 int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len);
+int t300rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode);
 int t300rs_send_int(struct t300rs_device_entry *t300rs);
 
 #endif

@@ -48,6 +48,12 @@ module_param(gain, ushort, 0);
 MODULE_PARM_DESC(gain,
 		"Level of gain (0-65535)");
 
+static bool tgt2_force;
+module_param(tgt2_force, bool, 0444);
+MODULE_PARM_DESC(tgt2_force,
+		"Treat 044f:b66d as a T-GT II instead of a T300RS, since the two "
+		"wheels share the same USB product ID");
+
 static u16 tmff2_scale_gain(u16 value)
 {
 	return DIV_ROUND_CLOSEST((u32)value * gain, GAIN_MAX);
@@ -696,6 +702,11 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		case TMT300RS_PS3_NORM_ID:
 		case TMT300RS_PS3_ADV_ID:
 		case TMT300RS_PS4_NORM_ID:
+			if (tmff2->hdev->product == TMT300RS_PS4_NORM_ID && tgt2_force) {
+				if ((ret = tgt2_populate_api(tmff2)))
+					goto wheel_err;
+				break;
+			}
 			if ((ret = t300rs_populate_api(tmff2)))
 				goto wheel_err;
 			break;
@@ -768,6 +779,20 @@ static const __u8 *tmff2_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		return tmff2->wheel_fixup(hdev, rdesc, rsize);
 
 	return rdesc;
+}
+
+static int tmff2_raw_event(struct hid_device *hdev, struct hid_report *report,
+		u8 *data, int size)
+{
+	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(hdev);
+
+	if (!tmff2)
+		return 0;
+
+	if (tmff2->raw_event)
+		return tmff2->raw_event(hdev, data, size);
+
+	return 0;
 }
 
 static void tmff2_remove(struct hid_device *hdev)
@@ -852,6 +877,7 @@ static struct hid_driver tmff2_driver = {
 	.remove = tmff2_remove,
 	.report_fixup = tmff2_report_fixup,
 	.input_configured = tmff2_input_configured,
+	.raw_event = tmff2_raw_event,
 };
 module_hid_driver(tmff2_driver);
 

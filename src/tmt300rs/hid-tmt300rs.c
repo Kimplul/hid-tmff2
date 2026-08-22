@@ -1446,7 +1446,7 @@ out:
 	return ret;
 }
 
-static int t300rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
+int t300rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 {
 	struct t300rs_device_entry *t300rs = kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
 	struct list_head *report_list;
