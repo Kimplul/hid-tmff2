@@ -346,8 +346,8 @@ static uint16_t t300rs_calculate_length(uint16_t length)
 
 static s32 t300rs_scale_direction(s16 level, u16 direction)
 {
-	return DIV_ROUND_CLOSEST((s32)level *
-		fixp_sin16(direction * 360 / 0x10000), 0x7fff);
+	return DIV_S64_ROUND_CLOSEST((s64)level *
+		fixp_sin32_rad(direction, 0x10000), 0x7fffffff);
 }
 
 static int16_t t300rs_calculate_constant_level(int16_t level, uint16_t direction)
