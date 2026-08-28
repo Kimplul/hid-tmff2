@@ -113,6 +113,15 @@ sudo yum install linuxconsoletools # Fedora-based
 > meaning that the wheels have to be initialized with `tmdrv`. Please see
 > https://github.com/Kimplul/hid-tmff2/issues/48.
 
+> **NOTE:** The T500 RS (like other modern Thrustmaster wheels) first enumerates
+> as a generic bootloader device (`044f:b65d`). A separate init driver must send
+> the vendor request that switches it into its real mode (`044f:b65e` standard
+> rim; the F1 attachment enumerates as a different PID) before this module can
+> bind. Install the bundled `hid-tminit` dependency (built automatically by
+> `make`), or make sure mainline `hid-thrustmaster` is **not** blacklisted.
+> If the wheel shows up as `b65d` in `lsusb` and no force feedback device
+> appears, the init driver is missing.
+
 > **NOTE:** When using Secure Boot and DKMS, you need to remember to add DKMS MOK certificate
 > otherwise the module won't be loaded and the wheel might function incorrectly/not at all.
 > You can follow the steps [here](https://github.com/dell/dkms?tab=readme-ov-file#secure-boot)
@@ -171,6 +180,11 @@ for wheels:
   ```shell
   echo 'blacklist hid_thrustmaster' | sudo tee /etc/modprobe.d/hid_thrustmaster.conf
   ```
+  **Only do this if this repo's `hid-tminit` is installed** (it is built and
+  installed automatically by `make`/DKMS). Both `hid-thrustmaster` and
+  `hid-tminit` perform the boot-mode switch modern wheels need; blacklisting
+  one is fine, but with both absent the wheel stays stuck in bootloader mode
+  (see the T500 RS note above).
 
 + If you've bought a new wheel, you might have to update the firmware
   through Windows before it will work with this driver.

@@ -83,9 +83,37 @@ static struct tmff2_device_entry *tmff2_from_input(struct input_dev *input_dev)
 	return tmff2_from_hdev(hdev);
 }
 
+/* Levels are passive: they are read during upload, not pushed to the device.
+ * This bridges the gap by re-uploading active effects of the given type so
+ * that sysfs level changes take effect immediately on playing effects.
+ */
+static void tmff2_requeue_effects_by_type(struct tmff2_device_entry *tmff2,
+					  u16 effect_type)
+{
+	unsigned long flags;
+	int i;
+
+	if (!tmff2 || !tmff2->states)
+		return;
+
+	spin_lock_irqsave(&tmff2->lock, flags);
+
+	for (i = 0; i < tmff2->max_effects; i++) {
+		if (tmff2->states[i].effect.type == effect_type)
+			__set_bit(FF_EFFECT_QUEUE_UPLOAD,
+				  &tmff2->states[i].flags);
+	}
+
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
+}
+
 static ssize_t spring_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct tmff2_device_entry *tmff2;
 	unsigned int value;
 	int ret;
 
@@ -100,7 +128,13 @@ static ssize_t spring_level_store(struct device *dev,
 		value = 100;
 	}
 
+	if (spring_level == value)
+		return count;
+
 	spring_level = value;
+
+	tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	tmff2_requeue_effects_by_type(tmff2, FF_SPRING);
 
 	return count;
 }
@@ -115,9 +149,9 @@ static DEVICE_ATTR_RW(spring_level);
 static ssize_t damper_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct tmff2_device_entry *tmff2;
 	unsigned int value;
 	int ret;
-
 
 	ret = kstrtouint(buf, 0, &value);
 	if (ret) {
@@ -130,7 +164,13 @@ static ssize_t damper_level_store(struct device *dev,
 		value = 100;
 	}
 
+	if (damper_level == value)
+		return count;
+
 	damper_level = value;
+
+	tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	tmff2_requeue_effects_by_type(tmff2, FF_DAMPER);
 
 	return count;
 }
@@ -145,9 +185,9 @@ static DEVICE_ATTR_RW(damper_level);
 static ssize_t friction_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct tmff2_device_entry *tmff2;
 	unsigned int value;
 	int ret;
-
 
 	ret = kstrtouint(buf, 0, &value);
 	if (ret) {
@@ -160,7 +200,13 @@ static ssize_t friction_level_store(struct device *dev,
 		value = 100;
 	}
 
+	if (friction_level == value)
+		return count;
+
 	friction_level = value;
+
+	tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	tmff2_requeue_effects_by_type(tmff2, FF_FRICTION);
 
 	return count;
 }
@@ -248,9 +294,38 @@ static ssize_t gain_store(struct device *dev,
 	}
 
 	gain = value;
-	if (tmff2->set_gain) /* if we can, update gain immediately */
-		tmff2->set_gain(tmff2->data, gain);
 
+	if (!tmff2->set_gain)
+		return count;
+
+	/* Rationale: two-level gain model
+	* - The input API's set_gain (pending_gain) is the in-game gain (0..GAIN_MAX).
+	* - This driver also exposes a device/system gain via sysfs param `gain`.
+	* - The device callback receives the product: (pg * gain) / GAIN_MAX.
+	*   See worker at tmff2->set_gain(... (pg * gain) / GAIN_MAX ).
+	* When the sysfs `gain` changes, we trigger a recompute by pushing
+	* pending_gain = GAIN_MAX here so the effective device gain becomes
+	* exactly the sysfs value (GAIN_MAX * gain / GAIN_MAX == gain) and future
+	* in-game set_gain calls continue to multiply in.
+	*
+	* References:
+	* - docs/T300RS_FFBEFFECTS.md: section "FF_GAIN" shows a dedicated
+	*   device gain path.
+	*
+	* - docs/T500RS_FFBEFFECTS.md: Report glossary mentions 0x43 (gain),
+	*   i.e. device-side gain separate from per-effect magnitudes; drivers should
+	*   expose both levels.
+	*/
+	unsigned long flags;
+	spin_lock_irqsave(&tmff2->lock, flags);
+
+	tmff2->pending_gain = GAIN_MAX;
+	__set_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 	return count;
 }
 
@@ -264,6 +339,7 @@ static DEVICE_ATTR_RW(gain);
 static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+	unsigned long flags;
 
 	if (!tmff2)
 		return;
@@ -273,13 +349,20 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_gain(tmff2->data, tmff2_scale_gain(value)))
-		hid_warn(tmff2->hdev, "unable to set gain\n");
+	/* Defer to workqueue: store pending gain and schedule */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->pending_gain = value;
+	__set_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 }
 
 static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+	unsigned long flags;
 
 	if (!tmff2)
 		return;
@@ -289,8 +372,14 @@ static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_autocenter(tmff2->data, value))
-		hid_warn(tmff2->hdev, "unable to set autocenter\n");
+	/* Defer to workqueue: store pending autocenter and schedule */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->pending_autocenter = value;
+	__set_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 }
 
 static void tmff2_work_handler(struct work_struct *w)
@@ -303,9 +392,34 @@ static void tmff2_work_handler(struct work_struct *w)
 	unsigned long time_now;
 	__u16 effect_delay, effect_length;
 
+	uint16_t pending_gain = 0, pending_autocenter = 0;
+	bool set_gain = 0, set_autocenter = 0;
 
 	if (!tmff2)
 		return;
+
+	/* Apply pending control changes (gain/autocenter) in process context */
+	spin_lock_irqsave(&tmff2->lock, lock_flags);
+
+	if (test_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags)) {
+		pending_gain = tmff2->pending_gain;
+		__clear_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+		set_gain = 1;
+	}
+
+	if (test_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags)) {
+		pending_autocenter = tmff2->pending_autocenter;
+		__clear_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
+		set_autocenter = 1;
+	}
+
+	spin_unlock_irqrestore(&tmff2->lock, lock_flags);
+
+	if (set_gain && tmff2->set_gain)
+		tmff2->set_gain(tmff2->data, (pending_gain * gain) / GAIN_MAX);
+
+	if (set_autocenter && tmff2->set_autocenter)
+		tmff2->set_autocenter(tmff2->data, pending_autocenter);
 
 	for (effect_id = 0; effect_id < tmff2->max_effects; ++effect_id) {
 		unsigned long actions = 0;
@@ -326,7 +440,6 @@ static void tmff2_work_handler(struct work_struct *w)
 					(effect_delay + effect_length) * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
-
 				state->count = 0;
 			}
 		}
@@ -700,6 +813,11 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 				goto wheel_err;
 			break;
 
+		case TMT500RS_PC_ID:
+			if ((ret = t500rs_populate_api(tmff2)))
+				goto wheel_err;
+			break;
+
 		case TMT248_PC_ID:
 			if ((ret = t248_populate_api(tmff2)))
 				goto wheel_err;
@@ -832,6 +950,8 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
+	/* t500rs */
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT500RS_PC_ID)},
 	/* t248 PC*/
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
 	/* tx */
@@ -855,5 +975,10 @@ static struct hid_driver tmff2_driver = {
 };
 module_hid_driver(tmff2_driver);
 
-MODULE_DESCRIPTION("FFB for Thrustmaster wheels");
+
+#ifndef TMFF2_DRIVER_VERSION
+#define TMFF2_DRIVER_VERSION "dev"
+#endif
+MODULE_VERSION(TMFF2_DRIVER_VERSION);
+
 MODULE_LICENSE("GPL");
