@@ -2,6 +2,7 @@
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <linux/hid.h>
+#include <linux/usb.h>
 #include <linux/version.h>
 #include "hid-tmff2.h"
 
@@ -680,6 +681,7 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct tmff2_device_entry *tmff2 =
 		kzalloc(sizeof(struct tmff2_device_entry), GFP_KERNEL);
+	struct usb_device *usbdev;
 
 	int ret;
 
@@ -692,11 +694,32 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	tmff2->hdev = hdev;
 	hid_set_drvdata(tmff2->hdev, tmff2);
 
+	if (!hid_is_usb(hdev)) {
+		ret = -EINVAL;
+		goto wheel_err;
+	}
+
+	usbdev = to_usb_device(tmff2->hdev->dev.parent->parent);
+
+	/* the T-GT II shows up in the same b66d compat mode as the T300RS,
+	 * but reports a different bcdDevice; leave it for hid-tminit, which
+	 * boots it into its native mode */
+	if (tmff2->hdev->product == TMT300RS_PS4_NORM_ID &&
+	    le16_to_cpu(usbdev->descriptor.bcdDevice) == TGT2_BCD_DEVICE) {
+		ret = -ENODEV;
+		goto wheel_err;
+	}
+
 	switch (tmff2->hdev->product) {
 		case TMT300RS_PS3_NORM_ID:
 		case TMT300RS_PS3_ADV_ID:
 		case TMT300RS_PS4_NORM_ID:
 			if ((ret = t300rs_populate_api(tmff2)))
+				goto wheel_err;
+			break;
+
+		case TGT2_ACTIVE:
+			if ((ret = tgt2_populate_api(tmff2)))
 				goto wheel_err;
 			break;
 
@@ -832,6 +855,8 @@ static const struct hid_device_id tmff2_devices[] = {
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_NORM_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS3_ADV_ID)},
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT300RS_PS4_NORM_ID)},
+	/* tgt2 */
+	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TGT2_ACTIVE)},
 	/* t248 PC*/
 	{HID_USB_DEVICE(USB_VENDOR_ID_THRUSTMASTER, TMT248_PC_ID)},
 	/* tx */

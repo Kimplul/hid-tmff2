@@ -196,5 +196,8 @@ for wheels:
   and add `options hid-tmff-new timer_msecs=NUMBER` into it.
   The default timer period is 8, but numbers as low as 2 should work alright.
 
-+ The T-GT II might show up as a T300 at the moment, since it reuses the T300
-  USB product ID.
++ The T-GT II first shows up in a T300 compat mode (they share a USB product
+  ID; the T-GT II is told apart by its `bcdDevice` of 0x0700) and is then
+  booted into its native mode by `hid-tminit`, where all of its inputs,
+  including the rotary encoders, work through the wheel's own report
+  descriptor.

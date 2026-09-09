@@ -105,6 +105,7 @@ int t248_populate_api(struct tmff2_device_entry *tmff2);
 int tx_populate_api(struct tmff2_device_entry *tmff2);
 int tsxw_populate_api(struct tmff2_device_entry *tmff2);
 int tspc_populate_api(struct tmff2_device_entry *tmff2);
+int tgt2_populate_api(struct tmff2_device_entry *tmff2);
 
 #define TMT300RS_PS3_NORM_ID	0xb66e
 #define TMT300RS_PS3_ADV_ID	0xb66f
@@ -117,6 +118,9 @@ int tspc_populate_api(struct tmff2_device_entry *tmff2);
 #define TSXW_ACTIVE		0xb692
 
 #define TMTS_PC_RACER_ID	0xb689
+
+#define TGT2_ACTIVE		0xb684
+#define TGT2_BCD_DEVICE		0x0700
 
 /* APIs to different wheel families */
 /* T248 and TX at least uses the T300RS api, not sure if there are other wheels
