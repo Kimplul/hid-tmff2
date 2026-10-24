@@ -14,7 +14,7 @@
 ## Description
 
 A Linux kernel module for Thrustmaster T300RS, T248, and (experimental support)
-TX, T128, T598, TS-PC and TS-XV wheels.
+TX, T128, T598, TS-PC and TS-XW wheels.
 
 I've been working on enhancing the real-time updating of effects, and although
 it's not flawless yet, the overall experience is gradually improving. There are
@@ -66,14 +66,6 @@ sudo pacman -S linux-neptune-68-headers
 
 If none of the above work, please do open up an issue.
 
-Joystick utilities from [linuxconsole tools](http://sf.net/projects/linuxconsole/)
-are needed for `udev` rules to work:
-```shell
-sudo apt install joystick          # Debian-based
-sudo pacman -S joyutils            # Arch-based
-sudo yum install linuxconsoletools # Fedora-based
-```
-
 #### Manual installation
 + Unplug wheel from computer
 + Run
@@ -95,7 +87,6 @@ sudo yum install linuxconsoletools # Fedora-based
   git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git
   cd hid-tmff2
   sudo ./dkms/dkms-install.sh
-  sudo make udev-rules # optional but should fix some common issues
   # sudo make steamdeck-rules # ONLY run if you're on a SteamDeck
   ```
 + Plug wheel back in

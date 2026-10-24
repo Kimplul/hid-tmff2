@@ -37,10 +37,12 @@ static const signed short t300rs_effects[] = {
 	-1
 };
 
+/* the wheel answers the firmware request with up to wLength (8) bytes, so the
+ * response buffer has to be at least that large */
 struct __packed t300rs_fw_response {
 	uint8_t unused1[2];
 	uint8_t fw_version;
-	uint8_t unused2;
+	uint8_t unused2[5];
 };
 
 
@@ -56,35 +58,32 @@ struct __packed t300rs_setup_header {
 };
 
 struct __packed t300rs_packet_envelope {
-	uint16_t attack_length;
-	uint16_t attack_level;
-	uint16_t fade_length;
-	uint16_t fade_level;
+	__le16 attack_length;
+	__le16 attack_level;
+	__le16 fade_length;
+	__le16 fade_level;
 };
 
 struct __packed t300rs_packet_timing {
 	uint8_t start_marker;
-	uint16_t duration;
+	__le16 duration;
 	uint8_t zero1[2];
-	uint16_t offset;
+	__le16 offset;
 	uint8_t zero2;
-	uint16_t end_marker;
+	__le16 end_marker;
 };
 
-struct usb_ctrlrequest t300rs_fw_request = {
-	.bRequestType = 0xc1,
-	.bRequest = 86,
-	.wValue = 0,
-	.wIndex = 0,
-	.wLength = 8
-};
+/* vendor specific requests to the interface, device to host */
+#define T300RS_REQUEST_TYPE_IN	(USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_INTERFACE)
+#define T300RS_REQUEST_FW_VERSION	86
+#define T300RS_REQUEST_ATTACHMENT	73
 
 struct t300rs_data {
 	unsigned long quirks;
 	void *device_props;
 };
 
-static u8 t300rs_rdesc_nrm_fixed[] = {
+static const u8 t300rs_rdesc_nrm_fixed[] = {
 	0x05, 0x01, /* Usage page (Generic Desktop) */
 	0x09, 0x04, /* Usage (Joystick) */
 	0xa1, 0x01, /* Collection (Application) */
@@ -103,9 +102,9 @@ static u8 t300rs_rdesc_nrm_fixed[] = {
 	0x26, 0xff, 0x03, /* Logical maximum (1023) */
 	0x46, 0xff, 0x03, /* Physical maximum (1023) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
-	0x09, 0x32, /* Usage (Z) (Gas) */
+	0x09, 0x32, /* Usage (Z) (Clutch) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
-	0x09, 0x31, /* Usage (Y) (Clutch) */
+	0x09, 0x31, /* Usage (Y) (Gas) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
 	0x81, 0x03, /* Input (Variable, Absolute, Constant) */
 	0x05, 0x09, /* Usage page (Button) */
@@ -116,9 +115,9 @@ static u8 t300rs_rdesc_nrm_fixed[] = {
 	0x75, 0x01, /* Report size (1) */
 	0x95, 0x0d, /* Report count (13) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
-	0x75, 0x0b, /* Report size (13) */
+	0x75, 0x0b, /* Report size (11) */
 	0x95, 0x01, /* Report count (1) */
-	0x81, 0x03, /* Usage (Variable, Absolute, Constant) */
+	0x81, 0x03, /* Input (Variable, Absolute, Constant) */
 	0x05, 0x01, /* Usage page (Generic Desktop) */
 	0x09, 0x39, /* Usage (Hat Switch) */
 	0x25, 0x07, /* Logical maximum (7) */
@@ -149,7 +148,7 @@ static u8 t300rs_rdesc_nrm_fixed[] = {
 	0xc0, /* End collection */
 };
 
-static u8 t300rs_rdesc_adv_fixed[] = {
+static const u8 t300rs_rdesc_adv_fixed[] = {
 	0x05, 0x01, /* Usage page (Generic Desktop) */
 	0x09, 0x04, /* Usage (Joystick) */
 	0xa1, 0x01, /* Collection (Application) */
@@ -202,7 +201,7 @@ static u8 t300rs_rdesc_adv_fixed[] = {
 	0x46, 0xff, 0x00, /* Physical maximum (255) */
 	0x91, 0x02, /* Output (Variable, Absolute) */
 	0x85, 0x02, /* Report ID (2) */
-	0x09, 0x02, /* Usage (Mouse) */
+	0x09, 0x02, /* Usage (2) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
 	0x09, 0x14, /* Usage (20) */
 	0x85, 0x14, /* Report ID (20) */
@@ -211,7 +210,7 @@ static u8 t300rs_rdesc_adv_fixed[] = {
 	0xc0, /* End collection */
 };
 
-static u8 t300rs_rdesc_ps4_fixed[] = {
+static const u8 t300rs_rdesc_ps4_fixed[] = {
 	0x05, 0x01, /* Usage page (Generic Desktop) */
 	0x09, 0x05, /* Usage (GamePad) */
 	0xa1, 0x01, /* Collection (Application) */
@@ -234,14 +233,14 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0x75, 0x04, /* Report size (4) */
 	0x95, 0x01, /* Report count (1) */
 	0x81, 0x42, /* Input (Variable, Absolute, NullState) */
-	0x65, 0x00, /* Input (None) */
+	0x65, 0x00, /* Unit (None) */
 	0x05, 0x09, /* Usage page (Button) */
 	0x19, 0x01, /* Usage minimum (1) */
 	0x29, 0x0e, /* Usage maximum (14) */
 	0x15, 0x00, /* Logical minimum (0) */
 	0x25, 0x01, /* Logical maximum (1) */
 	0x75, 0x01, /* Report size (1) */
-	0x95, 0x0e, /* Report size (14) */
+	0x95, 0x0e, /* Report count (14) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
 	0x06, 0x00, 0xff, /* Usage page (Vendor 1) */
 	0x09, 0x20, /* Usage (32) */
@@ -256,7 +255,7 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0x75, 0x08, /* Report size (8) */
 	0x95, 0x02, /* Report count (2) */
 	0x81, 0x02, /* Input (Variable, Absolute) */
-	0x05, 0x01, /* Usage page (Vendor 1) */
+	0x05, 0x01, /* Usage page (Generic Desktop) */
 	/* constant zero? */
 	0x09, 0x00, /* Usage (33) */
 	0x95, 0x21, /* Report count (33) */
@@ -283,7 +282,7 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0x05, 0x09, /* Usage page (Button) */
 	0x19, 0x0f, /* Usage minimum (15) */
 	0x29, 0x17, /* Usage maximum (23) */
-	0x15, 0x00, /* Logical minimum (1) */
+	0x15, 0x00, /* Logical minimum (0) */
 	0x25, 0x01, /* Logical maximum (1) */
 	0x75, 0x01, /* Report size (1) */
 	0x95, 0x08, /* Report count (8) */
@@ -296,8 +295,8 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0x81, 0x02, /* Input (Variable, Absolute) */
 	/* continue unmodified */
 	0x06, 0x00, 0xff, /* Usage page (Vendor defined 1) */
-	0x85, 0x60, /* Report ID (5) (change to 0x60?) */
-	0x09, 0x60, /* Usage (34) (change to 0x60?) */
+	0x85, 0x60, /* Report ID (96), prev 5 */
+	0x09, 0x60, /* Usage (96), prev 34 */
 	0x95, 0x1f, /* Report count (31) () */
 	0x91, 0x02, /* Output (Variable, Absolute) */
 	0x85, 0x03, /* Report ID (3) */
@@ -330,7 +329,7 @@ static u8 t300rs_rdesc_ps4_fixed[] = {
 	0xc0,
 };
 
-static u8 condition_values[] = {
+static const u8 condition_values[] = {
 	0xfe, 0xff, 0xfe, 0xff, 0xfe,
 	0xff, 0xfe, 0xff
 };
@@ -401,20 +400,21 @@ static uint8_t t300rs_condition_effect_type(uint16_t effect_type)
 	return 0x07;
 }
 
-static int16_t t300rs_calculate_coefficient(int16_t coeff, uint16_t effect_type)
+static int16_t t300rs_calculate_coefficient(struct t300rs_device_entry *t300rs,
+		int16_t coeff, uint16_t effect_type)
 {
-	uint8_t input_level;
+	int input_level;
 
 	switch (effect_type)
 	{
 	case FF_SPRING:
-		input_level = spring_level;
+		input_level = READ_ONCE(t300rs->tmff2->spring_level);
 		break;
 	case FF_DAMPER:
-		input_level = damper_level;
+		input_level = READ_ONCE(t300rs->tmff2->damper_level);
 		break;
 	case FF_FRICTION:
-		input_level = friction_level;
+		input_level = READ_ONCE(t300rs->tmff2->friction_level);
 		break;
 	default:
 		input_level = 100;
@@ -466,12 +466,20 @@ static void t300rs_calculate_ramp_parameters(uint16_t *out_slope,
 	*out_invert = (start_level < end_level) ? 0x04 : 0x05;
 }
 
-int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len)
+int t300rs_send_buf(struct t300rs_device_entry *t300rs, const u8 *send_buffer, size_t len)
 {
-	int i;
+	unsigned long flags;
+	size_t i;
+
 	/* check that send_buffer fits into our report */
 	if (len > t300rs->buffer_length)
 		return -EINVAL;
+
+	/* the field values are shared by everyone sending to the wheel, and
+	 * some callers (gain, autocenter) run in atomic context. usbhid copies
+	 * the report into its own output queue in hid_hw_request(), so holding
+	 * the lock until then is enough to keep packets from mixing. */
+	spin_lock_irqsave(&t300rs->send_lock, flags);
 
 	/* fill with actual data */
 	for (i = 0; i < len; ++i)
@@ -482,15 +490,19 @@ int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t 
 		t300rs->ff_field->value[i] = 0;
 
 	hid_hw_request(t300rs->hdev, t300rs->report, HID_REQ_SET_REPORT);
+
+	spin_unlock_irqrestore(&t300rs->send_lock, flags);
 	return 0;
 }
 
 int t300rs_send_int(struct t300rs_device_entry *t300rs)
 {
-	t300rs_send_buf(t300rs, t300rs->send_buffer, t300rs->buffer_length);
+	int ret;
+
+	ret = t300rs_send_buf(t300rs, t300rs->send_buffer, t300rs->buffer_length);
 	memset(t300rs->send_buffer, 0, t300rs->buffer_length);
 
-	return 0;
+	return ret;
 }
 
 static void t300rs_fill_header(struct t300rs_packet_header *packet_header,
@@ -506,7 +518,7 @@ int t300rs_play_effect(void *data, const struct tmff2_effect_state *state)
 	struct __packed t300rs_packet_play {
 		struct t300rs_packet_header header;
 		uint8_t code;
-		uint16_t count;
+		__le16 count;
 	} *play_packet = (struct t300rs_packet_play *)t300rs->send_buffer;
 
 	int ret;
@@ -574,7 +586,7 @@ static void t300rs_fill_timing(struct t300rs_packet_timing *packet_timing,
 	packet_timing->duration = cpu_to_le16(duration);
 	packet_timing->offset = cpu_to_le16(offset);
 
-	packet_timing->end_marker = 0xffff;
+	packet_timing->end_marker = cpu_to_le16(0xffff);
 }
 
 static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
@@ -586,12 +598,12 @@ static int t300rs_update_constant(struct t300rs_device_entry *t300rs,
 	struct ff_constant_effect constant_old = old.u.constant;
 	struct __packed t300rs_packet_mod_constant {
 		struct t300rs_packet_header header;
-		uint16_t magnitude;
+		__le16 magnitude;
 		struct t300rs_packet_envelope envelope;
 		uint8_t effect_type;
 		uint8_t update_type;
-		uint16_t duration;
-		uint16_t offset;
+		__le16 duration;
+		__le16 offset;
 	} *packet_mod_constant = (struct t300rs_packet_mod_constant *)t300rs->send_buffer;
 
 	int ret = 0;
@@ -637,14 +649,14 @@ static int t300rs_update_ramp(struct t300rs_device_entry *t300rs,
 	struct __packed t300rs_packet_mod_ramp {
 		struct t300rs_packet_header header;
 		uint8_t type;
-		uint16_t slope;
-		uint16_t center;
-		uint16_t length;
+		__le16 slope;
+		__le16 center;
+		__le16 length;
 		struct t300rs_packet_envelope envelope;
 		uint8_t effect_type;
 		uint8_t update_type;
-		uint16_t length2;
-		uint16_t offset;
+		__le16 length2;
+		__le16 offset;
 	} *packet_mod_ramp = (struct t300rs_packet_mod_ramp *)t300rs->send_buffer;
 
 	int ret = 0;
@@ -697,16 +709,16 @@ static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 	struct __packed t300rs_packet_mod_condition
 	{
 		struct t300rs_packet_header header;
-		uint16_t right_coeff;
-		uint16_t left_coeff;
-		uint16_t right_deadband;
-		uint16_t left_deadband;
-		uint16_t right_saturation;
-		uint16_t left_saturation;
+		__le16 right_coeff;
+		__le16 left_coeff;
+		__le16 right_deadband;
+		__le16 left_deadband;
+		__le16 right_saturation;
+		__le16 left_saturation;
 		uint8_t effect_type;
 		uint8_t update_type;
-		uint16_t duration;
-		uint16_t delay;
+		__le16 duration;
+		__le16 delay;
 	} *packet_mod_condition = (struct t300rs_packet_mod_condition *)t300rs->send_buffer;
 
 	int ret = 0;
@@ -715,11 +727,11 @@ static int t300rs_update_condition(struct t300rs_device_entry *t300rs,
 	uint16_t right_coeff, right_coeff_old, left_coeff, left_coeff_old;
 	int16_t right_deadband, right_deadband_old, left_deadband, left_deadband_old;
 
-	right_coeff = t300rs_calculate_coefficient(cond.right_coeff, effect.type);
-	right_coeff_old = t300rs_calculate_coefficient(cond_old.right_coeff, old.type);
+	right_coeff = t300rs_calculate_coefficient(t300rs, cond.right_coeff, effect.type);
+	right_coeff_old = t300rs_calculate_coefficient(t300rs, cond_old.right_coeff, old.type);
 
-	left_coeff = t300rs_calculate_coefficient(cond.left_coeff, effect.type);
-	left_coeff_old = t300rs_calculate_coefficient(cond_old.left_coeff, old.type);
+	left_coeff = t300rs_calculate_coefficient(t300rs, cond.left_coeff, effect.type);
+	left_coeff_old = t300rs_calculate_coefficient(t300rs, cond_old.left_coeff, old.type);
 
 	t300rs_calculate_deadband(&right_deadband, &left_deadband,
 		cond.deadband, cond.center);
@@ -773,15 +785,15 @@ static int t300rs_update_periodic(struct t300rs_device_entry *t300rs,
 	struct __packed t300rs_packet_mod_periodic {
 		struct t300rs_packet_header header;
 		uint8_t type;
-		uint16_t magnitude;
-		uint16_t offset;
-		uint16_t phase;
-		uint16_t period;
+		__le16 magnitude;
+		__le16 offset;
+		__le16 phase;
+		__le16 period;
 		struct t300rs_packet_envelope envelope;
 		uint8_t effect_type;
 		uint8_t update_type;
-		uint16_t duration;
-		uint16_t play_offset;
+		__le16 duration;
+		__le16 play_offset;
 	} *packet_mod_periodic = (struct t300rs_packet_mod_periodic *)t300rs->send_buffer;
 
 	struct ff_periodic_effect periodic, periodic_old;
@@ -834,7 +846,7 @@ static int t300rs_upload_constant(struct t300rs_device_entry *t300rs,
 	struct ff_constant_effect constant = state->effect.u.constant;
 	struct __packed t300rs_packet_constant {
 		struct t300rs_packet_header header;
-		uint16_t level;
+		__le16 level;
 		struct t300rs_packet_envelope envelope;
 		uint8_t zero;
 		struct t300rs_packet_timing timing;
@@ -871,11 +883,11 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 	struct ff_ramp_effect ramp = state->effect.u.ramp;
 	struct __packed t300rs_packet_ramp {
 		struct t300rs_packet_header header;
-		uint16_t slope;
-		uint16_t center;
+		__le16 slope;
+		__le16 center;
 		uint8_t zero1[2];
-		uint16_t duration;
-		uint16_t marker;
+		__le16 duration;
+		__le16 marker;
 		struct t300rs_packet_envelope envelope;
 		uint8_t invert;
 		struct t300rs_packet_timing timing;
@@ -906,7 +918,7 @@ static int t300rs_upload_ramp(struct t300rs_device_entry *t300rs,
 
 	ret = t300rs_send_int(t300rs);
 	if (ret)
-		hid_err(t300rs->hdev, "failed uploading ramp");
+		hid_err(t300rs->hdev, "failed uploading ramp\n");
 
 	return ret;
 }
@@ -919,15 +931,15 @@ static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
 	struct ff_condition_effect cond = state->effect.u.condition[0];
 	struct __packed t300rs_packet_condition {
 		struct t300rs_packet_header header;
-		int16_t right_coeff;
-		int16_t left_coeff;
-		int16_t right_deadband;
-		int16_t left_deadband;
-		uint16_t right_saturation;
-		uint16_t left_saturation;
+		__le16 right_coeff;
+		__le16 left_coeff;
+		__le16 right_deadband;
+		__le16 left_deadband;
+		__le16 right_saturation;
+		__le16 left_saturation;
 		uint8_t hardcoded[ARRAY_SIZE(condition_values)];
-		uint16_t max_right_saturation;
-		uint16_t max_left_saturation;
+		__le16 max_right_saturation;
+		__le16 max_left_saturation;
 		uint8_t type;
 		struct t300rs_packet_timing timing;
 	} *packet_condition = (struct t300rs_packet_condition *)t300rs->send_buffer;
@@ -936,8 +948,8 @@ static int t300rs_upload_condition(struct t300rs_device_entry *t300rs,
 	uint16_t duration, right_sat, left_sat, right_coeff, left_coeff, max_sat, offset;
 	int16_t right_deadband, left_deadband;
 
-	right_coeff = t300rs_calculate_coefficient(cond.right_coeff, effect.type);
-	left_coeff = t300rs_calculate_coefficient(cond.left_coeff, effect.type);
+	right_coeff = t300rs_calculate_coefficient(t300rs, cond.right_coeff, effect.type);
+	left_coeff = t300rs_calculate_coefficient(t300rs, cond.left_coeff, effect.type);
 
 	t300rs_calculate_deadband(&right_deadband, &left_deadband,
 		cond.deadband, cond.center);
@@ -982,11 +994,11 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 	struct ff_effect effect = state->effect;
 	struct __packed t300rs_packet_periodic {
 		struct t300rs_packet_header header;
-		uint16_t magnitude;
-		uint16_t periodic_offset;
-		uint16_t phase;
-		uint16_t period;
-		uint16_t marker;
+		__le16 magnitude;
+		__le16 periodic_offset;
+		__le16 phase;
+		__le16 period;
+		__le16 marker;
 		struct t300rs_packet_envelope envelope;
 		uint8_t waveform;
 		struct t300rs_packet_timing timing;
@@ -1023,7 +1035,7 @@ static int t300rs_upload_periodic(struct t300rs_device_entry *t300rs,
 
 	ret = t300rs_send_int(t300rs);
 	if (ret)
-		hid_err(t300rs->hdev, "failed uploading periodic effect");
+		hid_err(t300rs->hdev, "failed uploading periodic effect\n");
 
 	return ret;
 }
@@ -1044,9 +1056,9 @@ int t300rs_update_effect(void *data, const struct tmff2_effect_state *state)
 		case FF_PERIODIC:
 			return t300rs_update_periodic(t300rs, state);
 		default:
-			hid_err(t300rs->hdev, "invalid effect type: %x",
+			hid_err(t300rs->hdev, "invalid effect type: %x\n",
 					state->effect.type);
-			return -1;
+			return -EINVAL;
 	}
 }
 
@@ -1066,45 +1078,57 @@ int t300rs_upload_effect(void *data, const struct tmff2_effect_state *state)
 		case FF_PERIODIC:
 			return t300rs_upload_periodic(t300rs, state);
 		default:
-			hid_err(t300rs->hdev, "invalid effect type: %x",
+			hid_err(t300rs->hdev, "invalid effect type: %x\n",
 					state->effect.type);
-			return -1;
+			return -EINVAL;
 	}
 }
 
 static int t300rs_switch_mode(void *data, uint16_t mode)
 {
 	struct t300rs_device_entry *t300rs = data;
+	int value, ret;
+
 	if (!t300rs)
 		return -ENODEV;
 
-	if(t300rs->mode == mode) /* already in specified mode */
+	if (t300rs->mode == mode) /* already in specified mode */
 		return 0;
 
-	if (mode == 0)
-		/* go to normal mode */
-		usb_control_msg(t300rs->usbdev,
-				usb_sndctrlpipe(t300rs->usbdev, 0),
-				83, 0x41, 5, 0, 0, 0,
-				USB_CTRL_SET_TIMEOUT
-				);
-	else if (mode == 1)
-		/* go to advanced mode */
-		usb_control_msg(t300rs->usbdev,
-				usb_sndctrlpipe(t300rs->usbdev, 0),
-				83, 0x41, 3, 0, 0, 0,
-				USB_CTRL_SET_TIMEOUT
-				);
-	else
+	switch (mode) {
+	case 0: /* go to normal mode */
+		value = 5;
+		break;
+	case 1: /* go to advanced mode */
+		/* the advanced mode needs the F1 wheel attachment */
+		if (t300rs->attachment != T300RS_F1_ATTACHMENT) {
+			hid_warn(t300rs->hdev, "mode %i needs the F1 attachment\n", mode);
+			return -EINVAL;
+		}
+		value = 3;
+		break;
+	default:
 		hid_warn(t300rs->hdev, "mode %i not supported\n", mode);
+		return -EINVAL;
+	}
 
+	ret = usb_control_msg(t300rs->usbdev,
+			usb_sndctrlpipe(t300rs->usbdev, 0),
+			83, 0x41, value, 0, NULL, 0,
+			USB_CTRL_SET_TIMEOUT);
+	if (ret < 0) {
+		hid_err(t300rs->hdev, "failed switching to mode %i: %i\n", mode, ret);
+		return ret;
+	}
 
+	/* the wheel reconnects with a different product id after switching */
+	t300rs->mode = mode;
 	return 0;
 }
 
-static struct t300rs_alt_modes {
-	char *id;
-	char *label;
+static const struct t300rs_alt_modes {
+	const char *id;
+	const char *label;
 	uint16_t mode;
 } t300rs_modes[] = {
 	{"base", "T300RS base", 0},
@@ -1146,32 +1170,24 @@ static ssize_t t300rs_alt_mode_show(void *data, char *buf)
 static ssize_t t300rs_alt_mode_store(void *data, const char *buf, size_t count)
 {
 	struct t300rs_device_entry *t300rs = data;
-	int i, len, mode_len;
-	char *lbuf;
+	int i, ret;
+
 	if (!t300rs)
 		return -ENODEV;
 
 	if (t300rs->attachment != T300RS_F1_ATTACHMENT)
 		return count; /* don't do anything */
 
-	lbuf = kasprintf(GFP_KERNEL, "%s", buf);
-	if (!lbuf)
-		return -ENOMEM;
-
-	len = strlen(buf);
 	for (i = 0; i < ARRAY_SIZE(t300rs_modes); ++i) {
-		mode_len = strlen(t300rs_modes[i].id);
-		if (mode_len > len)
+		/* sysfs_streq() ignores a trailing newline */
+		if (!sysfs_streq(buf, t300rs_modes[i].id))
 			continue;
 
-		if (strncmp(lbuf, t300rs_modes[i].id, mode_len) == 0) {
-			t300rs_switch_mode(data, t300rs_modes[i].mode);
-			break;
-		}
+		ret = t300rs_switch_mode(data, t300rs_modes[i].mode);
+		return ret ? ret : count;
 	}
 
-	kfree(lbuf);
-	return count;
+	return -EINVAL;
 }
 
 int t300rs_set_autocenter(void *data, uint16_t value)
@@ -1179,34 +1195,32 @@ int t300rs_set_autocenter(void *data, uint16_t value)
 	struct t300rs_device_entry *t300rs = data;
 	struct __packed t300rs_packet_autocenter {
 		struct t300rs_setup_header header;
-		uint16_t value;
-	} *autocenter_packet;
+		__le16 value;
+	} autocenter_packet = { 0 };
 	int ret;
 
 	if (!t300rs)
 		return -ENODEV;
 
-	/* TODO: this should probably also use a separately allocated buffer?
-	 * someone might change autocentering while we're updating the buffer
-	 * which would cause corruption */
-	autocenter_packet = (struct t300rs_packet_autocenter *)t300rs->send_buffer;
+	/* called from atomic context by the ff core, so this uses its own
+	 * buffer on the stack instead of t300rs->send_buffer */
+	autocenter_packet.header.cmd = 0x08;
+	autocenter_packet.header.code = 0x04;
+	autocenter_packet.value = cpu_to_le16(0x01);
 
-	autocenter_packet->header.cmd = 0x08;
-	autocenter_packet->header.code = 0x04;
-	autocenter_packet->value = cpu_to_le16(0x01);
-
-	if ((ret = t300rs_send_int(t300rs))) {
-		hid_err(t300rs->hdev, "failed setting autocenter");
+	if ((ret = t300rs_send_buf(t300rs, (u8 *)&autocenter_packet,
+					sizeof(autocenter_packet)))) {
+		hid_err(t300rs->hdev, "failed setting autocenter\n");
 		return ret;
 	}
 
-	autocenter_packet->header.cmd = 0x08;
-	autocenter_packet->header.code = 0x03;
+	autocenter_packet.header.cmd = 0x08;
+	autocenter_packet.header.code = 0x03;
+	autocenter_packet.value = cpu_to_le16(value);
 
-	autocenter_packet->value = cpu_to_le16(value);
-
-	if ((ret = t300rs_send_int(t300rs)))
-		hid_err(t300rs->hdev, "failed setting autocenter");
+	if ((ret = t300rs_send_buf(t300rs, (u8 *)&autocenter_packet,
+					sizeof(autocenter_packet))))
+		hid_err(t300rs->hdev, "failed setting autocenter\n");
 
 	return ret;
 }
@@ -1214,19 +1228,18 @@ int t300rs_set_autocenter(void *data, uint16_t value)
 int t300rs_set_gain(void *data, uint16_t gain)
 {
 	struct t300rs_device_entry *t300rs = data;
-	struct __packed t300rs_packet_gain {
-		struct t300rs_setup_header header;
-	} *gain_packet;
+	struct t300rs_setup_header gain_packet;
 	int ret;
 
 	if (!t300rs)
 		return -ENODEV;
 
-	gain_packet = (struct t300rs_packet_gain *)t300rs->send_buffer;
-	gain_packet->header.cmd = 0x02;
-	gain_packet->header.code = (gain >> 8) & 0xff;
+	/* called from atomic context by the ff core, so this uses its own
+	 * buffer on the stack instead of t300rs->send_buffer */
+	gain_packet.cmd = 0x02;
+	gain_packet.code = (gain >> 8) & 0xff;
 
-	if ((ret = t300rs_send_int(t300rs)))
+	if ((ret = t300rs_send_buf(t300rs, (u8 *)&gain_packet, sizeof(gain_packet))))
 		hid_err(t300rs->hdev, "failed setting gain: %i\n", ret);
 
 	return ret;
@@ -1235,10 +1248,9 @@ int t300rs_set_gain(void *data, uint16_t gain)
 int t300rs_set_range(void *data, uint16_t value)
 {
 	struct t300rs_device_entry *t300rs = data;
-	/* it's important that we don't use t300rs->send_buffer, as range can be
-	 * set from outside of the FFB environment, and we don't want to
-	 * accidentally overwrite any data. */
-	u8 *send_buffer = kzalloc(t300rs->buffer_length, GFP_KERNEL);
+	/* range is set from sysfs, outside of the work handler, so don't use
+	 * t300rs->send_buffer */
+	u8 send_buffer[4];
 	uint16_t scaled_value;
 	int ret;
 
@@ -1252,51 +1264,40 @@ int t300rs_set_range(void *data, uint16_t value)
 		value = 1080;
 	}
 
-	if (!send_buffer) {
-		ret = -EINVAL;
-		hid_err(t300rs->hdev, "could not allocate send_buffer\n");
-		goto err;
-	}
-
 	scaled_value = value * 0x3c;
 	send_buffer[0] = 0x08;
 	send_buffer[1] = 0x11;
 	send_buffer[2] = scaled_value & 0xff;
 	send_buffer[3] = scaled_value >> 8;
 
-	if ((ret = t300rs_send_buf(t300rs, send_buffer, t300rs->buffer_length)))
+	if ((ret = t300rs_send_buf(t300rs, send_buffer, sizeof(send_buffer)))) {
 		hid_warn(t300rs->hdev, "failed setting range\n");
+		return ret;
+	}
 
-	/* since everythin went OK, update the current range */
-	range = value;
-err:
-	kfree(send_buffer);
-	return ret;
+	/* only remember the range if it actually was sent */
+	WRITE_ONCE(t300rs->tmff2->range, value);
+	return 0;
 }
 
 static int t300rs_send_open(struct t300rs_device_entry *t300rs)
 {
-	struct __packed t300rs_packet_open {
-		struct t300rs_setup_header header;
-	} *open_packet;
+	const struct t300rs_setup_header open_packet = {
+		.cmd = 0x01,
+		.code = 0x05,
+	};
 
-	open_packet = (struct t300rs_packet_open *)t300rs->send_buffer;
-	open_packet->header.cmd = 0x01;
-	open_packet->header.code = 0x05;
-
-	return t300rs_send_int(t300rs);
+	return t300rs_send_buf(t300rs, (const u8 *)&open_packet, sizeof(open_packet));
 }
 
 static int t300rs_send_close(struct t300rs_device_entry *t300rs)
 {
-	struct __packed t300rs_packet_open {
-		struct t300rs_setup_header header;
-	} *open_packet;
+	const struct t300rs_setup_header close_packet = {
+		.cmd = 0x01,
+		.code = 0x00,
+	};
 
-	open_packet = (struct t300rs_packet_open *)t300rs->send_buffer;
-	open_packet->header.cmd = 0x01;
-
-	return t300rs_send_int(t300rs);
+	return t300rs_send_buf(t300rs, (const u8 *)&close_packet, sizeof(close_packet));
 }
 
 int t300rs_open(void *data, int open_mode)
@@ -1308,7 +1309,7 @@ int t300rs_open(void *data, int open_mode)
 	if (open_mode && t300rs_send_open(t300rs))
 		hid_warn(t300rs->hdev, "failed sending open command\n");
 
-	return t300rs->open(t300rs->input_dev);
+	return 0;
 }
 
 int t300rs_close(void *data, int open_mode)
@@ -1322,7 +1323,6 @@ int t300rs_close(void *data, int open_mode)
 	if (open_mode && (ret = t300rs_send_close(t300rs)))
 		hid_warn(t300rs->hdev, "failed sending close command\n");
 
-	t300rs->close(t300rs->input_dev);
 	return ret;
 }
 
@@ -1340,12 +1340,11 @@ static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
 	/* fetch firmware version */
 	ret = usb_control_msg(t300rs->usbdev,
 			usb_rcvctrlpipe(t300rs->usbdev, 0),
-			t300rs_fw_request.bRequest,
-			t300rs_fw_request.bRequestType,
-			t300rs_fw_request.wValue,
-			t300rs_fw_request.wIndex,
+			T300RS_REQUEST_FW_VERSION,
+			T300RS_REQUEST_TYPE_IN,
+			0, 0,
 			fw_response,
-			t300rs_fw_request.wLength,
+			sizeof(struct t300rs_fw_response),
 			USB_CTRL_SET_TIMEOUT
 			);
 
@@ -1354,8 +1353,14 @@ static int t300rs_check_firmware(struct t300rs_device_entry *t300rs)
 		goto out;
 	}
 
+	if (ret <= offsetof(struct t300rs_fw_response, fw_version)) {
+		hid_warn(t300rs->hdev, "short firmware version response (%i bytes)\n", ret);
+		ret = 0;
+		goto out;
+	}
+
 	/* educated guess */
-	if (fw_response->fw_version < 31 && ret >= 0) {
+	if (fw_response->fw_version < 31) {
 		hid_warn(t300rs->hdev,
 				"firmware version %i might be too old, consider updating\n",
 				fw_response->fw_version
@@ -1377,45 +1382,37 @@ static int t300rs_get_attachment(struct t300rs_device_entry *t300rs)
 	/* taken directly from hid_tminit */
 	struct __packed t300rs_attachment_response
 	{
-		uint16_t type;
+		__le16 type;
 
 		union {
 			struct __packed {
-				uint16_t field0;
-				uint16_t field1;
+				__le16 field0;
+				__le16 field1;
 				uint8_t attachment;
 				uint8_t model;
-				uint16_t field2;
-				uint16_t field3;
-				uint16_t field4;
-				uint16_t field5;
+				__le16 field2;
+				__le16 field3;
+				__le16 field4;
+				__le16 field5;
 			} a;
 
 			struct __packed {
-				uint16_t field0;
-				uint16_t field1;
+				__le16 field0;
+				__le16 field1;
 				uint8_t attachment;
 				uint8_t model;
 			} b;
 		};
-	} *response = kzalloc(GFP_KERNEL, sizeof(struct t300rs_attachment_response));
-	struct usb_ctrlrequest t300rs_attachment_rq = {
-		.bRequestType = 0xc1,
-		.bRequest = 73,
-		.wValue = 0,
-		.wIndex = 0,
-		.wLength = sizeof(struct t300rs_attachment_response)
-	};
+	} *response = kzalloc(sizeof(struct t300rs_attachment_response), GFP_KERNEL);
 	int ret, attachment;
 	if (!response)
-		return -ENODEV;
+		return -ENOMEM;
 
 	ret = usb_control_msg(t300rs->usbdev,
 			usb_rcvctrlpipe(t300rs->usbdev, 0),
-			t300rs_attachment_rq.bRequest,
-			t300rs_attachment_rq.bRequestType,
-			t300rs_attachment_rq.wValue,
-			t300rs_attachment_rq.wIndex,
+			T300RS_REQUEST_ATTACHMENT,
+			T300RS_REQUEST_TYPE_IN,
+			0, 0,
 			response,
 			sizeof(struct t300rs_attachment_response),
 			USB_CTRL_SET_TIMEOUT
@@ -1426,14 +1423,21 @@ static int t300rs_get_attachment(struct t300rs_device_entry *t300rs)
 		goto out;
 	}
 
+	/* the attachment byte is at the same offset in both response types */
+	if (ret <= offsetof(struct t300rs_attachment_response, b.attachment)) {
+		hid_err(t300rs->hdev, "short attachment response (%i bytes)\n", ret);
+		ret = -EIO;
+		goto out;
+	}
+
 	if (response->type == cpu_to_le16(0x49)) {
 		attachment = response->a.attachment;
 	} else if (response->type == cpu_to_le16(0x47)) {
 		attachment = response->b.attachment;
 	} else {
 		hid_err(t300rs->hdev,
-				"unknown packet type %hx\n, please contact a maintainer",
-				response->type);
+				"unknown packet type %hx, please contact a maintainer\n",
+				le16_to_cpu(response->type));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -1446,10 +1450,50 @@ out:
 	return ret;
 }
 
+int t300rs_init_common(struct tmff2_device_entry *tmff2,
+		struct t300rs_device_entry *t300rs, u8 buffer_length)
+{
+	struct hid_device *hdev = tmff2->hdev;
+	struct list_head *report_list =
+		&hdev->report_enum[HID_OUTPUT_REPORT].report_list;
+	struct hid_report *report;
+
+	t300rs->tmff2 = tmff2;
+	t300rs->hdev = hdev;
+	t300rs->input_dev = tmff2->input_dev;
+	/* tmff2_probe() only accepts USB devices, so this cast is safe */
+	t300rs->usbdev = interface_to_usbdev(to_usb_interface(hdev->dev.parent));
+	t300rs->buffer_length = buffer_length;
+	spin_lock_init(&t300rs->send_lock);
+
+	/* the report descriptor is replaced by wheel_fixup, but make sure the
+	 * output report actually looks like we expect before writing into it */
+	if (list_empty(report_list)) {
+		hid_err(hdev, "no output report found\n");
+		return -ENODEV;
+	}
+
+	report = list_first_entry(report_list, struct hid_report, list);
+	if (report->maxfield < 1 || !report->field[0]
+			|| report->field[0]->report_count < buffer_length) {
+		hid_err(hdev, "unexpected output report layout\n");
+		return -ENODEV;
+	}
+
+	t300rs->report = report;
+	t300rs->ff_field = report->field[0];
+
+	t300rs->send_buffer = kzalloc(buffer_length, GFP_KERNEL);
+	if (!t300rs->send_buffer)
+		return -ENOMEM;
+
+	return 0;
+}
+
 static int t300rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 {
 	struct t300rs_device_entry *t300rs = kzalloc(sizeof(struct t300rs_device_entry), GFP_KERNEL);
-	struct list_head *report_list;
+	u8 buffer_length;
 	int ret;
 
 	if (!t300rs) {
@@ -1457,35 +1501,19 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 		goto t300rs_err;
 	}
 
-	t300rs->hdev = tmff2->hdev;
-	t300rs->input_dev = tmff2->input_dev;
-	t300rs->usbdev = to_usb_device(tmff2->hdev->dev.parent->parent);
-
-	if(t300rs->hdev->product == TMT300RS_PS4_NORM_ID)
-		t300rs->buffer_length = T300RS_PS4_BUFFER_LENGTH;
+	if (tmff2->hdev->product == TMT300RS_PS4_NORM_ID)
+		buffer_length = T300RS_PS4_BUFFER_LENGTH;
 	else
-		t300rs->buffer_length = T300RS_NORM_BUFFER_LENGTH;
+		buffer_length = T300RS_NORM_BUFFER_LENGTH;
 
-	t300rs->send_buffer = kzalloc(t300rs->buffer_length, GFP_KERNEL);
-	if (!t300rs->send_buffer) {
-		ret = -ENOMEM;
-		goto send_err;
-	}
+	if ((ret = t300rs_init_common(tmff2, t300rs, buffer_length)))
+		goto init_err;
 
 	if ((ret = t300rs_check_firmware(t300rs)))
-		goto firmware_err;
-
-	report_list = &t300rs->hdev->report_enum[HID_OUTPUT_REPORT].report_list;
-
-	/* because we set the rdesc, we know exactly which report and field to use */
-	t300rs->report = list_entry(report_list->next, struct hid_report, list);
-	t300rs->ff_field = t300rs->report->field[0];
-
-	t300rs->open = t300rs->input_dev->open;
-	t300rs->close = t300rs->input_dev->close;
+		goto init_err;
 
 	/* TODO: PS4 advanced mode? */
-	alt_mode = (t300rs->mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID));
+	t300rs->mode = (t300rs->hdev->product == TMT300RS_PS3_ADV_ID);
 	if ((t300rs->attachment = t300rs_get_attachment(t300rs)) < 0)
 		t300rs->attachment = T300RS_DEFAULT_ATTACHMENT;
 
@@ -1501,9 +1529,8 @@ static int t300rs_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	hid_info(t300rs->hdev, "force feedback for T300RS\n");
 	return 0;
 
-firmware_err:
+init_err:
 	kfree(t300rs->send_buffer);
-send_err:
 	kfree(t300rs);
 t300rs_err:
 	hid_err(tmff2->hdev, "failed initializing T300RS\n");
@@ -1521,27 +1548,24 @@ static int t300rs_wheel_destroy(void *data)
 	return 0;
 }
 
-static __u8 *t300rs_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,
+static const __u8 *t300rs_wheel_fixup(struct hid_device *hdev, __u8 *rdesc,
 		unsigned int *rsize)
 {
 	switch (hdev->product) {
 		case TMT300RS_PS3_NORM_ID:
 		/* normal PS3 mode */
-		rdesc = t300rs_rdesc_nrm_fixed;
 		*rsize = sizeof(t300rs_rdesc_nrm_fixed);
-		break;
+		return t300rs_rdesc_nrm_fixed;
 
 		case TMT300RS_PS4_NORM_ID:
 		/* PS4 normal mode */
-		rdesc = t300rs_rdesc_ps4_fixed;
 		*rsize = sizeof(t300rs_rdesc_ps4_fixed);
-		break;
+		return t300rs_rdesc_ps4_fixed;
 
 		case TMT300RS_PS3_ADV_ID:
 		/* PS3 advanced mode */
-		rdesc = t300rs_rdesc_adv_fixed;
 		*rsize = sizeof(t300rs_rdesc_adv_fixed);
-		break;
+		return t300rs_rdesc_adv_fixed;
 	}
 
 	return rdesc;

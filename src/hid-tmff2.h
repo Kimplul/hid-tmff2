@@ -7,14 +7,6 @@
 #include <linux/ktime.h>
 #include <linux/input.h>
 
-extern int timer_msecs;
-extern int spring_level;
-extern int damper_level;
-extern int friction_level;
-extern int range;
-extern u16 gain;
-extern int alt_mode;
-
 #define USB_VENDOR_ID_THRUSTMASTER 0x044f
 
 /* the wheel seems to only be capable of processing a certain number of
@@ -38,21 +30,17 @@ extern int alt_mode;
 #define PARAM_ALT_MODE		(1 << 4)
 #define PARAM_GAIN		(1 << 5)
 
-#undef fixp_sin16
-#define fixp_sin16(v) (((v % 360) > 180) ?\
-		-(fixp_sin32((v % 360) - 180) >> 16)\
-		: fixp_sin32(v) >> 16)
-
-#define JIFFIES2MS(jiffies) ((jiffies) * 1000 / HZ)
-
 struct tmff2_effect_state {
 	struct ff_effect effect;
 	struct ff_effect old;
 
 	unsigned long flags;
 	unsigned long count;
+	/* in jiffies */
 	unsigned long start_time;
 };
+
+struct tm_wheel_desc;
 
 struct tmff2_device_entry {
 	struct hid_device *hdev;
@@ -66,9 +54,26 @@ struct tmff2_device_entry {
 	spinlock_t lock;
 
 	int allow_scheduling;
+	/* the wheel is initialized, protected by input_dev->mutex */
+	int ready;
+
+	/* open/close of the input device as set up by hid-input */
+	int (*hid_open)(struct input_dev *dev);
+	void (*hid_close)(struct input_dev *dev);
+
+	/* per-device settings, changeable through sysfs */
+	int spring_level;
+	int damper_level;
+	int friction_level;
+	u16 range;
+	u16 gain;
+	/* gain set by the application through the ff core, scaled by gain */
+	u16 ff_gain;
 
 	/* fields relevant to each actual device (T300, T248...) */
 	void *data;
+	/* only set for wheels using the shared tmcommon backend */
+	const struct tm_wheel_desc *wheel_desc;
 	unsigned long params;
 	unsigned long max_effects;
 	signed short supported_effects[FF_CNT];
@@ -93,7 +98,7 @@ struct tmff2_device_entry {
 	ssize_t (*alt_mode_show)(void *data, char *buf);
 	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
 	int (*set_autocenter)(void *data, uint16_t autocenter);
-	__u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
+	const __u8 *(*wheel_fixup)(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize);
 
 	/* void pointers are dangerous, I know, but in this case likely the
 	 * best option... */
@@ -128,14 +133,21 @@ struct t300rs_device_entry {
 	struct hid_report *report;
 	struct hid_field *ff_field;
 	struct usb_device *usbdev;
+	struct tmff2_device_entry *tmff2;
 
-	int (*open)(struct input_dev *dev);
-	void (*close)(struct input_dev *dev);
+	/* only set for wheels using the shared tmcommon backend */
+	const struct tm_wheel_desc *desc;
 
 	int mode;
 	int attachment;
 	u8 buffer_length;
+
+	/* only used for effect packets, which are exclusively built from the
+	 * tmff2 work handler. Other commands use their own buffers. */
 	u8 *send_buffer;
+
+	/* serializes access to ff_field and the output report */
+	spinlock_t send_lock;
 };
 
 int t300rs_play_effect(void *, const struct tmff2_effect_state *);
@@ -149,7 +161,27 @@ int t300rs_set_gain(void *, uint16_t);
 int t300rs_set_range(void *, uint16_t);
 int t300rs_set_autocenter(void *, uint16_t);
 
-int t300rs_send_buf(struct t300rs_device_entry *t300rs, u8 *send_buffer, size_t len);
+int t300rs_send_buf(struct t300rs_device_entry *t300rs, const u8 *send_buffer, size_t len);
 int t300rs_send_int(struct t300rs_device_entry *t300rs);
+
+/* shared initialization of a t300rs_device_entry, validates the output report
+ * layout before anything is written into it */
+int t300rs_init_common(struct tmff2_device_entry *tmff2,
+		struct t300rs_device_entry *t300rs, u8 buffer_length);
+
+/* description of a wheel handled by the shared tmcommon backend */
+struct tm_wheel_desc {
+	const char *name;
+	const __u8 *rdesc;
+	unsigned int rsize;
+	u16 range_min;
+	u16 range_max;
+	unsigned long params;
+	/* optional */
+	ssize_t (*alt_mode_store)(void *data, const char *buf, size_t count);
+};
+
+int tm_common_populate_api(struct tmff2_device_entry *tmff2,
+		const struct tm_wheel_desc *desc);
 
 #endif
