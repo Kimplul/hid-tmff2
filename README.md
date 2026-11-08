@@ -82,6 +82,7 @@ sudo yum install linuxconsoletools # Fedora-based
   cd hid-tmff2
   make
   sudo make install
+  sudo make tweaks # optional but should fix some common issues
   # sudo make steamdeck-rules # ONLY run if you're on a SteamDeck
   ```
 + Plug wheel back in
@@ -95,7 +96,7 @@ sudo yum install linuxconsoletools # Fedora-based
   git clone --recurse-submodules https://github.com/Kimplul/hid-tmff2.git
   cd hid-tmff2
   sudo ./dkms/dkms-install.sh
-  sudo make udev-rules # optional but should fix some common issues
+  sudo make tweaks # optional but should fix some common issues
   # sudo make steamdeck-rules # ONLY run if you're on a SteamDeck
   ```
 + Plug wheel back in
@@ -148,6 +149,13 @@ for wheels:
   `open_mode=0` 'opens' the wheel immediately to work around this, but increases
   power draw and sets the fan spinning when not using the wheel, which might be
   a bit annoying.
+
++ If an X-box version wheel (e.g., T128X) has working buttons but no FFB, try
+  ```shell
+  sudo make tweaks
+  ```
+
+  See [#229](https://github.com/Kimplul/hid-tmff2/issues/229).
 
 + To change gain, autocentering etc. use
   [Oversteer](https://github.com/berarma/oversteer).

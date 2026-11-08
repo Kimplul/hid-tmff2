@@ -14,6 +14,9 @@ steamdeck-rules:
 clean: deps/hid-tminit
 	$(MAKE) -C $(KDIR) M=$(shell pwd) clean
 
+.PHONY: tweaks
+tweaks:
+	install -m 0644 modprobe/hid-tmff2-xpad.conf /etc/modprobe.d/
 
 .PHONY: deps/hid-tminit
 deps/hid-tminit:
