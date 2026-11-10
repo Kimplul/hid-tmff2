@@ -1,0 +1,2 @@
+# T-LCM
+SUBSYSTEM=="input", ATTRS{idVendor}=="044f", ATTRS{idProduct}=="b371", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1", ENV{ID_INPUT_ACCELEROMETER}="0", TAG+="uaccess"

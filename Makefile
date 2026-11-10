@@ -17,6 +17,7 @@ clean: deps/hid-tminit
 .PHONY: tweaks
 tweaks:
 	install -m 0644 modprobe/hid-tmff2-xpad.conf /etc/modprobe.d/
+	install -m 0644 udev/99-t-lcm.rules /etc/udev/rules.d/
 
 .PHONY: deps/hid-tminit
 deps/hid-tminit:
