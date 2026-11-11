@@ -235,6 +235,7 @@ static ssize_t gain_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_hdev(to_hid_device(dev));
+	unsigned long flags;
 	u16 value;
 	int ret;
 
@@ -248,8 +249,15 @@ static ssize_t gain_store(struct device *dev,
 	}
 
 	gain = value;
-	if (tmff2->set_gain) /* if we can, update gain immediately */
-		tmff2->set_gain(tmff2->data, gain);
+
+	/* Mark the gain dirty; the worker combines this master gain with
+	 * the last input gain and sends the product to the wheel */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	__set_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 
 	return count;
 }
@@ -264,6 +272,7 @@ static DEVICE_ATTR_RW(gain);
 static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+	unsigned long flags;
 
 	if (!tmff2)
 		return;
@@ -273,13 +282,21 @@ static void tmff2_set_gain(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_gain(tmff2->data, tmff2_scale_gain(value)))
-		hid_warn(tmff2->hdev, "unable to set gain\n");
+	/* Defer to workqueue: store the game gain and schedule. The worker
+	 * scales it with the sysfs gain via tmff2_scale_gain() */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->input_gain = value;
+	__set_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 }
 
 static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 {
 	struct tmff2_device_entry *tmff2 = tmff2_from_input(dev);
+	unsigned long flags;
 
 	if (!tmff2)
 		return;
@@ -289,8 +306,14 @@ static void tmff2_set_autocenter(struct input_dev *dev, uint16_t value)
 		return;
 	}
 
-	if (tmff2->set_autocenter(tmff2->data, value))
-		hid_warn(tmff2->hdev, "unable to set autocenter\n");
+	/* Defer to workqueue: store pending autocenter and schedule */
+	spin_lock_irqsave(&tmff2->lock, flags);
+	tmff2->pending_autocenter = value;
+	__set_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
+	spin_unlock_irqrestore(&tmff2->lock, flags);
+
+	if (!delayed_work_pending(&tmff2->work) && tmff2->allow_scheduling)
+		schedule_delayed_work(&tmff2->work, 0);
 }
 
 static void tmff2_work_handler(struct work_struct *w)
@@ -303,9 +326,34 @@ static void tmff2_work_handler(struct work_struct *w)
 	unsigned long time_now;
 	__u16 effect_delay, effect_length;
 
+	uint16_t pending_gain = 0, pending_autocenter = 0;
+	bool set_gain = 0, set_autocenter = 0;
 
 	if (!tmff2)
 		return;
+
+	/* Apply pending control changes (gain/autocenter) in process context */
+	spin_lock_irqsave(&tmff2->lock, lock_flags);
+
+	if (test_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags)) {
+		pending_gain = tmff2->input_gain;
+		__clear_bit(FF_EFFECT_QUEUE_GAIN, &tmff2->pending_flags);
+		set_gain = 1;
+	}
+
+	if (test_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags)) {
+		pending_autocenter = tmff2->pending_autocenter;
+		__clear_bit(FF_EFFECT_QUEUE_AUTOCENTER, &tmff2->pending_flags);
+		set_autocenter = 1;
+	}
+
+	spin_unlock_irqrestore(&tmff2->lock, lock_flags);
+
+	if (set_gain && tmff2->set_gain)
+		tmff2->set_gain(tmff2->data, tmff2_scale_gain(pending_gain));
+
+	if (set_autocenter && tmff2->set_autocenter)
+		tmff2->set_autocenter(tmff2->data, pending_autocenter);
 
 	for (effect_id = 0; effect_id < tmff2->max_effects; ++effect_id) {
 		unsigned long actions = 0;
@@ -326,7 +374,6 @@ static void tmff2_work_handler(struct work_struct *w)
 					(effect_delay + effect_length) * state->count) {
 				__clear_bit(FF_EFFECT_PLAYING, &state->flags);
 				__clear_bit(FF_EFFECT_QUEUE_UPDATE, &state->flags);
-
 				state->count = 0;
 			}
 		}
@@ -691,6 +738,7 @@ static int tmff2_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	tmff2->hdev = hdev;
 	hid_set_drvdata(tmff2->hdev, tmff2);
+	tmff2->input_gain = GAIN_MAX;
 
 	switch (tmff2->hdev->product) {
 		case TMT300RS_PS3_NORM_ID:

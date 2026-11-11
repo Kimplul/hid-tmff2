@@ -30,6 +30,8 @@ extern int alt_mode;
 #define FF_EFFECT_QUEUE_STOP	2
 #define FF_EFFECT_QUEUE_UPDATE	3
 #define FF_EFFECT_PLAYING	4
+#define FF_EFFECT_QUEUE_GAIN	5
+#define FF_EFFECT_QUEUE_AUTOCENTER	6
 
 #define PARAM_SPRING_LEVEL	(1 << 0)
 #define PARAM_DAMPER_LEVEL	(1 << 1)
@@ -64,6 +66,15 @@ struct tmff2_device_entry {
 	struct delayed_work work;
 
 	spinlock_t lock;
+
+	/* Pending control changes to be applied from workqueue context */
+	uint16_t pending_autocenter;
+	unsigned long pending_flags;
+
+	/* last gain requested through the input API; the worker combines it
+	 * with the sysfs gain (master) and sends the product to the wheel,
+	 * so changes to either source take effect on the next flush */
+	uint16_t input_gain;
 
 	int allow_scheduling;
 
