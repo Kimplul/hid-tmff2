@@ -8,8 +8,11 @@ feel free to open up an issue about it.
 
 Other documents available are linked here:
 
-+ [FFBEEFFECTS](./FFBEFFECTS.md):
++ [T300RS_FFBEFFECTS](./T300RS_FFBEFFECTS.md):
   Force feedback effects example for T300RS and compatible wheels
+
++ [T500RS_FFBEFFECTS](./T500RS_FFBEFFECTS.md):
+  Force feedback effects example for T500RS and compatible wheels
 
 + [STRUCTURE](./STRUCTURE.md):
   Structure of Thrustmaster device stack
@@ -103,5 +106,5 @@ With the wheel working under Windows, install
 [fedit.exe](https://gimx.fr/download/b882e209a0ac023d03abbf560dfc3f25fe6367ca/fedit.zip)
 and methodically go through all effects the device supports and compare the USB
 packets the driver sends out. You should be able to build up a table of what
-each value in the USB packet means, see [FFBEFFECTS.md](./FFBEFFECTS.md)
+each value in the USB packet means, see [T300RS_FFBEFFECTS.md](./T300RS_FFBEFFECTS.md)
 for an example of what I found out about the T300.
