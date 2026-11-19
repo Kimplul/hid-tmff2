@@ -128,6 +128,16 @@ static u8 t248_pc_rdesc_fixed[] = {
 	0xc0, /* End collection */
 };
 
+/* T598 in PC mode shares the T248 ID. T248 reports bcdDevice 1.00, T598 5.98
+ * (PS), 5.99 (Xbox) or 6.00, and some other b696 wheel reports 7.00 */
+static bool t248_is_t598(struct hid_device *hdev)
+{
+	struct usb_device *usbdev = to_usb_device(hdev->dev.parent->parent);
+	u16 bcd = le16_to_cpu(usbdev->descriptor.bcdDevice);
+
+	return bcd >= 0x0598 && bcd < 0x0700;
+}
+
 static int t248_interrupts(struct t300rs_device_entry *t248)
 {
 	u8 *send_buf = kmalloc(256, GFP_KERNEL);
@@ -178,15 +188,16 @@ static int t248_wheel_destroy(void *data)
 static int t248_set_range(void *data, uint16_t value)
 {
 	struct t300rs_device_entry *t248 = data;
+	uint16_t max = t248_is_t598(t248->hdev) ? 1080 : 900;
 
 	if (value < 140) {
 		hid_info(t248->hdev, "value %i too small, clamping to 140\n", value);
 		value = 140;
 	}
 
-	if (value > 900) {
-		hid_info(t248->hdev, "value %i too large, clamping to 900\n", value);
-		value = 900;
+	if (value > max) {
+		hid_info(t248->hdev, "value %i too large, clamping to %i\n", value, max);
+		value = max;
 	}
 
 	return t300rs_set_range(data, value);
@@ -256,6 +267,7 @@ static int t248_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	struct t300rs_device_entry *t248 = kzalloc(sizeof(struct t300rs_device_entry),
 						   GFP_KERNEL);
 	struct list_head *report_list;
+	bool t598 = t248_is_t598(tmff2->hdev);
 	int ret;
 
 
@@ -282,8 +294,13 @@ static int t248_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	t248->open = t248->input_dev->open;
 	t248->close = t248->input_dev->close;
 
-	if ((ret = t248_interrupts(t248)))
+	if (t598) {
+		/* the T598 never answers the setup packets, and the base drops
+		 * torque if the link suspends during a pause in FFB */
+		usb_disable_autosuspend(t248->usbdev);
+	} else if ((ret = t248_interrupts(t248))) {
 		goto interrupt_err;
+	}
 
 	/* everything went OK */
 	tmff2->data = t248;
@@ -294,7 +311,7 @@ static int t248_wheel_init(struct tmff2_device_entry *tmff2, int open_mode)
 	if (!open_mode)
 		t248_send_open(t248);
 
-	hid_info(t248->hdev, "force feedback for T248\n");
+	hid_info(t248->hdev, "force feedback for %s\n", t598 ? "T598" : "T248");
 	return 0;
 
 interrupt_err:
@@ -322,7 +339,7 @@ int t248_populate_api(struct tmff2_device_entry *tmff2)
 
 	tmff2->set_gain = t300rs_set_gain;
 	tmff2->set_autocenter = t300rs_set_autocenter;
-	/* T248 only has 900 degree range, instead of T300RS 1080 */
+	/* T248 only has 900 degree range, instead of T300RS (and T598) 1080 */
 	tmff2->set_range = t248_set_range;
 	tmff2->wheel_fixup = t248_wheel_fixup;
 
