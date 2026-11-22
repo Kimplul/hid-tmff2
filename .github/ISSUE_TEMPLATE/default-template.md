@@ -1,6 +1,6 @@
 ---
-name: Issue template
-about: Conventions and expectations
+name: Default template
+about: Use this by default
 title: ''
 labels: ''
 assignees: ''
