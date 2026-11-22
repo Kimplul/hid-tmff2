@@ -36,6 +36,10 @@ TS-XW support was contributed by
 TS-PC support was contributed by
 [@BDave95](https://github.com/BDave95)
 
+T598 support was contributed by
+[@bbuckleymain](https://github.com/bbuckleymain), written with the help of
+Claude (Anthropic's AI assistant) and tested on an Xbox version T598.
+
 ## Installation
 
 You can either install this kernel module by using DKMS or
@@ -150,7 +154,7 @@ for wheels:
   power draw and sets the fan spinning when not using the wheel, which might be
   a bit annoying.
 
-+ If an X-box version wheel (e.g., T128X) has working buttons but no FFB, try
++ If an X-box version wheel (e.g., T128X, T598) has working buttons but no FFB, try
   ```shell
   sudo make tweaks
   ```
